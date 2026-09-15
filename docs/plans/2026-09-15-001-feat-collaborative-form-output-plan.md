@@ -133,6 +133,7 @@ Contributor A is the integration owner for `src/main.jsx`, `src/styles.css`, `se
 - **Ordering accessibility:** Every person, unit, and discipline row has named move-up and move-down buttons with at least 44 by 44 CSS-pixel targets. Disable the impossible action at each boundary, keep focus on the moved record, and announce the new rank through an `aria-live` region. Dragging is an enhancement, never the only ordering method.
 - **Responsive tables:** Desktop shows complete editable tables. Narrow screens retain table semantics inside their own horizontal scroll containers while the page itself never scrolls horizontally; the identifying column and row actions remain visible.
 - **Entity edit lifecycle:** An empty list has one create action. A newly created record becomes selected. Switching records preserves validation errors and focus, deleting the current record requires confirmation and selects the next or previous record, and deleting the last record returns to the empty state. Mobile return-to-list restores the prior item focus and scroll position.
+- **Filling guidance:** Add concise, field-level filling guidance for every browser form and structured table changed by Contributor B. Guidance, terminology, length limits, required status, and examples must follow the official Word application template; expose it next to the relevant field instead of as a detached general help page.
 - **Patterns to follow:** Existing `ManualRecordsTable`, `SortableEntityTabs`, `normalizePerson`, `normalizeUnit`, and 700 ms autosave behavior in `src/main.jsx`.
 - **Test scenarios:**
   - Add three people and three units, reorder each by drag and buttons, reload, and verify names and numeric ranks retain the new order.
@@ -144,6 +145,7 @@ Contributor A is the integration owner for `src/main.jsx`, `src/styles.css`, `se
   - Load a legacy free-text discipline and verify it remains visible for review and is not discarded.
   - Change the first discipline through browser entry and Word mapping, then verify saved data, read-only field, preview, and PDF all update to the same derived science and technology field.
   - Add, edit, and delete a row in every structured table and verify autosaved JSON contains the configured fields.
+  - Open the guidance for each changed form area and verify it matches the corresponding Word-template instruction without hiding or shifting the input on desktop or mobile.
 - **Verification:** The browser forms expose every schema field on desktop and mobile, with stable saved data and no edits to PDF recognition code.
 
 ### U2. Rich-text and Word import
@@ -155,6 +157,7 @@ Contributor A is the integration owner for `src/main.jsx`, `src/styles.css`, `se
 - **Files:** Create `src/editor/RichTextEditor.jsx`, `src/editor/rich-text.css`, `src/import/WordImportDialog.jsx`, `src/import/word-field-map.js`, `lib/word-fields.mjs`, `routes/word-import.mjs`, `tests/fixtures/synthetic-import.docx`, and `tests/rich-text-word.e2e.spec.js`. Contributor A alone updates the shared integration files listed above.
 - **Approach:** Extend the current Tiptap editor with a bounded font family and size set that survives sanitization and preview. Normalize pasted Word HTML to supported marks. Use one session-wide editor zoom state with 70%-150% bounds, 10% steps, a visible current value, and reset; intercept `Ctrl/Cmd + wheel` only while an editor has focus. Parse `.docx` headings and tables into candidate field values and require explicit selection before merging. Use only synthetic fixtures without personal data.
 - **Import states:** Define file selection, parsing progress, parse failure, no matches, partial matches, candidate review, applying, apply failure, and success. Candidate rows show current value, proposed value, source, confidence, and conflict status. Non-empty fields are unselected by default; repeating records append with deterministic de-duplication. Cancel and every failure leave the original draft unchanged.
+- **Filling guidance:** Add contextual filling guidance to every long-text editor and Word-import area changed by Contributor A. Use the official Word template as the source for section purpose, content expectations, word limits, formatting, and image requirements; keep the guidance attached to its field and separate from imported document content.
 - **Security posture:** Apply tag, attribute, CSS-property, and URL-protocol allowlists before save and before render. Reject event attributes, script URLs, remote images, CSS URLs, dangerous data URLs, external Word relationships, macros, and resource-exhausting archives. Clean temporary files after success, rejection, and timeout.
 - **Patterns to follow:** Existing PDF import review interaction, file ownership checks, `DOMPurify` sanitization, rich-image upload, and `applicationFromRow` JSON persistence.
 - **Test scenarios:**
@@ -164,6 +167,7 @@ Contributor A is the integration owner for `src/main.jsx`, `src/styles.css`, `se
   - Reject unsupported, malformed, oversized, password-protected, macro-enabled, externally linked, archive-bomb, and timeout documents without changing the draft or leaving temporary files.
   - Import hostile Word HTML and verify executable markup and remote resources remain absent after save, reload, preview, and export.
   - Zoom with `Ctrl/Cmd + wheel`, then verify stored HTML and generated preview typography are unchanged.
+  - Verify every changed editor/import area exposes the matching Word-template guidance and that the guidance itself is never saved into, imported over, or exported as application content.
 - **Verification:** Word import is visible in the top toolbar, all overwrites require confirmation, and existing PDF import endpoints and extraction tests remain untouched.
 
 ### U3. PDF tables, entity pages, and signature flow
