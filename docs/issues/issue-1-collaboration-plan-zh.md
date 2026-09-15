@@ -2,7 +2,7 @@
 
 ## 目标与边界
 
-三位协作者并行完成网页字段、富文本与 Word 导入、PDF 表格和签章终稿流程。通过独立目录和独立分支减少冲突，由 A 统一修改现有共享入口文件。
+三位协作者分别完成网页字段、富文本与 Word 导入、PDF 表格和签章终稿流程。通过独立目录和独立分支减少冲突，由 C 统一修改共享入口并完成最终汇总。
 
 本轮必须保持现有 PDF 上传、分块、OCR、字段识别和导入行为不变，不为超大 PDF 另行改造识别能力。
 
@@ -30,12 +30,12 @@
 
 ---
 
-## A：富文本、Word 导入与最终集成
+## A：富文本与 Word 导入
 
 - 分支：feature/editor-word
 - 独占工作区：src/editor/、src/import/、lib/word-fields.mjs、routes/word-import.mjs
 - 独占测试：tests/fixtures/synthetic-import.docx、tests/rich-text-word.e2e.spec.js
-- 共享文件唯一修改人：src/main.jsx、src/styles.css、server.mjs、package.json、package-lock.json、README.md、tests/e2e.spec.js
+- 不得修改：C 管理的共享入口文件和 B 的表单目录
 
 ### A 的详细任务
 
@@ -47,7 +47,7 @@
 6. 对粘贴内容、导入内容和服务器保存内容执行一致的标签、属性、CSS 属性和 URL 协议白名单校验。
 7. 拒绝宏、加密文件、外部关系、异常压缩包和超限文档，并清理临时文件；不修改原有 PDF 识别路由。
 8. 为 A 修改的每个长文本编辑区和 Word 导入区域补充就近填写指引。指引中的章节用途、填写内容、字数限制、格式和图片要求以官方 Word 申报模板为准；指引不得保存、导入覆盖或导出为申报正文。
-9. B、C 合并后，由 A 统一接入共享入口、依赖、服务器挂载和最终回归。
+9. B 合并后同步最新 main，核对 Word 字段映射与 B 的字段 Schema；在 PR 中列明需要 C 接入的模块、路由和依赖。
 
 ### A 的验收
 
@@ -65,7 +65,7 @@
 - 分支：feature/form-fields
 - 独占工作区：src/forms/、src/data/disciplines.js、src/schema/table-fields.js、src/utils/reorder.js
 - 独占测试：tests/forms-ordering.e2e.spec.js
-- 不得修改：A 管理的共享入口文件和 C 的导出目录
+- 不得修改：C 管理的共享入口文件和 A 的编辑器目录
 
 ### B 的详细任务
 
@@ -90,12 +90,13 @@
 
 ---
 
-## C：PDF 表格、单人/单单位页和签章终稿
+## C：PDF 输出与最终汇总
 
-- 分支：feature/pdf-output
+- 分支：feature/pdf-integration
 - 独占工作区：src/export/、lib/signed-final-files.mjs、routes/signed-final.mjs
 - 独占测试：tests/pdf-export.e2e.spec.js
-- 依赖：B 的 src/schema/table-fields.js 合并后再完成字段模板
+- 共享文件唯一修改人：src/main.jsx、src/styles.css、server.mjs、package.json、package-lock.json、README.md、tests/e2e.spec.js
+- 依赖：B 的网页字段和 A 的富文本/Word 模块均已合并到 main
 
 ### C 的详细任务
 
@@ -107,6 +108,8 @@
 6. 建立独立终稿模块：识别源只读；签章前版本可重新生成和下载；已签终稿可上传、下载和确认替换。
 7. 已签终稿仅接受校验通过的 PDF，记录哈希、上传人和时间。新文件原子化成为“当前版本”，旧文件及审计记录保留且受权限保护。
 8. 客户端不能自行指定文件角色；跨项目访问、角色伪造及未授权替换必须由服务器拒绝。
+9. 在 A、B 合并后同步最新 main，由 C 将表单、富文本、Word 导入、预览和 PDF 模块接入共享入口，统一依赖与样式，解决集成冲突。
+10. 运行完整回归，确认网页字段、保存数据、Word 映射、预览和 PDF 一致，并负责最终构建、部署与服务健康检查。
 
 ### C 的验收
 
@@ -117,6 +120,7 @@
 - 签章页位于正式模板要求的位置。
 - 已签终稿下载内容与原文件字节一致，替换后只有新文件标记为当前，识别源保持不变。
 - 跨用户、跨项目和伪造角色测试均被拒绝。
+- A、B 的模块都由 C 完成接入，所有新旧回归测试通过后才能合并 C 的 PR。
 
 ---
 
@@ -138,12 +142,12 @@
 1. 三人从最新 main 创建各自指定分支，只修改本 Issue 分配的独占工作区。
 2. 每次开始工作先同步 origin/main，再把本人的功能分支变基到最新主线。
 3. 尽早创建 Draft PR；PR 写明字段变化、接入点、截图、保存数据验证和 PDF/预览验证。
-4. 合并顺序：B 的 Schema/网页表单 → C 的 PDF/签章模块 → A 的编辑器/Word 和共享文件集成。
-5. B 合并后 C 更新主线；B、C 合并后 A 更新主线并完成共享接线。
+4. 合并顺序：B 的 Schema/网页表单 → A 的富文本/Word 模块 → C 的 PDF、共享文件和最终汇总。
+5. B 合并后 A 更新主线并核对字段映射；A、B 合并后 C 更新主线完成 PDF 和共享接线。
 6. 文件冲突由文件负责人解决，禁止用旧版整个覆盖 src/main.jsx 或 src/styles.css。
 7. main 建议开启分支保护：必须 PR、至少一人审核、测试通过，禁止协作者直接推送。
 8. 禁止提交 data/、数据库、密码、Cloudflare 凭据、用户上传文件和真实申报材料。测试只使用合成数据。
-9. GitHub 合并只同步源代码，不会自动部署。最终由 A 在运行电脑上备份、拉取、构建、回归并重启服务。
+9. GitHub 合并只同步源代码，不会自动部署。最终由 C 在运行电脑上备份、拉取、构建、回归并重启服务。
 
 ## 暂不实施
 
@@ -152,9 +156,3 @@
 - SQLite 迁移和对象存储迁移。
 - 首期旧版二进制 .doc 解析。
 - 任意 Word 样式的像素级完全还原。
-
-## 计划源文件
-
-完整技术计划位于 docs/collaboration-plan 分支：
-
-docs/plans/2026-09-15-001-feat-collaborative-form-output-plan.md
