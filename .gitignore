@@ -1,0 +1,21 @@
+node_modules/
+dist/
+_inspection/
+test-results/
+playwright-report/
+
+# Runtime data contains accounts, applications, uploads and local credentials.
+data/
+
+# Source application materials may contain personal or confidential data.
+节能奖填报材料/
+
+# Local configuration and credentials.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+.cloudflared/
+
+*.log

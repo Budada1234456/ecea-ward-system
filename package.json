@@ -1,0 +1,52 @@
+{
+  "name": "ceca-award-application",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "scripts": {
+    "dev": "bash scripts/run-with-node.sh node_modules/concurrently/dist/bin/concurrently.js -k \"npm:dev:api\" \"npm:dev:web\"",
+    "dev:web": "bash scripts/run-with-node.sh node_modules/vite/bin/vite.js --host 0.0.0.0",
+    "dev:api": "bash scripts/run-with-node.sh server.mjs",
+    "build": "bash scripts/run-with-node.sh node_modules/vite/bin/vite.js build",
+    "test:e2e": "bash scripts/run-with-node.sh node_modules/@playwright/test/cli.js test --reporter=line --workers=1",
+    "test:extract": "bash scripts/run-with-node.sh tests/pdf-extraction.mjs",
+    "test:extract:async": "bash scripts/run-with-node.sh tests/pdf-extraction-async.mjs",
+    "test:extract:chunked": "bash scripts/run-with-node.sh tests/pdf-extraction-chunked.mjs",
+    "test:source-extract": "bash scripts/run-with-node.sh tests/project-source-extraction.mjs",
+    "preview": "bash scripts/run-with-node.sh node_modules/vite/bin/vite.js preview --host 0.0.0.0",
+    "start": "bash scripts/run-with-node.sh server.mjs --serve",
+    "start:lan": "bash scripts/run-with-node.sh server.mjs --serve --host=0.0.0.0",
+    "start:public": "bash scripts/run-with-node.sh scripts/start-public.mjs"
+  },
+  "dependencies": {
+    "@tesseract.js-data/chi_sim": "^1.0.0",
+    "@tesseract.js-data/eng": "^1.0.0",
+    "@tiptap/extension-color": "^3.31.3",
+    "@tiptap/extension-image": "^3.31.3",
+    "@tiptap/extension-link": "^3.31.3",
+    "@tiptap/extension-text-align": "^3.31.3",
+    "@tiptap/extension-text-style": "^3.31.3",
+    "@tiptap/extension-underline": "^3.31.3",
+    "@tiptap/react": "^3.31.3",
+    "@tiptap/starter-kit": "^3.31.3",
+    "dompurify": "^3.4.15",
+    "express": "^5.1.0",
+    "html2canvas": "^1.4.1",
+    "jspdf": "^4.2.1",
+    "lucide-react": "^0.468.0",
+    "multer": "^2.0.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tesseract.js": "^7.0.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.2",
+    "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.1.2",
+    "prettier": "^3.9.6",
+    "vite": "^6.0.7"
+  }
+}
