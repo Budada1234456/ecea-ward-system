@@ -3,8 +3,7 @@ import path from "node:path";
 
 const baseUrl = process.env.TEST_BASE_URL || "http://127.0.0.1:4174";
 const adminPassword = process.env.TEST_ADMIN_PASSWORD;
-if (!adminPassword)
-  throw new Error("请通过 TEST_ADMIN_PASSWORD 提供管理员测试密码");
+test.skip(!adminPassword, "需要通过 TEST_ADMIN_PASSWORD 提供管理员测试密码");
 const projectTitle = `浏览器验收项目-${Date.now()}`;
 const samplePdf = path.resolve(
   "节能奖填报材料",
@@ -120,6 +119,45 @@ test("project center, attachment workflow and PDF export", async ({
     await expect(
       page.locator("textarea.textarea--compact").first(),
     ).toHaveValue(englishName);
+
+    const disciplineInput = page.getByRole("combobox", { name: "检索学科" });
+    const disciplineResults = page.getByRole("listbox");
+    await disciplineInput.focus();
+    await expect(disciplineResults).toBeVisible();
+    await expect(
+      page.getByText("请选择终端二级学科或三级学科", { exact: false }),
+    ).toBeVisible();
+    await expect(
+      disciplineResults.getByRole("option", { name: /能源科学技术.*480/ }),
+    ).toBeVisible();
+    await page
+      .getByRole("button", { name: "展开能源科学技术的下级学科" })
+      .click();
+    await expect(
+      page.getByRole("navigation", { name: "学科层级路径" }),
+    ).toContainText("能源科学技术");
+    await page.getByRole("button", { name: "展开一次能源的下级学科" }).click();
+    const terminalDiscipline = disciplineResults.getByRole("option", {
+      name: /煤炭能.*4806010/,
+    });
+    await expect(terminalDiscipline).toBeVisible();
+    await terminalDiscipline.click();
+    await expect(disciplineResults).toBeHidden();
+    await expect(page.getByRole("list", { name: "已选学科" })).toContainText(
+      "能源科学技术（480） / 一次能源（48060） / 煤炭能（4806010）",
+    );
+
+    await disciplineInput.focus();
+    await expect(disciplineResults).toBeVisible();
+    await page.locator(".discipline-selector__selection li").click();
+    await expect(disciplineResults).toBeVisible();
+    await page.getByRole("heading", { name: "项目基本情况" }).click();
+    await expect(disciplineResults).toBeHidden();
+
+    await disciplineInput.focus();
+    await expect(disciplineResults).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(disciplineResults).toBeHidden();
 
     await page.getByRole("button", { name: "PDF 智能导入" }).click();
     const importDialog = page.locator(".import-dialog");

@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   AlertCircle,
+  ArrowDown,
+  ArrowUp,
   Archive,
   Bell,
   BookOpen,
@@ -19,7 +21,6 @@ import {
   FileInput,
   FileText,
   FolderOpen,
-  GripVertical,
   Home,
   Info,
   LoaderCircle,
@@ -39,11 +40,22 @@ import {
   Upload,
   UserRound,
   UserPlus,
-  UsersRound,
   X,
 } from "lucide-react";
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
+import {
+  DisciplineSelector,
+  EntityEditor,
+  StructuredTable,
+  createDefaultPerson,
+  createDefaultUnit,
+  derivePrimaryDiscipline,
+  normalizeApplicationData,
+  normalizeDisciplineSelection,
+} from "./forms/index.js";
+import { getPdfFields } from "./schema/table-fields.js";
+import { reorderAndRenumber, renumberItems } from "./utils/reorder.js";
 import {
   CharacterCount,
   RichTextEditor,
@@ -182,7 +194,7 @@ function createEmptyData(meta = {}) {
     contact: "",
     phone: "",
     email: "",
-    disciplines: ["", ""],
+    disciplines: [],
     industry: "",
     sources: [],
     plans: "",
@@ -429,96 +441,35 @@ function TextInput({ value, onChange, placeholder, maxLength, type = "text" }) {
   );
 }
 
-const personFieldDefaults = {
-  name: "",
-  gender: "",
-  rank: "",
-  birthDate: "",
-  birthPlace: "",
-  ethnicity: "",
-  nativePlace: "",
-  idNumber: "",
-  politicalAffiliation: "",
-  nationality: "中国",
-  administrativePosition: "",
-  returnee: "",
-  returnDate: "",
-  workUnit: "",
-  officePhone: "",
-  mailingAddress: "",
-  postalCode: "",
-  homeAddress: "",
-  homePhone: "",
-  email: "",
-  mobilePhone: "",
-  graduateSchool: "",
-  graduationDate: "",
-  education: "",
-  technicalTitle: "",
-  specialty: "",
-  highestDegree: "",
-  awards: "",
-  projectPeriod: "",
-  notes: "",
-  contribution: "",
-};
-
-const unitFieldDefaults = {
-  name: "",
-  location: "",
-  rank: "",
-  nature: "",
-  contact: "",
-  phone: "",
-  mobilePhone: "",
-  address: "",
-  postalCode: "",
-  email: "",
-  fax: "",
-  contribution: "",
-};
-
-function normalizePerson(person, index) {
-  const normalized =
-    typeof person === "string" ? { name: person } : person || {};
-  return {
-    ...personFieldDefaults,
-    ...normalized,
-    rank: String(normalized.rank || index + 1),
-  };
+function disciplineDisplay(item, disciplineRecords = []) {
+  if (!item) return "";
+  if (typeof item === "string") return item;
+  const byCode = new Map(
+    disciplineRecords.map((record) => [record.code, record]),
+  );
+  const path = (Array.isArray(item.path) ? item.path : [])
+    .map((code) => byCode.get(code))
+    .filter(Boolean);
+  if (path.length) {
+    return path.map((record) => `${record.name}（${record.code}）`).join(" / ");
+  }
+  if (item.name && item.code) return `${item.name}（${item.code}）`;
+  return item.name || item.code || "";
 }
 
 function newPerson(name, index) {
-  return {
-    ...personFieldDefaults,
-    id: globalThis.crypto?.randomUUID?.() || `person-${Date.now()}-${index}`,
-    name,
-    rank: String(index + 1),
-  };
-}
-
-function normalizeUnit(unit, index) {
-  const normalized = typeof unit === "string" ? { name: unit } : unit || {};
-  return {
-    ...unitFieldDefaults,
-    ...normalized,
-    rank: String(normalized.rank || index + 1),
-  };
+  return { ...createDefaultPerson(index), name };
 }
 
 function newUnit(name, index) {
-  return {
-    ...unitFieldDefaults,
-    id: globalThis.crypto?.randomUUID?.() || `unit-${Date.now()}-${index}`,
-    name,
-    rank: String(index + 1),
-  };
+  return { ...createDefaultUnit(index), name };
 }
 
 function TagEditor({
   values,
   onChange,
   placeholder,
+  label,
   getLabel = (value) => value,
   createValue = (value) => value,
 }) {
@@ -531,19 +482,47 @@ function TagEditor({
   };
   return (
     <div className="tag-editor">
-      <div className="tag-list">
+      <div className="tag-list" aria-label={`${label}排序列表`}>
         {values.map((value, index) => (
-          <span className="entry-tag" key={`${getLabel(value)}-${index}`}>
+          <div
+            className="entry-tag"
+            key={value?.id || `${getLabel(value)}-${index}`}
+          >
             <b>{index + 1}</b>
-            {getLabel(value)}
+            <span className="entry-tag__name">{getLabel(value)}</span>
             <button
               type="button"
-              onClick={() => onChange(values.filter((_, i) => i !== index))}
+              disabled={index === 0}
+              onClick={() =>
+                onChange(reorderAndRenumber(values, index, index - 1))
+              }
+              aria-label={`上移${getLabel(value)}`}
+              title="上移"
+            >
+              <ArrowUp size={14} />
+            </button>
+            <button
+              type="button"
+              disabled={index === values.length - 1}
+              onClick={() =>
+                onChange(reorderAndRenumber(values, index, index + 1))
+              }
+              aria-label={`下移${getLabel(value)}`}
+              title="下移"
+            >
+              <ArrowDown size={14} />
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                onChange(renumberItems(values.filter((_, i) => i !== index)))
+              }
               aria-label={`删除${getLabel(value)}`}
+              title="删除"
             >
               <X size={13} />
             </button>
-          </span>
+          </div>
         ))}
       </div>
       <div className="tag-add-row">
@@ -571,7 +550,7 @@ function TagEditor({
   );
 }
 
-function BasicForm({ data, setField }) {
+function BasicForm({ data, setField, disciplineRecords }) {
   const isAchievement = data.awardType === "节能减排科技成就奖";
   const toggleSource = (key) =>
     setField(
@@ -669,6 +648,7 @@ function BasicForm({ data, setField }) {
           <TagEditor
             values={data.people}
             onChange={(value) => setField("people", value)}
+            label="主要完成人"
             placeholder="输入姓名后按回车"
             getLabel={(person) =>
               typeof person === "string" ? person : person?.name || "未填写姓名"
@@ -684,6 +664,7 @@ function BasicForm({ data, setField }) {
           <TagEditor
             values={data.units}
             onChange={(value) => setField("units", value)}
+            label="主要完成单位"
             placeholder="输入单位全称后按回车"
             getLabel={(unit) =>
               typeof unit === "string" ? unit : unit?.name || "未填写单位名称"
@@ -738,26 +719,14 @@ function BasicForm({ data, setField }) {
         <Field
           label="学科分类名称"
           required
-          hint="保留2个填写项；第1项必填，第2项选填，并按主要技术创新点涉及学科的先后顺序填写。"
+          hint="依据 GB/T 13745-2009 按代码或名称检索，最多选择3项，并按主要技术创新点涉及学科的先后顺序排列。"
         >
-          <div className="ranked-inputs">
-            {(data.disciplines || ["", ""]).slice(0, 2).map((item, index) => (
-              <label key={index}>
-                <b>{index + 1}</b>
-                <TextInput
-                  value={item}
-                  onChange={(value) => {
-                    const next = [...(data.disciplines || ["", ""])].slice(
-                      0,
-                      2,
-                    );
-                    next[index] = value;
-                    setField("disciplines", next);
-                  }}
-                />
-              </label>
-            ))}
-          </div>
+          <DisciplineSelector
+            value={data.disciplines}
+            onChange={(value) => setField("disciplines", value)}
+            disciplines={disciplineRecords}
+            label="检索学科"
+          />
         </Field>
         <Field label="所属国民经济行业" required>
           <select
@@ -896,27 +865,7 @@ function RecordsSection({
   onChange,
   supplement,
 }) {
-  const configs =
-    type === "ip"
-      ? [
-          ["name", "授权（申请）项目名称"],
-          ["type", "知识产权类别"],
-          ["country", "国（区）别"],
-          ["applicationNumber", "申请号"],
-          ["authorizationNumber", "授权号"],
-        ]
-      : [
-          ["name", "获奖项目名称"],
-          ["date", "获奖时间"],
-          ["award", "奖项名称"],
-          ["level", "奖励等级"],
-          ["org", "授奖部门（组织）"],
-        ];
-  const addRecord = () =>
-    onChange([
-      ...records,
-      Object.fromEntries(configs.map(([key]) => [key, ""])),
-    ]);
+  const group = type === "ip" ? "ipRecords" : "awardRecords";
   return (
     <section className="form-section">
       <div className="section-heading">
@@ -926,340 +875,31 @@ function RecordsSection({
           </span>
           <h2>{title}</h2>
         </div>
-        <div className="section-heading-actions">
-          <button
-            className="secondary-button"
-            type="button"
-            onClick={addRecord}
-          >
-            <Plus size={16} />
-            添加记录
-          </button>
-        </div>
       </div>
-      <div className="records-table">
-        <div className="records-head">
-          {configs.map(([, label]) => (
-            <span key={label}>{label}</span>
-          ))}
-          <span>操作</span>
-        </div>
-        {records.length === 0 ? (
-          <div className="empty-record">
-            <FileText size={28} />
-            <span>
-              {type === "ip"
-                ? "暂无知识产权记录，可手动添加"
-                : "暂无记录，无相关奖励时可保持为空"}
-            </span>
-          </div>
-        ) : (
-          records.map((record, rowIndex) => (
-            <div className="records-row" key={rowIndex}>
-              {configs.map(([key, label]) =>
-                key === "name" ? (
-                  <textarea
-                    key={key}
-                    aria-label={label}
-                    rows={2}
-                    value={record[key] || ""}
-                    onChange={(e) => {
-                      const next = records.map((item, index) =>
-                        index === rowIndex
-                          ? { ...item, [key]: e.target.value }
-                          : item,
-                      );
-                      onChange(next);
-                    }}
-                  />
-                ) : (
-                  <input
-                    key={key}
-                    aria-label={label}
-                    value={
-                      record[key] ||
-                      (key === "authorizationNumber" ? record.number : "") ||
-                      ""
-                    }
-                    onChange={(e) => {
-                      const next = records.map((item, index) =>
-                        index === rowIndex
-                          ? {
-                              ...item,
-                              [key]: e.target.value,
-                              ...(key === "authorizationNumber"
-                                ? { number: undefined }
-                                : {}),
-                            }
-                          : item,
-                      );
-                      onChange(next);
-                    }}
-                  />
-                ),
-              )}
-              <button
-                type="button"
-                className="icon-button"
-                title="删除"
-                onClick={() =>
-                  onChange(records.filter((_, index) => index !== rowIndex))
-                }
-              >
-                <X size={16} />
-              </button>
-            </div>
-          ))
-        )}
-      </div>
+      <StructuredTable
+        group={group}
+        value={records}
+        onChange={onChange}
+        addLabel="添加记录"
+        emptyLabel={
+          type === "ip"
+            ? "暂无知识产权记录，可手动添加"
+            : "暂无记录，无相关奖励时可保持为空"
+        }
+        className="records-collection"
+      />
       {supplement}
     </section>
   );
 }
 
-function SortableEntityTabs({
-  items,
-  selectedIndex,
-  onSelect,
-  onReorder,
-  getLabel,
-  entityLabel,
-}) {
-  const [dragIndex, setDragIndex] = useState(null);
-  return (
-    <div
-      className="sortable-entity-tabs"
-      role="tablist"
-      aria-label={`${entityLabel}排序`}
-    >
-      {items.map((item, index) => (
-        <button
-          className={
-            selectedIndex === index
-              ? "sortable-entity-tab active"
-              : "sortable-entity-tab"
-          }
-          type="button"
-          role="tab"
-          aria-selected={selectedIndex === index}
-          draggable
-          key={item.id || `${getLabel(item)}-${index}`}
-          title="拖动调整排名，点击查看详细信息"
-          onClick={() => onSelect(selectedIndex === index ? null : index)}
-          onDragStart={(event) => {
-            setDragIndex(index);
-            event.dataTransfer.effectAllowed = "move";
-            event.dataTransfer.setData("text/plain", String(index));
-          }}
-          onDragOver={(event) => {
-            event.preventDefault();
-            event.dataTransfer.dropEffect = "move";
-          }}
-          onDrop={(event) => {
-            event.preventDefault();
-            const from =
-              dragIndex ?? Number(event.dataTransfer.getData("text/plain"));
-            if (Number.isInteger(from) && from !== index)
-              onReorder(from, index);
-            setDragIndex(null);
-          }}
-          onDragEnd={() => setDragIndex(null)}
-        >
-          <GripVertical className="drag-handle" size={15} />
-          <b>{index + 1}</b>
-          <span>{getLabel(item) || `第 ${index + 1} ${entityLabel}`}</span>
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function ManualRecordsTable({
-  title,
-  records = [],
-  onChange,
-  fields,
-  addLabel,
-  emptyLabel,
-  className = "",
-  showIndex = false,
-}) {
-  const columns = `${showIndex ? "56px " : ""}${fields.map((field) => field.width || "minmax(120px, 1fr)").join(" ")} 44px`;
-  const minWidth = Math.max(
-    760,
-    fields.reduce((total, field) => total + (field.minWidth || 130), 44) +
-      (showIndex ? 56 : 0),
-  );
-  const addRecord = () =>
-    onChange([
-      ...records,
-      Object.fromEntries(
-        fields.map((field) => [field.key, field.defaultValue || ""]),
-      ),
-    ]);
-  return (
-    <div className={`manual-collection ${className}`.trim()}>
-      <div className="manual-collection-head">
-        <span>
-          <b>{title}</b>
-          <small>选填</small>
-        </span>
-        <button className="secondary-button" type="button" onClick={addRecord}>
-          <Plus size={15} />
-          {addLabel}
-        </button>
-      </div>
-      <div className="manual-table-scroll">
-        <div className="manual-table" style={{ minWidth }}>
-          <div
-            className="manual-table-head"
-            style={{ gridTemplateColumns: columns }}
-          >
-            {showIndex && <span>序号</span>}
-            {fields.map((field) => (
-              <span key={field.key}>{field.label}</span>
-            ))}
-            <span>操作</span>
-          </div>
-          {!records.length ? (
-            <div className="manual-table-empty">{emptyLabel}</div>
-          ) : (
-            records.map((record, rowIndex) => (
-              <div
-                className="manual-table-row"
-                style={{ gridTemplateColumns: columns }}
-                key={record.id || rowIndex}
-              >
-                {showIndex && (
-                  <span className="manual-row-index">{rowIndex + 1}</span>
-                )}
-                {fields.map((field) =>
-                  field.options ? (
-                    <select
-                      key={field.key}
-                      aria-label={field.label}
-                      value={record[field.key] || ""}
-                      onChange={(event) =>
-                        onChange(
-                          records.map((item, index) =>
-                            index === rowIndex
-                              ? { ...item, [field.key]: event.target.value }
-                              : item,
-                          ),
-                        )
-                      }
-                    >
-                      <option value="">请选择</option>
-                      {field.options.map((option) => (
-                        <option value={option} key={option}>
-                          {option}
-                        </option>
-                      ))}
-                    </select>
-                  ) : field.multiline ? (
-                    <textarea
-                      key={field.key}
-                      aria-label={field.label}
-                      rows={2}
-                      value={record[field.key] || ""}
-                      onChange={(event) =>
-                        onChange(
-                          records.map((item, index) =>
-                            index === rowIndex
-                              ? { ...item, [field.key]: event.target.value }
-                              : item,
-                          ),
-                        )
-                      }
-                    />
-                  ) : (
-                    <input
-                      key={field.key}
-                      aria-label={field.label}
-                      type={field.type || "text"}
-                      inputMode={field.numeric ? "decimal" : undefined}
-                      value={record[field.key] || ""}
-                      onChange={(event) =>
-                        onChange(
-                          records.map((item, index) =>
-                            index === rowIndex
-                              ? { ...item, [field.key]: event.target.value }
-                              : item,
-                          ),
-                        )
-                      }
-                    />
-                  ),
-                )}
-                <button
-                  className="icon-button icon-button--small"
-                  type="button"
-                  title="删除"
-                  onClick={() =>
-                    onChange(records.filter((_, index) => index !== rowIndex))
-                  }
-                >
-                  <X size={15} />
-                </button>
-              </div>
-            ))
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-const paperFields = [
-  {
-    key: "title",
-    label: "论著名称",
-    width: "minmax(220px, 1.7fr)",
-    minWidth: 240,
-    multiline: true,
-  },
-  {
-    key: "publisher",
-    label: "出版单位",
-    width: "minmax(170px, 1.2fr)",
-    minWidth: 180,
-  },
-  {
-    key: "publicationYear",
-    label: "出版年份",
-    width: "105px",
-    minWidth: 105,
-    type: "number",
-  },
-  {
-    key: "authors",
-    label: "作者",
-    width: "minmax(150px, 1fr)",
-    minWidth: 160,
-  },
-  {
-    key: "authorRank",
-    label: "本人排序",
-    width: "95px",
-    minWidth: 95,
-    numeric: true,
-  },
-  {
-    key: "domestic",
-    label: "是否国内出版",
-    width: "120px",
-    minWidth: 120,
-    options: ["是", "否"],
-  },
-];
-
 function PapersTable({ records, onChange }) {
   return (
-    <ManualRecordsTable
+    <StructuredTable
+      group="paperRecords"
       title="论著"
-      records={records}
+      value={records}
       onChange={onChange}
-      fields={paperFields}
       addLabel="添加论著"
       emptyLabel="暂无论著记录"
       className="paper-collection"
@@ -1268,100 +908,19 @@ function PapersTable({ records, onChange }) {
   );
 }
 
-const applicationUnitFields = [
-  {
-    key: "unitName",
-    label: "应用单位名称",
-    width: "minmax(220px, 1.5fr)",
-    minWidth: 230,
-  },
-  {
-    key: "technology",
-    label: "应用技术",
-    width: "minmax(220px, 1.5fr)",
-    minWidth: 230,
-  },
-  {
-    key: "startDate",
-    label: "应用起始时间",
-    width: "145px",
-    minWidth: 145,
-    type: "month",
-  },
-  {
-    key: "endDate",
-    label: "应用截止时间",
-    width: "145px",
-    minWidth: 145,
-    type: "month",
-  },
-  {
-    key: "contactPhone",
-    label: "应用单位联系人及电话",
-    width: "210px",
-    minWidth: 210,
-  },
-  {
-    key: "economicBenefit",
-    label: "使用本项目产生的经济效益（万元）",
-    width: "150px",
-    minWidth: 150,
-    numeric: true,
-  },
-];
-
 function ApplicationUnitsTable({ records, onChange }) {
   return (
-    <ManualRecordsTable
+    <StructuredTable
+      group="applicationUnits"
       title="主要应用单位情况"
-      records={records}
+      value={records}
       onChange={onChange}
-      fields={applicationUnitFields}
       addLabel="添加应用单位"
       emptyLabel="暂无应用单位记录"
       className="application-unit-collection"
     />
   );
 }
-
-const economicRecordFields = [
-  { key: "year", label: "年份", width: "110px", minWidth: 110 },
-  {
-    key: "newSales",
-    label: "新增销售额",
-    width: "minmax(150px, 1fr)",
-    minWidth: 160,
-    numeric: true,
-  },
-  {
-    key: "newProfit",
-    label: "新增利润",
-    width: "minmax(150px, 1fr)",
-    minWidth: 160,
-    numeric: true,
-  },
-  {
-    key: "newTax",
-    label: "新增税收",
-    width: "minmax(150px, 1fr)",
-    minWidth: 160,
-    numeric: true,
-  },
-  {
-    key: "foreignExchange",
-    label: "创收外汇（万美元）",
-    width: "minmax(160px, 1fr)",
-    minWidth: 170,
-    numeric: true,
-  },
-  {
-    key: "savingsTotal",
-    label: "节支总额",
-    width: "minmax(150px, 1fr)",
-    minWidth: 160,
-    numeric: true,
-  },
-];
 
 function EconomicCollection({
   summary,
@@ -1377,466 +936,39 @@ function EconomicCollection({
         <small>选填；除创收外汇为万美元外，其余金额单位为万元人民币</small>
       </div>
       <div className="economic-summary-fields">
-        <label>
-          <span>项目总投资额</span>
-          <input
-            className="control"
-            inputMode="decimal"
-            value={normalized.totalInvestment || ""}
-            onChange={(event) =>
-              onSummaryChange({
-                ...normalized,
-                totalInvestment: event.target.value,
-              })
-            }
-          />
-        </label>
-        <label>
-          <span>回收期（年）</span>
-          <input
-            className="control"
-            inputMode="decimal"
-            value={normalized.paybackYears || ""}
-            onChange={(event) =>
-              onSummaryChange({
-                ...normalized,
-                paybackYears: event.target.value,
-              })
-            }
-          />
-        </label>
+        {getPdfFields("economicSummary").map((field) => (
+          <label key={field.key}>
+            <span>
+              {field.label}
+              {field.unit && !field.label.includes(field.unit)
+                ? `（${field.unit}）`
+                : ""}
+            </span>
+            <input
+              className="control"
+              type={field.type}
+              inputMode={field.inputMode}
+              value={normalized[field.key] || ""}
+              onChange={(event) =>
+                onSummaryChange({
+                  ...normalized,
+                  [field.key]: event.target.value,
+                })
+              }
+            />
+          </label>
+        ))}
       </div>
-      <ManualRecordsTable
+      <StructuredTable
+        group="economicRecords"
         title="近三年新增直接效益"
-        records={records}
+        value={records}
         onChange={onRecordsChange}
-        fields={economicRecordFields}
         addLabel="添加年度"
         emptyLabel="暂无年度经济效益数据"
         className="economic-record-collection"
       />
     </div>
-  );
-}
-
-const personFieldGroups = [
-  [
-    ["name", "姓名", true],
-    ["gender", "性别"],
-    ["rank", "排名", true],
-    ["birthDate", "出生年月"],
-    ["birthPlace", "出生地"],
-    ["ethnicity", "民族"],
-    ["nativePlace", "籍贯"],
-    ["idNumber", "身份证号", true],
-    ["politicalAffiliation", "党派"],
-    ["nationality", "国籍"],
-    ["administrativePosition", "行政职务"],
-    ["technicalTitle", "技术职称"],
-  ],
-  [
-    ["workUnit", "工作单位", true],
-    ["officePhone", "办公电话"],
-    ["mobilePhone", "移动电话"],
-    ["email", "电子邮箱", true],
-    ["mailingAddress", "通讯地址", true],
-    ["postalCode", "邮政编码"],
-    ["homeAddress", "家庭住址", true],
-    ["homePhone", "住宅电话"],
-    ["returnee", "归国人员"],
-    ["returnDate", "归国时间"],
-  ],
-  [
-    ["graduateSchool", "毕业学校", true],
-    ["graduationDate", "毕业时间"],
-    ["education", "文化程度"],
-    ["highestDegree", "最高学位"],
-    ["specialty", "专业、专长", true],
-    ["projectPeriod", "参加本项目起止时间", true],
-    ["awards", "曾获奖励", true, true],
-    ["notes", "备注", true, true],
-  ],
-];
-
-const cooperationRecordFields = [
-  {
-    key: "method",
-    label: "合作方式",
-    width: "150px",
-    minWidth: 150,
-  },
-  {
-    key: "collaborators",
-    label: "合作者",
-    width: "180px",
-    minWidth: 180,
-  },
-  {
-    key: "period",
-    label: "合作时间",
-    width: "170px",
-    minWidth: 170,
-  },
-  {
-    key: "output",
-    label: "合作成果",
-    width: "minmax(260px, 1.5fr)",
-    minWidth: 280,
-    multiline: true,
-  },
-  {
-    key: "evidence",
-    label: "证明材料",
-    width: "minmax(220px, 1fr)",
-    minWidth: 230,
-    multiline: true,
-  },
-  {
-    key: "notes",
-    label: "备注",
-    width: "180px",
-    minWidth: 180,
-  },
-];
-
-function PeopleSection({ data, setField, applicationId }) {
-  const [selectedIndex, setSelectedIndex] = useState(null);
-  const people = (data.people || []).map(normalizePerson);
-  const updatePerson = (index, key, value) => {
-    setField(
-      "people",
-      people.map((person, personIndex) =>
-        personIndex === index ? { ...person, [key]: value } : person,
-      ),
-    );
-  };
-  const addPerson = () => {
-    const nextIndex = people.length;
-    setField("people", [...people, newPerson("", nextIndex)]);
-    setSelectedIndex(nextIndex);
-  };
-  const removePerson = (index) => {
-    setField(
-      "people",
-      people
-        .filter((_, personIndex) => personIndex !== index)
-        .map((person, personIndex) => ({
-          ...person,
-          rank: String(personIndex + 1),
-        })),
-    );
-    setSelectedIndex((current) =>
-      current === index ? null : current > index ? current - 1 : current,
-    );
-  };
-  const reorderPeople = (from, to) => {
-    const next = [...people];
-    const [moved] = next.splice(from, 1);
-    next.splice(to, 0, moved);
-    setField(
-      "people",
-      next.map((person, index) => ({ ...person, rank: String(index + 1) })),
-    );
-    setSelectedIndex(to);
-  };
-  const selectedPerson = selectedIndex === null ? null : people[selectedIndex];
-  return (
-    <section className="form-section">
-      <div className="section-heading">
-        <div>
-          <span className="section-index">08</span>
-          <h2>主要完成人情况表</h2>
-        </div>
-        <button className="secondary-button" type="button" onClick={addPerson}>
-          <Plus size={16} />
-          新增完成人
-        </button>
-      </div>
-      {!people.length ? (
-        <div className="empty-record person-empty">
-          <UserRound size={28} />
-          <span>暂无主要完成人</span>
-          <button
-            className="secondary-button"
-            type="button"
-            onClick={addPerson}
-          >
-            <Plus size={15} />
-            新增完成人
-          </button>
-        </div>
-      ) : (
-        <SortableEntityTabs
-          items={people}
-          selectedIndex={selectedIndex}
-          onSelect={setSelectedIndex}
-          onReorder={reorderPeople}
-          getLabel={(person) => person.name}
-          entityLabel="完成人"
-        />
-      )}
-      {selectedPerson && (
-        <article className="entity-detail-panel">
-          <div className="entity-detail-head">
-            <span>
-              <UserRound size={18} />
-              <b>{selectedPerson.name || `第 ${selectedIndex + 1} 完成人`}</b>
-              <small>排名 {selectedIndex + 1}</small>
-            </span>
-            <button
-              className="icon-button icon-button--small"
-              type="button"
-              title="删除完成人"
-              aria-label={`删除${selectedPerson.name || `第 ${selectedIndex + 1} 完成人`}`}
-              onClick={() => removePerson(selectedIndex)}
-            >
-              <X size={15} />
-            </button>
-          </div>
-          <div className="person-card-body">
-            {personFieldGroups.map((group, groupIndex) => (
-              <div className="person-fields" key={groupIndex}>
-                {group.map(([key, label, wide, multiline]) => (
-                  <label
-                    className={
-                      wide ? "person-field person-field--wide" : "person-field"
-                    }
-                    key={key}
-                  >
-                    <span>{label}</span>
-                    {multiline ? (
-                      <textarea
-                        className="control textarea--compact"
-                        aria-label={label}
-                        value={
-                          key === "rank"
-                            ? String(selectedIndex + 1)
-                            : selectedPerson[key] || ""
-                        }
-                        onChange={(event) =>
-                          updatePerson(selectedIndex, key, event.target.value)
-                        }
-                      />
-                    ) : (
-                      <input
-                        className="control"
-                        aria-label={label}
-                        readOnly={key === "rank"}
-                        inputMode={
-                          key === "rank" ||
-                          key.includes("Phone") ||
-                          key === "postalCode"
-                            ? "numeric"
-                            : undefined
-                        }
-                        value={selectedPerson[key] || ""}
-                        onChange={(event) =>
-                          updatePerson(selectedIndex, key, event.target.value)
-                        }
-                      />
-                    )}
-                  </label>
-                ))}
-              </div>
-            ))}
-            <div className="person-contribution">
-              <div className="person-contribution-label">
-                <span className="required">*</span>对本项目主要贡献
-              </div>
-              <RichTextEditor
-                value={selectedPerson.contribution}
-                onChange={(value) =>
-                  updatePerson(selectedIndex, "contribution", value)
-                }
-                applicationId={applicationId}
-                fieldKey={`person-${selectedPerson.id || selectedIndex}-contribution`}
-                label={`${selectedPerson.name || `第 ${selectedIndex + 1} 完成人`}对本项目主要贡献`}
-              />
-            </div>
-          </div>
-        </article>
-      )}
-      <div className="form-grid entity-project-fields">
-        <Field label="完成人合作关系说明">
-          <RichTextEditor
-            value={data.peopleCooperation || ""}
-            onChange={(value) => setField("peopleCooperation", value)}
-            applicationId={applicationId}
-            fieldKey="peopleCooperation"
-            label="完成人合作关系说明"
-          />
-        </Field>
-        <Field label="完成人合作关系情况汇总表">
-          <ManualRecordsTable
-            title="完成人合作关系情况汇总表"
-            records={data.cooperationRecords || []}
-            onChange={(value) => setField("cooperationRecords", value)}
-            fields={cooperationRecordFields}
-            addLabel="添加合作关系"
-            emptyLabel="暂无合作关系记录"
-            className="cooperation-record-collection"
-          />
-        </Field>
-      </div>
-    </section>
-  );
-}
-
-const unitFields = [
-  ["name", "单位名称", true],
-  ["location", "所在地"],
-  ["rank", "排名"],
-  ["nature", "单位性质", true],
-  ["contact", "联系人"],
-  ["phone", "联系电话"],
-  ["mobilePhone", "移动电话"],
-  ["fax", "传真"],
-  ["address", "通讯地址", true],
-  ["postalCode", "邮政编码"],
-  ["email", "电子邮箱", true],
-];
-
-function UnitSection({ data, setField, applicationId }) {
-  const [selectedIndex, setSelectedIndex] = useState(null);
-  const units = (data.units || []).map(normalizeUnit);
-  const updateUnit = (index, key, value) =>
-    setField(
-      "units",
-      units.map((unit, unitIndex) =>
-        unitIndex === index ? { ...unit, [key]: value } : unit,
-      ),
-    );
-  const addUnit = () => {
-    const nextIndex = units.length;
-    setField("units", [...units, newUnit("", nextIndex)]);
-    setSelectedIndex(nextIndex);
-  };
-  const removeUnit = (index) => {
-    setField(
-      "units",
-      units
-        .filter((_, unitIndex) => unitIndex !== index)
-        .map((unit, unitIndex) => ({ ...unit, rank: String(unitIndex + 1) })),
-    );
-    setSelectedIndex((current) =>
-      current === index ? null : current > index ? current - 1 : current,
-    );
-  };
-  const reorderUnits = (from, to) => {
-    const next = [...units];
-    const [moved] = next.splice(from, 1);
-    next.splice(to, 0, moved);
-    setField(
-      "units",
-      next.map((unit, index) => ({ ...unit, rank: String(index + 1) })),
-    );
-    setSelectedIndex(to);
-  };
-  const selectedUnit = selectedIndex === null ? null : units[selectedIndex];
-  return (
-    <section className="form-section">
-      <div className="section-heading">
-        <div>
-          <span className="section-index">09</span>
-          <h2>主要完成单位情况表</h2>
-        </div>
-        <button className="secondary-button" type="button" onClick={addUnit}>
-          <Plus size={16} />
-          新增完成单位
-        </button>
-      </div>
-      {!units.length ? (
-        <div className="empty-record person-empty">
-          <UsersRound size={28} />
-          <span>暂无主要完成单位</span>
-          <button className="secondary-button" type="button" onClick={addUnit}>
-            <Plus size={15} />
-            新增完成单位
-          </button>
-        </div>
-      ) : (
-        <SortableEntityTabs
-          items={units}
-          selectedIndex={selectedIndex}
-          onSelect={setSelectedIndex}
-          onReorder={reorderUnits}
-          getLabel={(unit) => unit.name}
-          entityLabel="完成单位"
-        />
-      )}
-      {selectedUnit && (
-        <article className="entity-detail-panel">
-          <div className="entity-detail-head">
-            <span>
-              <UsersRound size={18} />
-              <b>{selectedUnit.name || `第 ${selectedIndex + 1} 完成单位`}</b>
-              <small>
-                {selectedIndex === 0 ? "牵头单位" : `排名 ${selectedIndex + 1}`}
-              </small>
-            </span>
-            <button
-              className="icon-button icon-button--small"
-              type="button"
-              title="删除完成单位"
-              aria-label={`删除${selectedUnit.name || `第 ${selectedIndex + 1} 完成单位`}`}
-              onClick={() => removeUnit(selectedIndex)}
-            >
-              <X size={15} />
-            </button>
-          </div>
-          <div className="person-card-body">
-            <div className="person-fields unit-fields">
-              {unitFields.map(([key, label, wide]) => (
-                <label
-                  className={
-                    wide ? "person-field person-field--wide" : "person-field"
-                  }
-                  key={key}
-                >
-                  <span>{label}</span>
-                  <input
-                    className="control"
-                    aria-label={label}
-                    readOnly={key === "rank"}
-                    inputMode={
-                      key === "rank" ||
-                      key === "phone" ||
-                      key === "mobilePhone" ||
-                      key === "postalCode" ||
-                      key === "fax"
-                        ? "numeric"
-                        : undefined
-                    }
-                    value={
-                      key === "rank"
-                        ? String(selectedIndex + 1)
-                        : selectedUnit[key] || ""
-                    }
-                    onChange={(event) =>
-                      updateUnit(selectedIndex, key, event.target.value)
-                    }
-                  />
-                </label>
-              ))}
-            </div>
-            <div className="person-contribution unit-contribution">
-              <div className="person-contribution-label">
-                对本项目技术创新和应用的贡献
-              </div>
-              <RichTextEditor
-                value={selectedUnit.contribution}
-                onChange={(value) =>
-                  updateUnit(selectedIndex, "contribution", value)
-                }
-                applicationId={applicationId}
-                fieldKey={`unit-${selectedUnit.id || selectedIndex}-contribution`}
-                label={`${selectedUnit.name || `第 ${selectedIndex + 1} 完成单位`}对本项目技术创新和应用的贡献`}
-              />
-            </div>
-          </div>
-        </article>
-      )}
-    </section>
   );
 }
 
@@ -2421,13 +1553,13 @@ function ImportDialog({ applicationId, onClose, onApply }) {
   );
 }
 
-function PreviewPageOne({ data }) {
+function PreviewPageOne({ data, disciplineRecords }) {
   const formatDate = (value) =>
     value
       ? value
           .replace(/-(\d{2})-(\d{2})$/, " 年 $1 月 $2 日")
           .replace(/^(\d{4})/, "$1")
-      : "";
+      : "年　　月　　日";
   return (
     <article className="preview-page preview-basic-page">
       <header>
@@ -2436,22 +1568,36 @@ function PreviewPageOne({ data }) {
         <p>（{data.year} 年度）</p>
       </header>
       <h3>一、项目基本情况</h3>
+      <p className="preview-award-kind">
+        奖种： □节能减排科技进步奖&nbsp;&nbsp;□节能减排技术发明奖
+      </p>
       <table>
+        <colgroup>
+          <col style={{ width: "10.88%" }} />
+          <col style={{ width: "10.88%" }} />
+          <col style={{ width: "5.8%" }} />
+          <col style={{ width: "31.03%" }} />
+          <col style={{ width: "2.52%" }} />
+          <col style={{ width: "12.63%" }} />
+          <col style={{ width: "26%" }} />
+        </colgroup>
         <tbody>
           <tr>
-            <th rowSpan="2">项目名称</th>
+            <th rowSpan="2">
+              项 目<br />名 称
+            </th>
             <td className="subhead">中文</td>
-            <td colSpan="3">{data.projectName}</td>
+            <td colSpan="5">{data.projectName}</td>
           </tr>
           <tr>
             <td className="subhead">英文</td>
-            <td colSpan="3" className="preview-en">
+            <td colSpan="5" className="preview-en">
               {data.projectNameEn}
             </td>
           </tr>
           <tr>
-            <th>主要完成人</th>
-            <td colSpan="4">
+            <th colSpan="2">主要完成人</th>
+            <td colSpan="5">
               {data.people
                 .map((person) =>
                   typeof person === "string" ? person : person?.name,
@@ -2461,8 +1607,8 @@ function PreviewPageOne({ data }) {
             </td>
           </tr>
           <tr>
-            <th>主要完成单位</th>
-            <td colSpan="4">
+            <th colSpan="2">主要完成单位</th>
+            <td colSpan="5">
               {data.units
                 .map((unit) => (typeof unit === "string" ? unit : unit?.name))
                 .filter(Boolean)
@@ -2470,8 +1616,10 @@ function PreviewPageOne({ data }) {
             </td>
           </tr>
           <tr>
-            <th rowSpan="3">第一申报单位</th>
-            <td rowSpan="3" colSpan="2" className="stamp-cell">
+            <th rowSpan="3" colSpan="2">
+              第一申报单位
+            </th>
+            <td rowSpan="3" colSpan="3" className="stamp-cell">
               <span>{data.applicantUnit}</span>
               <i>盖章</i>
             </td>
@@ -2487,17 +1635,32 @@ function PreviewPageOne({ data }) {
             <td>{data.email}</td>
           </tr>
           <tr>
-            <th rowSpan="2">学科分类名称</th>
+            <th rowSpan="3" colSpan="2">
+              学 科 分 类<br />名 称
+            </th>
             <td className="subhead">1</td>
-            <td colSpan="3">{data.disciplines[0]}</td>
+            <td colSpan="4">
+              {disciplineDisplay(
+                derivePrimaryDiscipline(data.disciplines),
+                disciplineRecords,
+              )}
+            </td>
           </tr>
           <tr>
             <td className="subhead">2</td>
-            <td colSpan="3">{data.disciplines[1]}</td>
+            <td colSpan="4">
+              {disciplineDisplay(data.disciplines?.[1], disciplineRecords)}
+            </td>
           </tr>
           <tr>
-            <th>所属行业</th>
+            <td className="subhead">3</td>
             <td colSpan="4">
+              {disciplineDisplay(data.disciplines?.[2], disciplineRecords)}
+            </td>
+          </tr>
+          <tr>
+            <th colSpan="2">所属行业</th>
+            <td colSpan="5">
               <div className="industry-letters">
                 {industryOptions.map(([key]) => (
                   <span
@@ -2511,8 +1674,8 @@ function PreviewPageOne({ data }) {
             </td>
           </tr>
           <tr>
-            <th>项目来源</th>
-            <td colSpan="4">
+            <th colSpan="2">项目来源</th>
+            <td colSpan="5">
               <div className="source-lines">
                 {sourceOptions.map(([key, label]) => (
                   <span key={key}>
@@ -2523,38 +1686,33 @@ function PreviewPageOne({ data }) {
             </td>
           </tr>
           <tr>
-            <th>具体计划、基金的名称和编号</th>
-            <td colSpan="4" className="plans-cell">
+            <th colSpan="2">
+              具体计划、基金
+              <br />
+              名称和编号
+            </th>
+            <td colSpan="5" className="plans-cell">
               {data.plans}
             </td>
           </tr>
           <tr>
-            <th>项目起止时间</th>
-            <td colSpan="2">起始：{formatDate(data.startDate)}</td>
-            <td colSpan="2">完成：{formatDate(data.endDate)}</td>
+            <th colSpan="2">项目起止时间</th>
+            <td colSpan="3">
+              <div className="preview-date-range-value">
+                <span>起始：</span>
+                <span>{formatDate(data.startDate)}</span>
+              </div>
+            </td>
+            <td colSpan="2">
+              <div className="preview-date-range-value">
+                <span>完成：</span>
+                <span>{formatDate(data.endDate)}</span>
+              </div>
+            </td>
           </tr>
         </tbody>
       </table>
       <footer>1</footer>
-    </article>
-  );
-}
-
-function PreviewPageTwo({ data }) {
-  const rich = isHtmlContent(data.introduction);
-  return (
-    <article className="preview-page preview-text-page">
-      <h3>二、项目简介</h3>
-      {rich ? (
-        <div
-          className="preview-body-text preview-rich-text"
-          dangerouslySetInnerHTML={{ __html: sanitizeRichText(data.introduction) }}
-        />
-      ) : (
-        <div className="preview-body-text">{data.introduction || "尚未填写项目简介。"}</div>
-      )}
-      <div className="preview-limit">（限 800 个汉字）</div>
-      <footer>2</footer>
     </article>
   );
 }
@@ -2572,6 +1730,470 @@ function PreviewTextPage({ title, body, pageNumber }) {
       ) : (
         <div className="preview-body-text">{body || "尚未填写。"}</div>
       )}
+      <footer>{pageNumber}</footer>
+    </article>
+  );
+}
+
+function PreviewTablePage({ title, group, records, pageNumber, continued }) {
+  const fields = getPdfFields(group);
+  const displayValue = (record, field) => {
+    const direct = record[field.key];
+    if (direct !== undefined && direct !== null) return direct;
+    return (
+      field.legacyKeys
+        ?.map((key) => record[key])
+        .find((value) => value !== undefined && value !== null) ?? ""
+    );
+  };
+  return (
+    <article className="preview-page preview-form-page preview-table-page">
+      <h3>{continued ? `${title}（续）` : title}</h3>
+      <table aria-label={title}>
+        <thead>
+          <tr>
+            <th className="preview-index-column">序号</th>
+            {fields.map((field) => (
+              <th key={field.key}>{field.label}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {records.length ? (
+            records.map(({ record, index }) => (
+              <tr key={record.id || index}>
+                <td className="preview-index-column">{index + 1}</td>
+                {fields.map((field) => (
+                  <td key={field.key}>{displayValue(record, field)}</td>
+                ))}
+              </tr>
+            ))
+          ) : (
+            <tr className="preview-empty-row">
+              <td colSpan={fields.length + 1}>暂无记录</td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+      <footer>{pageNumber}</footer>
+    </article>
+  );
+}
+
+function PreviewAwardPage({ records, pageNumber, continued }) {
+  const value = (record, key) => record?.[key] ?? "";
+  return (
+    <article className="preview-page preview-form-page preview-template-table preview-award-page">
+      <h3>
+        {continued ? "四、本项目曾获奖励情况（续）" : "四、本项目曾获奖励情况"}
+      </h3>
+      <table aria-label="四、本项目曾获奖励情况">
+        <colgroup>
+          <col style={{ width: "30.91%" }} />
+          <col style={{ width: "14.55%" }} />
+          <col style={{ width: "16.36%" }} />
+          <col style={{ width: "12.73%" }} />
+          <col style={{ width: "25.45%" }} />
+        </colgroup>
+        <thead>
+          <tr>
+            <th>获奖项目名称</th>
+            <th>获奖时间</th>
+            <th>奖项名称</th>
+            <th>奖励等级</th>
+            <th>授奖部门（组织）</th>
+          </tr>
+        </thead>
+        <tbody>
+          {[
+            ...records,
+            ...Array(Math.max(0, 10 - records.length)).fill({}),
+          ].map((record, index) => (
+            <tr key={record.id || index}>
+              <td>{value(record, "name")}</td>
+              <td>{value(record, "date")}</td>
+              <td>{value(record, "award")}</td>
+              <td>{value(record, "level")}</td>
+              <td>{value(record, "org")}</td>
+            </tr>
+          ))}
+          <tr className="preview-note-row">
+            <td colSpan="5">
+              填写国务院、省／部委／军队、经登记社会力量、国际组织／外国政府设立的科技奖励，无则填“无”。
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <footer>{pageNumber}</footer>
+    </article>
+  );
+}
+
+function PreviewIpPage({
+  ipRecords,
+  paperRecords,
+  technicalEvaluation,
+  pageNumber,
+  continued,
+}) {
+  return (
+    <article className="preview-page preview-form-page preview-template-table preview-ip-page">
+      <h3>五、知识产权情况{continued ? "（续）" : ""}</h3>
+      <section className="preview-subtable">
+        <h4>1. 申请、获得知识产权情况表</h4>
+        <table aria-label="五、申请、获得知识产权情况表">
+          <colgroup>
+            <col style={{ width: "28.17%" }} />
+            <col style={{ width: "22.69%" }} />
+            <col style={{ width: "13.42%" }} />
+            <col style={{ width: "18.06%" }} />
+            <col style={{ width: "17.65%" }} />
+          </colgroup>
+          <thead>
+            <tr>
+              <th>授权（申请）项目名称</th>
+              <th>知识产权类别（发明／实用新型／外观／软著等）</th>
+              <th>国（区）别</th>
+              <th>申请号</th>
+              <th>授权号</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(ipRecords.length ? ipRecords : [{}, {}, {}, {}, {}]).map(
+              (record, index) => (
+                <tr key={record.id || index}>
+                  <td>{record.name || ""}</td>
+                  <td>{record.type || ""}</td>
+                  <td>{record.country || ""}</td>
+                  <td>{record.applicationNumber || ""}</td>
+                  <td>{record.authorizationNumber || record.number || ""}</td>
+                </tr>
+              ),
+            )}
+          </tbody>
+        </table>
+      </section>
+      <section className="preview-subtable">
+        <h4>2. 论著</h4>
+        <table aria-label="五、论著">
+          <colgroup>
+            <col style={{ width: "32%" }} />
+            <col style={{ width: "20%" }} />
+            <col style={{ width: "12%" }} />
+            <col style={{ width: "18%" }} />
+            <col style={{ width: "9%" }} />
+            <col style={{ width: "9%" }} />
+          </colgroup>
+          <thead>
+            <tr>
+              <th>论著名称</th>
+              <th>出版单位</th>
+              <th>出版年份</th>
+              <th>作者</th>
+              <th>本人排序</th>
+              <th>是否国内出版</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(paperRecords.length ? paperRecords : [{}, {}, {}]).map(
+              (record, index) => (
+                <tr key={record.id || index}>
+                  <td>{record.title || ""}</td>
+                  <td>{record.publisher || ""}</td>
+                  <td>{record.publicationYear || ""}</td>
+                  <td>{record.authors || ""}</td>
+                  <td>{record.authorRank || ""}</td>
+                  <td>{record.domestic || ""}</td>
+                </tr>
+              ),
+            )}
+          </tbody>
+        </table>
+      </section>
+      <section className="preview-subtable">
+        <h4>3. 技术评价证明及国家法律法规要求的行业审批文件目录</h4>
+        <div
+          className="preview-ip-description"
+          aria-label="五、技术评价证明及国家法律法规要求的行业审批文件目录"
+        >
+          <PreviewRichValue value={technicalEvaluation} />
+        </div>
+      </section>
+      <footer>{pageNumber}</footer>
+    </article>
+  );
+}
+
+function PreviewEconomicPage({ data, pageNumber }) {
+  const records = data.economicRecords || [];
+  const amountFields = getPdfFields("economicRecords").filter(
+    (field) => field.key !== "year",
+  );
+  const total = (key) =>
+    records.reduce((sum, record) => sum + (Number(record[key]) || 0), 0) || "";
+  return (
+    <article className="preview-page preview-form-page preview-economic-page">
+      <h3>三、项目详细内容</h3>
+      <h4>6. 经济效益（标准、软科学类项目可以不填此栏）</h4>
+      <p className="preview-table-unit">单位：万元人民币</p>
+      <table aria-label="经济效益数据">
+        <colgroup>
+          {Array.from({ length: amountFields.length + 1 }, (_, index) => (
+            <col
+              key={index}
+              style={{ width: `${100 / (amountFields.length + 1)}%` }}
+            />
+          ))}
+        </colgroup>
+        <tbody>
+          <tr>
+            <th>项目总投资额</th>
+            <td colSpan="2">{data.economicSummary?.totalInvestment || ""}</td>
+            <th>回收期（年）</th>
+            <td>{data.economicSummary?.paybackYears || ""}</td>
+          </tr>
+          <tr>
+            <th>年度</th>
+            {amountFields.map((field) => (
+              <th key={field.key}>
+                {field.label}
+                {field.key === "foreignExchange" ? "（万美元）" : ""}
+              </th>
+            ))}
+          </tr>
+          {records.map((record, index) => (
+            <tr key={record.id || index}>
+              <td>{record.year}</td>
+              {amountFields.map((field) => (
+                <td key={field.key}>{record[field.key]}</td>
+              ))}
+            </tr>
+          ))}
+          <tr>
+            <th colSpan="1">累计</th>
+            {amountFields.map((field) => (
+              <td key={field.key}>{total(field.key)}</td>
+            ))}
+          </tr>
+        </tbody>
+        <tbody className="preview-economic-basis">
+          <tr>
+            <td colSpan="5">
+              <strong>各栏目的计算依据：</strong>
+              <PreviewRichValue value={data.economic} />
+              <span className="preview-word-limit">（限 300 字）</span>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <footer>{pageNumber}</footer>
+    </article>
+  );
+}
+
+function PreviewRichValue({ value, className = "" }) {
+  return isHtmlContent(value) ? (
+    <div
+      className={`preview-cell-rich ${className}`}
+      dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(value) }}
+    />
+  ) : (
+    <div className={`preview-cell-rich ${className}`}>{value || ""}</div>
+  );
+}
+
+function PreviewPersonPage({ person, index, pageNumber }) {
+  return (
+    <article className="preview-page preview-form-page preview-entity-page">
+      <h3>六、主要完成人情况表</h3>
+      <table aria-label={`第 ${index + 1} 完成人情况表`}>
+        <colgroup>
+          <col style={{ width: "6.5%" }} />
+          <col style={{ width: "7.22%" }} />
+          <col style={{ width: "19.86%" }} />
+          <col style={{ width: "7.22%" }} />
+          <col style={{ width: "9.18%" }} />
+          <col style={{ width: "3.46%" }} />
+          <col style={{ width: "13.2%" }} />
+          <col style={{ width: "13.89%" }} />
+          <col style={{ width: "19.45%" }} />
+        </colgroup>
+        <tbody>
+          <tr>
+            <th colSpan="2">姓 名</th>
+            <td colSpan="2">{person.name}</td>
+            <th colSpan="2">性别</th>
+            <td>{person.gender}</td>
+            <th>排名</th>
+            <td>第 {index + 1} 完成人</td>
+          </tr>
+          <tr>
+            <th colSpan="2">出生年月</th>
+            <td colSpan="2">{person.birthDate}</td>
+            <th colSpan="2">出生地</th>
+            <td>{person.birthPlace}</td>
+            <th>民族</th>
+            <td>{person.ethnicity}</td>
+          </tr>
+          <tr>
+            <th colSpan="2">籍贯</th>
+            <td colSpan="7">{person.nativePlace}</td>
+          </tr>
+          <tr>
+            <th colSpan="2">身份证号</th>
+            <td colSpan="2">{person.idNumber}</td>
+            <th colSpan="2">党 派</th>
+            <td>{person.politicalAffiliation}</td>
+            <th>国籍</th>
+            <td>{person.nationality}</td>
+          </tr>
+          <tr>
+            <th colSpan="2">行政职务</th>
+            <td colSpan="2">{person.administrativePosition}</td>
+            <th colSpan="2">归国人员</th>
+            <td>{person.returnee}</td>
+            <th>归国时间</th>
+            <td>{person.returnDate}</td>
+          </tr>
+          <tr>
+            <th colSpan="2">工作单位</th>
+            <td colSpan="5">{person.workUnit}</td>
+            <th>办公电话</th>
+            <td>{person.officePhone}</td>
+          </tr>
+          <tr>
+            <th colSpan="2">通讯地址</th>
+            <td colSpan="5">{person.mailingAddress}</td>
+            <th>邮政编码</th>
+            <td>{person.postalCode}</td>
+          </tr>
+          <tr>
+            <th colSpan="2">家庭住址</th>
+            <td colSpan="5">{person.homeAddress}</td>
+            <th>住宅电话</th>
+            <td>{person.homePhone}</td>
+          </tr>
+          <tr>
+            <th colSpan="2">电子信箱</th>
+            <td colSpan="5">{person.email}</td>
+            <th>移动电话</th>
+            <td>{person.mobilePhone}</td>
+          </tr>
+          <tr>
+            <th colSpan="2">毕业学校</th>
+            <td>{person.graduateSchool}</td>
+            <th colSpan="2">毕业时间</th>
+            <td colSpan="2">{person.graduationDate}</td>
+            <th colSpan="1">文化程度</th>
+            <td>{person.education}</td>
+          </tr>
+          <tr>
+            <th colSpan="2">技术职称</th>
+            <td>{person.technicalTitle}</td>
+            <th colSpan="2">专业、专长</th>
+            <td colSpan="2">{person.specialty}</td>
+            <th colSpan="1">最高学位</th>
+            <td>{person.highestDegree}</td>
+          </tr>
+          <tr>
+            <th colSpan="3">曾获奖励及荣誉称号情况</th>
+            <td colSpan="6">{person.awards}</td>
+          </tr>
+          <tr>
+            <th colSpan="3">参加本项目的起止时间</th>
+            <td colSpan="6">{person.projectPeriod}</td>
+          </tr>
+          <tr>
+            <th colSpan="3">备注</th>
+            <td colSpan="6">{person.notes}</td>
+          </tr>
+          <tr className="preview-contribution-row">
+            <td colSpan="9">
+              <strong>对本项目主要科学技术贡献：</strong>
+              <span>（简明阐述核心贡献，与创新点对应）</span>
+              <PreviewRichValue value={person.contribution} />
+            </td>
+          </tr>
+          <tr className="preview-declaration-row">
+            <th>
+              <span>声</span>
+              <span>明</span>
+            </th>
+            <td colSpan="8">
+              <p>
+                本人对申报书内容及全部附件材料进行了审查，内容和材料均属实，对推荐材料的真实性负责，并同意本人在“主要完成人”中的排序。
+              </p>
+              <p className="preview-signature-line">本人签名：</p>
+              <p className="preview-date-line">
+                年&nbsp;&nbsp;&nbsp;&nbsp;月&nbsp;&nbsp;&nbsp;&nbsp;日
+              </p>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <footer>{pageNumber}</footer>
+    </article>
+  );
+}
+
+function PreviewUnitPage({ unit, index, pageNumber }) {
+  return (
+    <article className="preview-page preview-form-page preview-entity-page preview-unit-page">
+      <h3>七、主要完成单位情况表</h3>
+      <table aria-label={`第 ${index + 1} 完成单位情况表`}>
+        <tbody>
+          <tr>
+            <th>单位名称</th>
+            <td colSpan="3">{unit.name}</td>
+            <th>所在地</th>
+            <td>{unit.location}</td>
+          </tr>
+          <tr>
+            <th>排名</th>
+            <td>第 {index + 1} 完成单位</td>
+            <th>单位性质</th>
+            <td colSpan="3">{unit.nature}</td>
+          </tr>
+          <tr>
+            <th>联系人</th>
+            <td>{unit.contact}</td>
+            <th>联系电话</th>
+            <td>{unit.phone}</td>
+            <th>移动电话</th>
+            <td>{unit.mobilePhone}</td>
+          </tr>
+          <tr>
+            <th>通讯地址及邮政编码</th>
+            <td colSpan="5">
+              {[unit.address, unit.postalCode].filter(Boolean).join("，")}
+            </td>
+          </tr>
+          <tr>
+            <th>电子邮箱</th>
+            <td>{unit.email}</td>
+            <td colSpan="2" className="preview-unit-note">
+              注：务必确保以上相关信息完整无误。
+            </td>
+            <th>传真</th>
+            <td>{unit.fax}</td>
+          </tr>
+          <tr className="preview-contribution-row preview-unit-contribution">
+            <td colSpan="6">
+              <strong>
+                对本项目技术创新和应用的贡献（限 500
+                字，阐述单位在研发、资金、场地、试验、推广等方面的核心支持与贡献）
+              </strong>
+              <PreviewRichValue value={unit.contribution} />
+              <div className="preview-stamp-block">
+                <div>单位盖章：</div>
+                <div>
+                  年&nbsp;&nbsp;&nbsp;&nbsp;月&nbsp;&nbsp;&nbsp;&nbsp;日
+                </div>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
       <footer>{pageNumber}</footer>
     </article>
   );
@@ -2611,117 +2233,9 @@ function splitPreviewContent(content, maxLength = 1250) {
   return chunks.length ? chunks : ["尚未填写。"];
 }
 
-function buildPreviewSections(data) {
-  const escapePreviewText = (value) => {
-    const element = document.createElement("span");
-    element.textContent = String(value || "");
-    return element.innerHTML;
-  };
-  const peopleContent = (data.people || [])
-    .map((item, index) => {
-      const person = normalizePerson(item, index);
-      const details = [
-        ["name", "姓名"],
-        ["gender", "性别"],
-        ["rank", "排名"],
-        ["birthDate", "出生年月"],
-        ["birthPlace", "出生地"],
-        ["ethnicity", "民族"],
-        ["nativePlace", "籍贯"],
-        ["idNumber", "身份证号"],
-        ["politicalAffiliation", "党派"],
-        ["nationality", "国籍"],
-        ["administrativePosition", "行政职务"],
-        ["technicalTitle", "技术职称"],
-        ["workUnit", "工作单位"],
-        ["officePhone", "办公电话"],
-        ["mobilePhone", "移动电话"],
-        ["email", "电子邮箱"],
-        ["mailingAddress", "通讯地址"],
-        ["postalCode", "邮政编码"],
-        ["homeAddress", "家庭住址"],
-        ["homePhone", "住宅电话"],
-        ["returnee", "归国人员"],
-        ["returnDate", "归国时间"],
-        ["graduateSchool", "毕业学校"],
-        ["graduationDate", "毕业时间"],
-        ["education", "文化程度"],
-        ["highestDegree", "最高学位"],
-        ["specialty", "专业、专长"],
-        ["projectPeriod", "参加本项目起止时间"],
-        ["awards", "曾获奖励"],
-        ["notes", "备注"],
-      ]
-        .map(([key, label]) =>
-          person[key] ? `${label}：${escapePreviewText(person[key])}` : "",
-        )
-        .filter(Boolean)
-        .join("　");
-      const contribution = isHtmlContent(person.contribution)
-        ? sanitizeRichText(person.contribution)
-        : `<p>${escapePreviewText(person.contribution)}</p>`;
-      return `<div><p><strong>第 ${index + 1} 完成人</strong></p><p>${details}</p>${person.contribution ? `<p><strong>对本项目主要贡献：</strong></p>${contribution}` : ""}</div>`;
-    })
-    .join("");
-  const unitsContent = (data.units || [])
-    .map((item, index) => {
-      const unit = normalizeUnit(item, index);
-      const details = [
-        ["name", "单位名称"],
-        ["location", "所在地"],
-        ["rank", "排名"],
-        ["nature", "单位性质"],
-        ["contact", "联系人"],
-        ["phone", "联系电话"],
-        ["mobilePhone", "移动电话"],
-        ["address", "通讯地址"],
-        ["postalCode", "邮政编码"],
-        ["email", "电子邮箱"],
-        ["fax", "传真"],
-      ]
-        .map(([key, label]) =>
-          unit[key] ? `${label}：${escapePreviewText(unit[key])}` : "",
-        )
-        .filter(Boolean)
-        .join("　");
-      const contribution = isHtmlContent(unit.contribution)
-        ? sanitizeRichText(unit.contribution)
-        : `<p>${escapePreviewText(unit.contribution)}</p>`;
-      return `<div><p><strong>第 ${index + 1} 完成单位</strong></p><p>${details}</p>${unit.contribution ? `<p><strong>对本项目技术创新和应用的贡献：</strong></p>${contribution}` : ""}</div>`;
-    })
-    .join("");
-  const listRecords = (records, fields) =>
-    (records || [])
-      .map(
-        (record, index) =>
-          `${index + 1}. ${fields
-            .map(([key, label]) =>
-              record[key] ? `${label}：${record[key]}` : "",
-            )
-            .filter(Boolean)
-            .join("　")}`,
-      )
-      .join("\n");
-  const economicSummary = data.economicSummary || {};
-  const economicData = [
-    economicSummary.totalInvestment
-      ? `项目总投资额：${economicSummary.totalInvestment} 万元`
-      : "",
-    economicSummary.paybackYears
-      ? `回收期：${economicSummary.paybackYears} 年`
-      : "",
-    listRecords(data.economicRecords, [
-      ["year", "年份"],
-      ["newSales", "新增销售额（万元）"],
-      ["newProfit", "新增利润"],
-      ["newTax", "新增税收"],
-      ["foreignExchange", "创收外汇（万美元）"],
-      ["savingsTotal", "节支总额"],
-    ]),
-  ]
-    .filter(Boolean)
-    .join("\n");
-  const raw = [
+function buildPreviewSections(sourceData) {
+  const data = normalizeApplicationData(sourceData);
+  const textSections = [
     ["二、项目简介", data.introduction],
     ["三、项目详细内容（1. 立项背景）", data.background],
     [
@@ -2731,83 +2245,129 @@ function buildPreviewSections(data) {
     ["三、项目详细内容（3. 主要技术创新点）", data.innovations],
     ["三、项目详细内容（4. 与当前国内外同类技术比较）", data.comparison],
     ["三、项目详细内容（5. 应用情况）", data.application],
-    ["三、项目详细内容（6. 经济效益数据）", economicData],
-    ["三、项目详细内容（6. 各栏目的计算依据）", data.economic],
-    ["三、项目详细内容（7. 社会效益）", data.social],
-    [
-      "四、本项目曾获奖励情况",
-      (data.awardRecords || [])
-        .map(
-          (item, index) =>
-            `${index + 1}. ${Object.values(item).filter(Boolean).join("　")}`,
-        )
-        .join("\n"),
-    ],
-    [
-      "五、申请、获得知识产权情况表",
-      (data.ipRecords || [])
-        .map(
-          (item, index) =>
-            `${index + 1}. ${Object.values(item).filter(Boolean).join("　")}`,
-        )
-        .join("\n"),
-    ],
-    [
-      "五、论文、专著目录",
-      listRecords(data.paperRecords, [
-        ["title", "论著名称"],
-        ["publisher", "出版单位"],
-        ["publicationYear", "出版年份"],
-        ["authors", "作者"],
-        ["authorRank", "本人排序"],
-        ["domestic", "是否国内出版"],
-      ]),
-    ],
-    [
-      "五、技术评价证明及国家法律法规要求的行业审批文件目录",
-      data.technicalEvaluation,
-    ],
-    [
-      "五、应用单位目录",
-      listRecords(data.applicationUnits, [
-        ["unitName", "应用单位名称"],
-        ["technology", "应用技术"],
-        ["startDate", "应用起始时间"],
-        ["endDate", "应用截止时间"],
-        ["contactPhone", "应用单位联系人及电话"],
-        ["economicBenefit", "使用本项目产生的经济效益（万元）"],
-      ]),
-    ],
-    ["六、主要完成人情况表", peopleContent],
-    ["六、完成人合作关系说明", data.peopleCooperation],
-    [
-      "六、完成人合作关系情况汇总表",
-      listRecords(data.cooperationRecords, [
-        ["method", "合作方式"],
-        ["collaborators", "合作者"],
-        ["period", "合作时间"],
-        ["output", "合作成果"],
-        ["evidence", "证明材料"],
-        ["notes", "备注"],
-      ]),
-    ],
-    ["七、主要完成单位情况表", unitsContent],
-    ["八、申报、推荐单位意见", "签章意见以系统上传附件为准。"],
   ];
   const pages = [];
-  for (const [title, content = ""] of raw) {
+  const addTablePages = (title, group, records, pageSize) => {
+    const source = records?.length ? records : [];
+    const chunks = source.length
+      ? Array.from(
+          { length: Math.ceil(source.length / pageSize) },
+          (_, index) => source.slice(index * pageSize, (index + 1) * pageSize),
+        )
+      : [[]];
+    chunks.forEach((chunk, pageIndex) =>
+      pages.push({
+        kind: "table",
+        title,
+        group,
+        continued: pageIndex > 0,
+        records: chunk.map((record, index) => ({
+          record,
+          index: pageIndex * pageSize + index,
+        })),
+      }),
+    );
+  };
+  for (const [title, content = ""] of textSections) {
     splitPreviewContent(content).forEach((body, index) => {
-      pages.push({ title: index ? `${title}（续）` : title, body });
+      pages.push({
+        kind: "text",
+        title: index ? `${title}（续）` : title,
+        body,
+      });
     });
   }
+  pages.push({ kind: "economic", title: "经济效益数据", data });
+  splitPreviewContent(data.social).forEach((body, index) =>
+    pages.push({
+      kind: "text",
+      title: `三、项目详细内容（7. 社会效益）${index ? "（续）" : ""}`,
+      body,
+    }),
+  );
+  const awardChunks = data.awardRecords?.length
+    ? Array.from(
+        { length: Math.ceil(data.awardRecords.length / 12) },
+        (_, index) => data.awardRecords.slice(index * 12, (index + 1) * 12),
+      )
+    : [[]];
+  awardChunks.forEach((records, index) =>
+    pages.push({
+      kind: "award",
+      title: "四、本项目曾获奖励情况",
+      continued: index > 0,
+      records,
+    }),
+  );
+  const ipPageCount = Math.max(
+    1,
+    Math.ceil((data.ipRecords?.length || 0) / 5),
+    Math.ceil((data.paperRecords?.length || 0) / 6),
+  );
+  for (let index = 0; index < ipPageCount; index += 1) {
+    pages.push({
+      kind: "ip",
+      title: "五、知识产权情况",
+      continued: index > 0,
+      ipRecords: (data.ipRecords || []).slice(index * 5, (index + 1) * 5),
+      paperRecords: (data.paperRecords || []).slice(index * 6, (index + 1) * 6),
+      technicalEvaluation: index === 0 ? data.technicalEvaluation : "",
+    });
+  }
+  addTablePages(
+    "五、应用单位目录",
+    "applicationUnits",
+    data.applicationUnits,
+    8,
+  );
+  data.people.forEach((person, index) =>
+    pages.push({
+      kind: "person",
+      title: `第 ${index + 1} 完成人`,
+      person,
+      index,
+    }),
+  );
+  splitPreviewContent(data.peopleCooperation).forEach((body, index) =>
+    pages.push({
+      kind: "text",
+      title: `六、完成人合作关系说明${index ? "（续）" : ""}`,
+      body,
+    }),
+  );
+  addTablePages(
+    "六、完成人合作关系情况汇总表",
+    "cooperationRecords",
+    data.cooperationRecords,
+    10,
+  );
+  data.units.forEach((unit, index) =>
+    pages.push({
+      kind: "unit",
+      title: `第 ${index + 1} 完成单位`,
+      unit,
+      index,
+    }),
+  );
+  pages.push({
+    kind: "text",
+    title: "八、申报、推荐单位意见",
+    body: "签章意见以系统上传附件为准。",
+  });
   return pages;
 }
 
-function PreviewDialog({ data, onClose, applicationId, sourceFile }) {
+function PreviewDialog({
+  data,
+  onClose,
+  applicationId,
+  sourceFile,
+  disciplineRecords,
+}) {
   const pagesRef = useRef(null);
   const [exporting, setExporting] = useState(false);
-  const textPages = useMemo(() => buildPreviewSections(data), [data]);
-  const pageCount = textPages.length + 1;
+  const previewPages = useMemo(() => buildPreviewSections(data), [data]);
+  const pageCount = previewPages.length + 1;
   const exportPdf = async () => {
     setExporting(true);
     try {
@@ -2884,7 +2444,7 @@ function PreviewDialog({ data, onClose, applicationId, sourceFile }) {
             <b>第 1 页</b>
             <small>基本情况</small>
           </button>
-          {textPages.map((page, index) => (
+          {previewPages.map((page, index) => (
             <button
               className="page-thumb"
               key={`${page.title}-${index}`}
@@ -2905,14 +2465,71 @@ function PreviewDialog({ data, onClose, applicationId, sourceFile }) {
           ))}
         </aside>
         <main className="preview-pages" ref={pagesRef}>
-          <PreviewPageOne data={data} />
-          {textPages.map((page, index) => (
-            <PreviewTextPage
-              key={`${page.title}-${index}`}
-              {...page}
-              pageNumber={index + 2}
-            />
-          ))}
+          <PreviewPageOne data={data} disciplineRecords={disciplineRecords} />
+          {previewPages.map((page, index) => {
+            const pageNumber = index + 2;
+            if (page.kind === "award") {
+              return (
+                <PreviewAwardPage
+                  key={`award-${index}`}
+                  {...page}
+                  pageNumber={pageNumber}
+                />
+              );
+            }
+            if (page.kind === "ip") {
+              return (
+                <PreviewIpPage
+                  key={`ip-${index}`}
+                  {...page}
+                  pageNumber={pageNumber}
+                />
+              );
+            }
+            if (page.kind === "table") {
+              return (
+                <PreviewTablePage
+                  key={`${page.title}-${index}`}
+                  {...page}
+                  pageNumber={pageNumber}
+                />
+              );
+            }
+            if (page.kind === "economic") {
+              return (
+                <PreviewEconomicPage
+                  key={`${page.title}-${index}`}
+                  data={page.data}
+                  pageNumber={pageNumber}
+                />
+              );
+            }
+            if (page.kind === "person") {
+              return (
+                <PreviewPersonPage
+                  key={page.person.id}
+                  {...page}
+                  pageNumber={pageNumber}
+                />
+              );
+            }
+            if (page.kind === "unit") {
+              return (
+                <PreviewUnitPage
+                  key={page.unit.id}
+                  {...page}
+                  pageNumber={pageNumber}
+                />
+              );
+            }
+            return (
+              <PreviewTextPage
+                key={`${page.title}-${index}`}
+                {...page}
+                pageNumber={pageNumber}
+              />
+            );
+          })}
         </main>
       </div>
     </div>
@@ -3775,6 +3392,7 @@ function Dashboard({ onOpen, user, onLogout }) {
 }
 
 function EditorApp({ application, onHome }) {
+  const [disciplineRecords, setDisciplineRecords] = useState([]);
   const [data, setData] = useState(() => {
     const stored = application.data || {};
     let localDraft = {};
@@ -3785,12 +3403,22 @@ function EditorApp({ application, onHome }) {
     } catch {
       localDraft = {};
     }
-    return {
+    const merged = {
       ...createEmptyData(application),
       ...stored,
       ...localDraft,
     };
+    return normalizeApplicationData(merged);
   });
+  useEffect(() => {
+    let active = true;
+    import("./data/disciplines.js").then(({ disciplines: records }) => {
+      if (active) setDisciplineRecords(records);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
   const [active, setActive] = useState("basic");
   const [saveState, setSaveState] = useState("saved");
   const [savedAt, setSavedAt] = useState("");
@@ -3821,7 +3449,7 @@ function EditorApp({ application, onHome }) {
     }
   };
   const saveToDatabase = (nextData = latestData.current) => {
-    const snapshot = structuredClone(nextData);
+    const snapshot = normalizeApplicationData(structuredClone(nextData));
     setSaveState("saving");
     saveQueue.current = saveQueue.current
       .catch(() => {})
@@ -3883,7 +3511,9 @@ function EditorApp({ application, onHome }) {
       fetch(`/api/applications/${application.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ data: latestData.current }),
+        body: JSON.stringify({
+          data: normalizeApplicationData(latestData.current),
+        }),
         keepalive: true,
       }).catch(() => {});
     };
@@ -3907,9 +3537,9 @@ function EditorApp({ application, onHome }) {
           .trim().length > 0
       );
     };
-    const hasRecord = (records) =>
+    const hasRecord = (records, group) =>
       (records || []).some((record) =>
-        Object.values(record || {}).some(hasContent),
+        getPdfFields(group).some((field) => hasContent(record?.[field.key])),
       );
     return {
       basic: [
@@ -3922,7 +3552,7 @@ function EditorApp({ application, onHome }) {
         data.industry,
         data.startDate,
         data.endDate,
-        data.disciplines?.[0],
+        derivePrimaryDiscipline(data.disciplines)?.name,
         data.sources?.length,
         data.people?.length,
         data.units?.length,
@@ -3933,10 +3563,10 @@ function EditorApp({ application, onHome }) {
       ),
       comparison: hasContent(data.comparison),
       application: hasContent(data.application),
-      awards: hasRecord(data.awardRecords),
+      awards: hasRecord(data.awardRecords, "awardRecords"),
       ip:
-        hasRecord(data.ipRecords) ||
-        hasRecord(data.paperRecords) ||
+        hasRecord(data.ipRecords, "ipRecords") ||
+        hasRecord(data.paperRecords, "paperRecords") ||
         hasContent(data.technicalEvaluation),
       people:
         (data.people || []).length > 0 &&
@@ -3980,12 +3610,12 @@ function EditorApp({ application, onHome }) {
       ].filter((key) => data[key]).length +
       (data.people.length ? 1 : 0) +
       (data.units.length ? 1 : 0) +
-      (data.disciplines.some(Boolean) ? 1 : 0),
+      (derivePrimaryDiscipline(data.disciplines) ? 1 : 0),
     [data],
   );
   const completion = Math.round((completeCount / 15) * 100);
   const applyImport = (fields, result) => {
-    setData((current) => ({ ...current, ...fields }));
+    setData((current) => normalizeApplicationData({ ...current, ...fields }));
     if (result?.sourceFile) {
       const importedSource = {
         ...result.sourceFile,
@@ -4000,13 +3630,19 @@ function EditorApp({ application, onHome }) {
     setShowImport(false);
   };
   const applyWordImport = async (fields) => {
-    const nextData = { ...data, ...fields };
+    const nextData = normalizeApplicationData({ ...data, ...fields });
     await saveToDatabase(nextData);
     setData(nextData);
   };
   const currentContent = () => {
     if (active === "basic")
-      return <BasicForm data={data} setField={setField} />;
+      return (
+        <BasicForm
+          data={data}
+          setField={setField}
+          disciplineRecords={disciplineRecords}
+        />
+      );
     if (active === "introduction")
       return (
         <LongTextSection
@@ -4160,18 +3796,76 @@ function EditorApp({ application, onHome }) {
       );
     if (active === "people")
       return (
-        <PeopleSection
-          data={data}
-          setField={setField}
-          applicationId={application.id}
+        <EntityEditor
+          entityType="people"
+          number={8}
+          value={data.people}
+          onChange={(value) => setField("people", value)}
+          renderCustomField={({ field, record, index, update }) =>
+            field.key === "contribution" ? (
+              <div className="person-contribution">
+                <div className="person-contribution-label">
+                  对本项目主要贡献
+                </div>
+                <RichTextEditor
+                  value={record.contribution}
+                  onChange={(value) => update("contribution", value)}
+                  applicationId={application.id}
+                  fieldKey={`person-${record.id || index}-contribution`}
+                  label={`${record.name || `第 ${index + 1} 完成人`}对本项目主要贡献`}
+                />
+              </div>
+            ) : null
+          }
+          afterFields={() => (
+            <div className="form-grid entity-project-fields">
+              <Field label="完成人合作关系说明">
+                <RichTextEditor
+                  value={data.peopleCooperation || ""}
+                  onChange={(value) => setField("peopleCooperation", value)}
+                  applicationId={application.id}
+                  fieldKey="peopleCooperation"
+                  label="完成人合作关系说明"
+                />
+              </Field>
+              <Field label="完成人合作关系情况汇总表">
+                <StructuredTable
+                  group="cooperationRecords"
+                  title="完成人合作关系情况汇总表"
+                  value={data.cooperationRecords || []}
+                  onChange={(value) => setField("cooperationRecords", value)}
+                  addLabel="添加合作关系"
+                  emptyLabel="暂无合作关系记录"
+                  className="cooperation-record-collection"
+                />
+              </Field>
+            </div>
+          )}
         />
       );
     if (active === "units")
       return (
-        <UnitSection
-          data={data}
-          setField={setField}
-          applicationId={application.id}
+        <EntityEditor
+          entityType="units"
+          number={9}
+          value={data.units}
+          onChange={(value) => setField("units", value)}
+          renderCustomField={({ field, record, index, update }) =>
+            field.key === "contribution" ? (
+              <div className="person-contribution unit-contribution">
+                <div className="person-contribution-label">
+                  对本项目技术创新和应用的贡献
+                </div>
+                <RichTextEditor
+                  value={record.contribution}
+                  onChange={(value) => update("contribution", value)}
+                  applicationId={application.id}
+                  fieldKey={`unit-${record.id || index}-contribution`}
+                  label={`${record.name || `第 ${index + 1} 完成单位`}对本项目技术创新和应用的贡献`}
+                />
+              </div>
+            ) : null
+          }
         />
       );
     if (active === "recommendation")
@@ -4195,6 +3889,7 @@ function EditorApp({ application, onHome }) {
         data={data}
         applicationId={application.id}
         sourceFile={sourceFile}
+        disciplineRecords={disciplineRecords}
         onClose={() => setShowPreview(false)}
       />
     );
@@ -4204,7 +3899,8 @@ function EditorApp({ application, onHome }) {
         <button
           className="mobile-menu icon-button"
           onClick={() => setSidebarOpen(!sidebarOpen)}
-          aria-label="打开导航"
+          aria-expanded={sidebarOpen}
+          aria-label={sidebarOpen ? "关闭导航" : "打开导航"}
         >
           <Menu size={20} />
         </button>
@@ -4299,7 +3995,10 @@ function EditorApp({ application, onHome }) {
         </button>
       </div>
       <div className="body-shell">
-        <aside className={sidebarOpen ? "sidebar open" : "sidebar"}>
+        <aside
+          className={sidebarOpen ? "sidebar open" : "sidebar"}
+          aria-label="申报内容导航"
+        >
           <div className="project-summary">
             <span className="summary-icon">
               <FileText size={20} />
