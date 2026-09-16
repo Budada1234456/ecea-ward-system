@@ -1,14 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
-  AlignCenter,
-  AlignJustify,
-  AlignLeft,
-  AlignRight,
   AlertCircle,
   Archive,
   Bell,
-  Bold,
   BookOpen,
   CalendarDays,
   Check,
@@ -21,16 +16,12 @@ import {
   ExternalLink,
   FileCheck2,
   FileDown,
+  FileInput,
   FileText,
   FolderOpen,
   GripVertical,
   Home,
   Info,
-  ImagePlus,
-  Italic,
-  Link2,
-  List,
-  ListOrdered,
   LoaderCircle,
   LockKeyhole,
   LogOut,
@@ -45,27 +36,21 @@ import {
   ScanText,
   ShieldCheck,
   Sparkles,
-  Strikethrough,
   Upload,
-  Underline as UnderlineIcon,
-  Undo2,
-  Redo2,
   UserRound,
   UserPlus,
   UsersRound,
   X,
 } from "lucide-react";
-import { EditorContent, useEditor } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
-import Underline from "@tiptap/extension-underline";
-import TextAlign from "@tiptap/extension-text-align";
-import Link from "@tiptap/extension-link";
-import Image from "@tiptap/extension-image";
-import { TextStyle } from "@tiptap/extension-text-style";
-import Color from "@tiptap/extension-color";
-import DOMPurify from "dompurify";
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
+import {
+  CharacterCount,
+  RichTextEditor,
+  isHtmlContent,
+  sanitizeRichText,
+} from "./editor/index.jsx";
+import { WordImportDialog } from "./import/WordImportDialog.jsx";
 import "./styles.css";
 
 const sections = [
@@ -441,319 +426,6 @@ function TextInput({ value, onChange, placeholder, maxLength, type = "text" }) {
       placeholder={placeholder}
       onChange={(e) => onChange(e.target.value)}
     />
-  );
-}
-
-function CharacterCount({ value, max }) {
-  const count = richTextToPlain(value).length;
-  return (
-    <span
-      className={count > max ? "char-count char-count--over" : "char-count"}
-    >
-      {count} / {max}
-    </span>
-  );
-}
-
-function isHtmlContent(value) {
-  return /<\/?[a-z][\s\S]*>/i.test(String(value || ""));
-}
-
-function richTextToPlain(value) {
-  const source = String(value || "");
-  if (!isHtmlContent(source)) return source;
-  const documentNode = new DOMParser().parseFromString(source, "text/html");
-  return (documentNode.body.textContent || "").trim();
-}
-
-function toEditorHtml(value) {
-  const source = String(value || "");
-  if (!source) return "";
-  if (isHtmlContent(source)) return DOMPurify.sanitize(source);
-  return source
-    .split(/\n{2,}/)
-    .map(
-      (paragraph) =>
-        `<p>${paragraph.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br>")}</p>`,
-    )
-    .join("");
-}
-
-function RichTextButton({
-  title,
-  active = false,
-  disabled = false,
-  onClick,
-  children,
-}) {
-  return (
-    <button
-      type="button"
-      title={title}
-      aria-label={title}
-      className={active ? "rich-tool active" : "rich-tool"}
-      disabled={disabled}
-      onMouseDown={(event) => event.preventDefault()}
-      onClick={onClick}
-    >
-      {children}
-    </button>
-  );
-}
-
-function RichTextEditor({ value, onChange, applicationId, fieldKey, label }) {
-  const imageInput = useRef(null);
-  const [uploadingImage, setUploadingImage] = useState(false);
-  const editor = useEditor({
-    extensions: [
-      StarterKit.configure({ link: false, underline: false }),
-      Underline,
-      TextAlign.configure({ types: ["heading", "paragraph"] }),
-      Link.configure({
-        openOnClick: false,
-        autolink: true,
-        defaultProtocol: "https",
-      }),
-      Image.configure({ allowBase64: false, inline: false }),
-      TextStyle,
-      Color,
-    ],
-    content: toEditorHtml(value),
-    editorProps: {
-      attributes: {
-        class: "rich-editor-content",
-        "aria-label": label,
-      },
-    },
-    onUpdate: ({ editor: currentEditor }) => {
-      onChange(currentEditor.isEmpty ? "" : currentEditor.getHTML());
-    },
-  });
-
-  useEffect(() => {
-    if (!editor) return;
-    const normalized = toEditorHtml(value);
-    if (editor.getHTML() !== normalized)
-      editor.commands.setContent(normalized, { emitUpdate: false });
-  }, [editor, value]);
-
-  const setLink = () => {
-    const current = editor.getAttributes("link").href || "";
-    const href = window.prompt("请输入链接地址", current);
-    if (href === null) return;
-    if (!href.trim()) editor.chain().focus().unsetLink().run();
-    else
-      editor
-        .chain()
-        .focus()
-        .extendMarkRange("link")
-        .setLink({ href: href.trim() })
-        .run();
-  };
-  const uploadImage = async (file) => {
-    if (!file || !editor) return;
-    if (!file.type.startsWith("image/")) {
-      window.alert("请选择 JPG 或 PNG 图片");
-      return;
-    }
-    setUploadingImage(true);
-    const body = new FormData();
-    body.append("file", file);
-    body.append("category", `content_image:${fieldKey}`);
-    try {
-      const response = await apiFetch(
-        `/api/applications/${applicationId}/files`,
-        { method: "POST", body },
-      );
-      const payload = await response.json();
-      if (!response.ok || !payload.ok)
-        throw new Error(payload.message || "图片上传失败");
-      editor
-        .chain()
-        .focus()
-        .setImage({
-          src: `/api/applications/${applicationId}/files/${payload.file.id}/download?inline=1`,
-          alt: file.name,
-          title: file.name,
-        })
-        .run();
-    } catch (error) {
-      window.alert(error.message);
-    } finally {
-      setUploadingImage(false);
-      if (imageInput.current) imageInput.current.value = "";
-    }
-  };
-
-  if (!editor)
-    return (
-      <div className="rich-editor rich-editor--loading">正在载入编辑器…</div>
-    );
-  return (
-    <div className="rich-editor">
-      <div
-        className="rich-toolbar"
-        role="toolbar"
-        aria-label={`${label}格式工具栏`}
-      >
-        <select
-          className="rich-block-select"
-          value={
-            editor.isActive("heading", { level: 2 })
-              ? "h2"
-              : editor.isActive("heading", { level: 3 })
-                ? "h3"
-                : "p"
-          }
-          onChange={(event) => {
-            const type = event.target.value;
-            if (type === "p") editor.chain().focus().setParagraph().run();
-            else
-              editor
-                .chain()
-                .focus()
-                .toggleHeading({ level: Number(type.slice(1)) })
-                .run();
-          }}
-          aria-label="段落样式"
-        >
-          <option value="p">正文</option>
-          <option value="h2">一级标题</option>
-          <option value="h3">二级标题</option>
-        </select>
-        <span className="rich-tool-group">
-          <RichTextButton
-            title="加粗"
-            active={editor.isActive("bold")}
-            onClick={() => editor.chain().focus().toggleBold().run()}
-          >
-            <Bold size={16} />
-          </RichTextButton>
-          <RichTextButton
-            title="斜体"
-            active={editor.isActive("italic")}
-            onClick={() => editor.chain().focus().toggleItalic().run()}
-          >
-            <Italic size={16} />
-          </RichTextButton>
-          <RichTextButton
-            title="下划线"
-            active={editor.isActive("underline")}
-            onClick={() => editor.chain().focus().toggleUnderline().run()}
-          >
-            <UnderlineIcon size={16} />
-          </RichTextButton>
-          <RichTextButton
-            title="删除线"
-            active={editor.isActive("strike")}
-            onClick={() => editor.chain().focus().toggleStrike().run()}
-          >
-            <Strikethrough size={16} />
-          </RichTextButton>
-          <label className="rich-color" title="文字颜色">
-            <span>A</span>
-            <input
-              type="color"
-              aria-label="文字颜色"
-              value={editor.getAttributes("textStyle").color || "#263449"}
-              onChange={(event) =>
-                editor.chain().focus().setColor(event.target.value).run()
-              }
-            />
-          </label>
-        </span>
-        <span className="rich-tool-group">
-          <RichTextButton
-            title="左对齐"
-            active={editor.isActive({ textAlign: "left" })}
-            onClick={() => editor.chain().focus().setTextAlign("left").run()}
-          >
-            <AlignLeft size={16} />
-          </RichTextButton>
-          <RichTextButton
-            title="居中"
-            active={editor.isActive({ textAlign: "center" })}
-            onClick={() => editor.chain().focus().setTextAlign("center").run()}
-          >
-            <AlignCenter size={16} />
-          </RichTextButton>
-          <RichTextButton
-            title="右对齐"
-            active={editor.isActive({ textAlign: "right" })}
-            onClick={() => editor.chain().focus().setTextAlign("right").run()}
-          >
-            <AlignRight size={16} />
-          </RichTextButton>
-          <RichTextButton
-            title="两端对齐"
-            active={editor.isActive({ textAlign: "justify" })}
-            onClick={() => editor.chain().focus().setTextAlign("justify").run()}
-          >
-            <AlignJustify size={16} />
-          </RichTextButton>
-        </span>
-        <span className="rich-tool-group">
-          <RichTextButton
-            title="项目符号列表"
-            active={editor.isActive("bulletList")}
-            onClick={() => editor.chain().focus().toggleBulletList().run()}
-          >
-            <List size={16} />
-          </RichTextButton>
-          <RichTextButton
-            title="编号列表"
-            active={editor.isActive("orderedList")}
-            onClick={() => editor.chain().focus().toggleOrderedList().run()}
-          >
-            <ListOrdered size={16} />
-          </RichTextButton>
-          <RichTextButton
-            title="插入链接"
-            active={editor.isActive("link")}
-            onClick={setLink}
-          >
-            <Link2 size={16} />
-          </RichTextButton>
-          <RichTextButton
-            title="插入图片"
-            disabled={uploadingImage}
-            onClick={() => imageInput.current?.click()}
-          >
-            {uploadingImage ? (
-              <LoaderCircle className="spin" size={16} />
-            ) : (
-              <ImagePlus size={16} />
-            )}
-          </RichTextButton>
-          <input
-            ref={imageInput}
-            hidden
-            type="file"
-            accept="image/jpeg,image/png"
-            onChange={(event) => uploadImage(event.target.files?.[0])}
-          />
-        </span>
-        <span className="rich-tool-group rich-tool-group--history">
-          <RichTextButton
-            title="撤销"
-            disabled={!editor.can().chain().focus().undo().run()}
-            onClick={() => editor.chain().focus().undo().run()}
-          >
-            <Undo2 size={16} />
-          </RichTextButton>
-          <RichTextButton
-            title="重做"
-            disabled={!editor.can().chain().focus().redo().run()}
-            onClick={() => editor.chain().focus().redo().run()}
-          >
-            <Redo2 size={16} />
-          </RichTextButton>
-        </span>
-      </div>
-      <div className="rich-editor-canvas">
-        <EditorContent editor={editor} />
-      </div>
-    </div>
   );
 }
 
@@ -2869,12 +2541,18 @@ function PreviewPageOne({ data }) {
 }
 
 function PreviewPageTwo({ data }) {
+  const rich = isHtmlContent(data.introduction);
   return (
     <article className="preview-page preview-text-page">
       <h3>二、项目简介</h3>
-      <div className="preview-body-text">
-        {data.introduction || "尚未填写项目简介。"}
-      </div>
+      {rich ? (
+        <div
+          className="preview-body-text preview-rich-text"
+          dangerouslySetInnerHTML={{ __html: sanitizeRichText(data.introduction) }}
+        />
+      ) : (
+        <div className="preview-body-text">{data.introduction || "尚未填写项目简介。"}</div>
+      )}
       <div className="preview-limit">（限 800 个汉字）</div>
       <footer>2</footer>
     </article>
@@ -2889,7 +2567,7 @@ function PreviewTextPage({ title, body, pageNumber }) {
       {rich ? (
         <div
           className="preview-body-text preview-rich-text"
-          dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(body) }}
+          dangerouslySetInnerHTML={{ __html: sanitizeRichText(body) }}
         />
       ) : (
         <div className="preview-body-text">{body || "尚未填写。"}</div>
@@ -2910,7 +2588,7 @@ function splitPreviewContent(content, maxLength = 1250) {
     return chunks;
   }
   const documentNode = new DOMParser().parseFromString(
-    DOMPurify.sanitize(source),
+    sanitizeRichText(source),
     "text/html",
   );
   const chunks = [];
@@ -2980,7 +2658,7 @@ function buildPreviewSections(data) {
         .filter(Boolean)
         .join("　");
       const contribution = isHtmlContent(person.contribution)
-        ? DOMPurify.sanitize(person.contribution)
+        ? sanitizeRichText(person.contribution)
         : `<p>${escapePreviewText(person.contribution)}</p>`;
       return `<div><p><strong>第 ${index + 1} 完成人</strong></p><p>${details}</p>${person.contribution ? `<p><strong>对本项目主要贡献：</strong></p>${contribution}` : ""}</div>`;
     })
@@ -3007,7 +2685,7 @@ function buildPreviewSections(data) {
         .filter(Boolean)
         .join("　");
       const contribution = isHtmlContent(unit.contribution)
-        ? DOMPurify.sanitize(unit.contribution)
+        ? sanitizeRichText(unit.contribution)
         : `<p>${escapePreviewText(unit.contribution)}</p>`;
       return `<div><p><strong>第 ${index + 1} 完成单位</strong></p><p>${details}</p>${unit.contribution ? `<p><strong>对本项目技术创新和应用的贡献：</strong></p>${contribution}` : ""}</div>`;
     })
@@ -4119,6 +3797,7 @@ function EditorApp({ application, onHome }) {
   const [showImport, setShowImport] = useState(
     application.data?.workflowMode === "document",
   );
+  const [showWordImport, setShowWordImport] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sourceFile, setSourceFile] = useState(null);
@@ -4319,6 +3998,11 @@ function EditorApp({ application, onHome }) {
       ]);
     }
     setShowImport(false);
+  };
+  const applyWordImport = async (fields) => {
+    const nextData = { ...data, ...fields };
+    await saveToDatabase(nextData);
+    setData(nextData);
   };
   const currentContent = () => {
     if (active === "basic")
@@ -4571,6 +4255,13 @@ function EditorApp({ application, onHome }) {
             <ScanText size={17} />
             PDF 智能导入
           </button>
+          <button
+            className="secondary-button import-button"
+            onClick={() => setShowWordImport(true)}
+          >
+            <FileInput size={17} />
+            Word 导入
+          </button>
           {sourceFile && (
             <a
               className="secondary-button final-export-top"
@@ -4721,6 +4412,14 @@ function EditorApp({ application, onHome }) {
           applicationId={application.id}
           onClose={() => setShowImport(false)}
           onApply={applyImport}
+        />
+      )}
+      {showWordImport && (
+        <WordImportDialog
+          applicationId={application.id}
+          currentData={data}
+          onClose={() => setShowWordImport(false)}
+          onApply={applyWordImport}
         />
       )}
     </div>
