@@ -17,6 +17,8 @@ import {
   timingSafeEqual,
 } from "node:crypto";
 import { extractProjectSourceFields } from "./lib/pdf-fields.mjs";
+import { createWordImportRouter } from "./routes/word-import.mjs";
+import { sanitizeApplicationRichTextData } from "./src/editor/rich-text-node.mjs";
 
 const execFileAsync = promisify(execFile);
 const app = express();
@@ -535,6 +537,14 @@ app.use("/api", (req, res, next) => {
   if (req.path === "/health" || req.path.startsWith("/auth/")) return next();
   return requireAuth(req, res, next);
 });
+
+app.use(
+  "/api/word-import",
+  createWordImportRouter({
+    ownsApplication: (applicationId, userId) =>
+      Boolean(ownedApplication(applicationId, userId)),
+  }),
+);
 
 function parseData(value) {
   try {
@@ -1189,7 +1199,10 @@ app.put("/api/applications/:id", (req, res) => {
   const row = ownedApplication(id, req.user.id);
   if (!row)
     return res.status(404).json({ ok: false, message: "申报项目不存在" });
-  const data = { ...parseData(row.data_json), ...(req.body.data || {}) };
+  const data = sanitizeApplicationRichTextData({
+    ...parseData(row.data_json),
+    ...(req.body.data || {}),
+  });
   const title =
     String(data.projectName || req.body.title || row.title).trim() ||
     "未命名申报项目";

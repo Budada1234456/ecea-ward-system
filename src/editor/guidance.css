@@ -1,0 +1,236 @@
+.rich-field-guidance {
+  padding: 8px 12px;
+  color: #40516a;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.rich-editor-guidance-counter {
+  padding: 6px 10px;
+  border-top: 1px solid #d9dfe7;
+  color: #798596;
+  font-size: 11px;
+  text-align: left;
+}
+
+.rich-editor-guidance-counter--over {
+  color: #c12c35;
+}
+
+.control-with-count:has(.rich-editor) > .char-count {
+  display: none;
+}
+
+.control-with-count:has(.rich-editor) {
+  padding-bottom: 0;
+}
+
+.rich-editor-content .tableWrapper {
+  margin: 12px 0;
+  overflow-x: auto;
+}
+
+.rich-editor-content table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.rich-editor-content td,
+.rich-editor-content th {
+  position: relative;
+  min-width: 60px;
+  padding: 4px 6px;
+  border: 1px solid #aeb8c4;
+  vertical-align: top;
+  cursor: text;
+}
+
+.rich-editor-content th {
+  background: #eef3f8;
+  font-weight: 700;
+}
+
+.rich-editor-content .selectedCell::after {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  pointer-events: none;
+  content: "";
+  background: rgba(23, 105, 210, 0.18);
+  outline: 2px solid #1769d2;
+  outline-offset: -2px;
+}
+
+.rich-editor-content table.ProseMirror-selectednode {
+  outline: 2px solid #1769d2;
+  outline-offset: 2px;
+}
+
+.rich-editor-content .column-resize-handle {
+  position: absolute;
+  z-index: 4;
+  top: 0;
+  right: -2px;
+  bottom: -2px;
+  width: 4px;
+  pointer-events: none;
+  background: #1769d2;
+}
+
+.rich-editor-content.resize-cursor,
+.rich-editor-content.resize-cursor * {
+  cursor: col-resize;
+}
+
+.rich-preview-overlay {
+  position: fixed;
+  z-index: 300;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(24, 32, 43, 0.5);
+}
+
+.rich-preview-dialog {
+  width: min(1120px, calc(100vw - 32px));
+  height: min(820px, calc(100vh - 32px));
+  overflow: hidden;
+  display: grid;
+  grid-template-rows: 58px minmax(0, 1fr) 62px;
+  border: 1px solid #d9dfe7;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.28);
+}
+
+.rich-preview-dialog-head,
+.rich-preview-dialog-actions {
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  background: #fff;
+}
+
+.rich-preview-dialog-head {
+  justify-content: space-between;
+  border-bottom: 1px solid #e1e6ec;
+}
+
+.rich-preview-dialog-head b {
+  color: #202c3b;
+  font-size: 17px;
+}
+
+.rich-preview-icon-button {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  color: #405067;
+  background: transparent;
+  cursor: pointer;
+}
+
+.rich-preview-icon-button:hover {
+  color: #1769d2;
+  background: #edf4fc;
+}
+
+.rich-preview-workspace {
+  min-width: 0;
+  min-height: 0;
+  padding: 14px 28px 30px;
+  overflow: auto;
+  background: #dfe4eb;
+}
+
+.rich-editor-content.rich-preview-paper {
+  width: min(794px, 100%);
+  min-height: 1040px;
+  box-sizing: border-box;
+  margin: 0 auto;
+  padding: 70px 76px 82px;
+  box-shadow: 0 2px 10px rgba(21, 31, 45, 0.18);
+  color: #1d2733;
+  font-family: SimSun, serif;
+  font-size: 14px;
+  line-height: 1.75;
+}
+
+.rich-preview-field-title {
+  margin: 0 0 28px;
+  color: #111827;
+  font-family: SimHei, "Microsoft YaHei", sans-serif;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.rich-preview-document-body {
+  min-height: 820px;
+}
+
+.rich-preview-document-body table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.rich-preview-document-body td,
+.rich-preview-document-body th {
+  min-width: 0;
+  cursor: default;
+}
+
+.rich-preview-dialog-actions {
+  justify-content: flex-end;
+  border-top: 1px solid #e1e6ec;
+}
+
+.rich-preview-close-button {
+  min-width: 64px;
+  height: 34px;
+  padding: 0 16px;
+  border: 1px solid #1769d2;
+  border-radius: 4px;
+  color: #fff;
+  background: #1769d2;
+  cursor: pointer;
+}
+
+.rich-preview-close-button:hover {
+  border-color: #105bb9;
+  background: #105bb9;
+}
+
+@media (max-width: 720px) {
+  .rich-preview-overlay {
+    padding: 8px;
+  }
+
+  .rich-preview-dialog {
+    width: calc(100vw - 16px);
+    height: calc(100vh - 16px);
+    grid-template-rows: 52px minmax(0, 1fr) 56px;
+  }
+
+  .rich-preview-workspace {
+    padding: 8px;
+  }
+
+  .rich-editor-content.rich-preview-paper {
+    min-height: calc(100vh - 148px);
+    padding: 34px 20px 46px;
+  }
+
+  .rich-preview-field-title {
+    margin-bottom: 22px;
+    font-size: 18px;
+  }
+}
