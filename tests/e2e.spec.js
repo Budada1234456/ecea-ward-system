@@ -3,8 +3,7 @@ import path from "node:path";
 
 const baseUrl = process.env.TEST_BASE_URL || "http://127.0.0.1:4174";
 const adminPassword = process.env.TEST_ADMIN_PASSWORD;
-if (!adminPassword)
-  throw new Error("请通过 TEST_ADMIN_PASSWORD 提供管理员测试密码");
+test.skip(!adminPassword, "需要通过 TEST_ADMIN_PASSWORD 提供管理员测试密码");
 const projectTitle = `浏览器验收项目-${Date.now()}`;
 const samplePdf = path.resolve(
   "节能奖填报材料",
@@ -120,6 +119,66 @@ test("project center, attachment workflow and PDF export", async ({
     await expect(
       page.locator("textarea.textarea--compact").first(),
     ).toHaveValue(englishName);
+
+    const disciplineInput = page.getByRole("combobox", { name: "检索学科" });
+    const disciplineResults = page.getByRole("listbox");
+    await disciplineInput.focus();
+    await expect(disciplineResults).toBeVisible();
+    await expect(
+      page.getByText("可选择一级、二级或三级学科", { exact: false }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "二级学科（738）" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "三级学科（2732）" }),
+    ).toBeVisible();
+    await expect(disciplineResults.getByRole("option")).toHaveCount(50);
+    await expect(
+      disciplineResults.getByRole("option", { name: /能源科学技术/ }),
+    ).toBeVisible();
+    await page
+      .getByRole("button", { name: "显示更多（已显示 50 / 62）" })
+      .click();
+    await expect(disciplineResults.getByRole("option")).toHaveCount(62);
+    await expect(
+      disciplineResults.getByRole("option", { name: /统计学/ }),
+    ).toBeVisible();
+
+    await page.getByRole("button", { name: "二级学科（738）" }).click();
+    await expect(disciplineResults.getByRole("option")).toHaveCount(50);
+    await expect(
+      page.getByRole("button", { name: "显示更多（已显示 50 / 738）" }),
+    ).toBeVisible();
+
+    await page.getByRole("button", { name: "三级学科（2732）" }).click();
+    await expect(disciplineResults.getByRole("option")).toHaveCount(50);
+    await expect(
+      page.getByRole("button", { name: "显示更多（已显示 50 / 2732）" }),
+    ).toBeVisible();
+
+    await disciplineInput.fill("婴儿心理学");
+    const nestedDiscipline = disciplineResults.getByRole("option", {
+      name: /婴儿心理学.*1903510.*第 3 级/,
+    });
+    await expect(nestedDiscipline).toBeVisible();
+    await nestedDiscipline.click();
+    await expect(disciplineResults).toBeHidden();
+    await expect(
+      page.getByRole("list", { name: "已选学科" }).getByText("婴儿心理学"),
+    ).toBeVisible();
+
+    await disciplineInput.focus();
+    await expect(disciplineResults).toBeVisible();
+    await page.locator(".discipline-selector__selection li").click();
+    await expect(disciplineResults).toBeVisible();
+    await page.getByRole("heading", { name: "项目基本情况" }).click();
+    await expect(disciplineResults).toBeHidden();
+
+    await disciplineInput.focus();
+    await expect(disciplineResults).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(disciplineResults).toBeHidden();
 
     await page.getByRole("button", { name: "PDF 智能导入" }).click();
     const importDialog = page.locator(".import-dialog");
