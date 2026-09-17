@@ -71,6 +71,26 @@ test("all repeated groups receive deterministic unique legacy ids", () => {
   }
 });
 
+test("legacy achievement applications reuse the first person as candidate data", () => {
+  const data = normalizeApplicationData({
+    awardType: "节能减排科技成就奖",
+    applicationMode: "individual",
+    people: [
+      {
+        name: "历史候选人",
+        birthDate: "1980-01-01",
+        workUnit: "历史工作单位",
+        technicalTitle: "研究员",
+      },
+    ],
+  });
+
+  assert.equal(data.candidate.name, "历史候选人");
+  assert.equal(data.candidate.birthDate, "1980-01-01");
+  assert.equal(data.candidate.workUnit, "历史工作单位");
+  assert.equal(data.candidate.technicalTitle, "研究员");
+});
+
 test("a confirmed discipline stores its terminal code and complete path", () => {
   const [discipline] = normalizeDisciplineSelection([
     {

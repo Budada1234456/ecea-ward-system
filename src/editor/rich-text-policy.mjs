@@ -82,6 +82,7 @@ export const RICH_TEXT_FIELD_KEYS = Object.freeze([
   "recommendation",
   "peopleCooperation",
   "unitContribution",
+  "transformation",
 ]);
 
 const FONT_FAMILIES = new Set([

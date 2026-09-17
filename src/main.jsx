@@ -60,49 +60,22 @@ import {
   CharacterCount,
   RichTextEditor,
   isHtmlContent,
+  richTextToPlain,
   sanitizeRichText,
 } from "./editor/index.jsx";
 import { WordImportDialog } from "./import/WordImportDialog.jsx";
+import {
+  AWARD_TYPES,
+  awardProfiles,
+  getAwardProfile,
+  getAwardSections,
+} from "./award-profiles.js";
 import "./styles.css";
 
-const sections = [
-  ["basic", "基本情况"],
-  ["introduction", "项目简介"],
-  ["details", "项目详细内容"],
-  ["comparison", "同类技术比较"],
-  ["application", "应用及效益"],
-  ["awards", "曾获奖励情况"],
-  ["ip", "知识产权情况"],
-  ["people", "主要完成人"],
-  ["units", "主要完成单位"],
-  ["recommendation", "申报、推荐单位意见"],
-  ["attachments", "附件目录"],
-];
-
-const awardOptions = [
-  {
-    value: "节能减排科技成就奖",
-    mode: "个人奖",
-    summary: "奖励长期活跃在节能减排科技前沿并作出重大原创贡献的个人。",
-    conditions:
-      "申报人为核心成果第一完成人；申报年末不超过 60 周岁；成果应用效益显著。",
-  },
-  {
-    value: "节能减排科技进步奖",
-    mode: "项目奖",
-    summary: "奖励在技术创新、成果应用和产业化方面推动行业科技进步的项目。",
-    conditions:
-      "成果实践应用超过 1 年；近 2 年完成国家科技成果登记系统登记的科技成果评价。",
-  },
-  {
-    value: "节能减排技术发明奖",
-    mode: "项目奖",
-    summary:
-      "奖励国内外首创并在新工艺、新材料、新系统能效提升方面取得突破的技术发明。",
-    conditions:
-      "成果试验应用超过 2 年；近 2 年完成国家科技成果登记系统登记的科技成果评价。",
-  },
-];
+const awardOptions = awardProfiles.map((profile) => ({
+  ...profile,
+  mode: profile.mode === "individual" ? "个人奖" : "项目奖",
+}));
 
 const applicationChannels = [
   "科研院所、高等院校推荐",
@@ -178,17 +151,43 @@ const industryOptions = [
 ];
 
 function createEmptyData(meta = {}) {
+  const profile = getAwardProfile(meta.award_type || meta.awardType);
   return {
+    schemaVersion: 2,
+    profileCode: profile.code,
     year: String(meta.year || 2026),
-    awardType: meta.awardType || "节能减排科技进步奖",
-    applicationMode:
-      meta.awardType === "节能减排科技成就奖" ? "individual" : "project",
+    awardType: profile.value,
+    applicationMode: profile.mode,
     applicationChannel: "自由申报",
     projectName: meta.title || "",
     projectNameEn: "",
+    candidate: {
+      gender: "",
+      birthDate: "",
+      birthPlace: "",
+      ethnicity: "",
+      nativePlace: "",
+      idNumber: "",
+      politicalAffiliation: "",
+      nationality: "中国",
+      workUnit: "",
+      administrativePosition: "",
+      technicalTitle: "",
+      education: "",
+      highestDegree: "",
+      graduateSchool: "",
+      specialty: "",
+      mailingAddress: "",
+      postalCode: "",
+      officePhone: "",
+      mobilePhone: "",
+      email: "",
+    },
     people: [],
     peopleCooperation: "",
     cooperationRecords: [],
+    researchRecords: [],
+    engineeringRecords: [],
     units: [],
     applicantUnit: "",
     contact: "",
@@ -208,6 +207,7 @@ function createEmptyData(meta = {}) {
     application: "",
     economic: "",
     social: "",
+    transformation: "",
     awardRecords: [],
     ipRecords: [],
     paperRecords: [],
@@ -550,8 +550,218 @@ function TagEditor({
   );
 }
 
+function AwardTypeLock({ profile }) {
+  return (
+    <div className="award-type-lock" role="status">
+      <LockKeyhole size={16} />
+      <span>
+        <b>{profile.value}</b>
+        <small>奖项在创建后锁定；如需申报其他奖项，请新建一份申报材料。</small>
+      </span>
+      <i>{profile.mode === "individual" ? "个人奖" : "项目奖"}</i>
+    </div>
+  );
+}
+
+function AchievementBasicForm({ data, setField }) {
+  const profile = getAwardProfile(data.awardType);
+  const candidate = data.candidate || {};
+  const setCandidate = (key, value) =>
+    setField("candidate", { ...candidate, [key]: value });
+  return (
+    <section className="form-section">
+      <div className="section-heading">
+        <div>
+          <span className="section-index">01</span>
+          <h2>候选人基本情况</h2>
+        </div>
+      </div>
+      <div className="section-note">
+        <Info size={16} />
+        <span>
+          科技成就奖面向个人申报。候选人应为主要发明成果第一完成人，且申报年末年龄不超过
+          60 周岁。
+        </span>
+      </div>
+      <div className="form-grid">
+        <Field label="奖种" required>
+          <AwardTypeLock profile={profile} />
+        </Field>
+        <Field label="申报年度" required>
+          <select
+            className="control"
+            value={data.year}
+            onChange={(event) => setField("year", event.target.value)}
+          >
+            <option>2026</option>
+            <option>2025</option>
+          </select>
+        </Field>
+        <Field label="候选人姓名（中文）" required>
+          <TextInput
+            value={data.projectName}
+            onChange={(value) => setField("projectName", value)}
+          />
+        </Field>
+        <Field label="候选人姓名（英文）">
+          <TextInput
+            value={data.projectNameEn}
+            onChange={(value) => setField("projectNameEn", value)}
+          />
+        </Field>
+        <Field label="性别">
+          <TextInput
+            value={candidate.gender}
+            onChange={(value) => setCandidate("gender", value)}
+          />
+        </Field>
+        <Field label="出生年月" required>
+          <TextInput
+            type="date"
+            value={candidate.birthDate}
+            onChange={(value) => setCandidate("birthDate", value)}
+          />
+        </Field>
+        <Field label="出生地">
+          <TextInput
+            value={candidate.birthPlace}
+            onChange={(value) => setCandidate("birthPlace", value)}
+          />
+        </Field>
+        <Field label="籍贯">
+          <TextInput
+            value={candidate.nativePlace}
+            onChange={(value) => setCandidate("nativePlace", value)}
+          />
+        </Field>
+        <Field label="民族">
+          <TextInput
+            value={candidate.ethnicity}
+            onChange={(value) => setCandidate("ethnicity", value)}
+          />
+        </Field>
+        <Field label="国籍">
+          <TextInput
+            value={candidate.nationality}
+            onChange={(value) => setCandidate("nationality", value)}
+          />
+        </Field>
+        <Field label="身份证号">
+          <TextInput
+            value={candidate.idNumber}
+            onChange={(value) => setCandidate("idNumber", value)}
+          />
+        </Field>
+        <Field label="政治面貌">
+          <TextInput
+            value={candidate.politicalAffiliation}
+            onChange={(value) => setCandidate("politicalAffiliation", value)}
+          />
+        </Field>
+        <Field label="工作单位" required>
+          <TextInput
+            value={candidate.workUnit}
+            onChange={(value) => setCandidate("workUnit", value)}
+          />
+        </Field>
+        <Field label="行政职务">
+          <TextInput
+            value={candidate.administrativePosition}
+            onChange={(value) => setCandidate("administrativePosition", value)}
+          />
+        </Field>
+        <Field label="专业技术职称">
+          <TextInput
+            value={candidate.technicalTitle}
+            onChange={(value) => setCandidate("technicalTitle", value)}
+          />
+        </Field>
+        <Field label="最高学位">
+          <TextInput
+            value={candidate.highestDegree}
+            onChange={(value) => setCandidate("highestDegree", value)}
+          />
+        </Field>
+        <Field label="毕业学校">
+          <TextInput
+            value={candidate.graduateSchool}
+            onChange={(value) => setCandidate("graduateSchool", value)}
+          />
+        </Field>
+        <Field label="专业、专长">
+          <TextInput
+            value={candidate.specialty}
+            onChange={(value) => setCandidate("specialty", value)}
+          />
+        </Field>
+        <Field label="推荐单位" required>
+          <TextInput
+            value={data.applicantUnit}
+            onChange={(value) => setField("applicantUnit", value)}
+          />
+        </Field>
+        <Field label="申报渠道" required>
+          <select
+            className="control"
+            value={data.applicationChannel || "自由申报"}
+            onChange={(event) =>
+              setField("applicationChannel", event.target.value)
+            }
+          >
+            {applicationChannels.map((channel) => (
+              <option key={channel}>{channel}</option>
+            ))}
+          </select>
+        </Field>
+        <Field label="通讯地址">
+          <TextInput
+            value={candidate.mailingAddress}
+            onChange={(value) => setCandidate("mailingAddress", value)}
+          />
+        </Field>
+        <Field label="邮政编码">
+          <TextInput
+            value={candidate.postalCode}
+            onChange={(value) => setCandidate("postalCode", value)}
+          />
+        </Field>
+        <div className="field-row field-row--triple">
+          <div className="field-label">联系信息</div>
+          <div className="field-control triple-controls">
+            <label>
+              <span>办公电话</span>
+              <TextInput
+                value={candidate.officePhone}
+                onChange={(value) => setCandidate("officePhone", value)}
+              />
+            </label>
+            <label>
+              <span>移动电话</span>
+              <TextInput
+                value={candidate.mobilePhone}
+                onChange={(value) => setCandidate("mobilePhone", value)}
+              />
+            </label>
+            <label>
+              <span>电子邮箱</span>
+              <TextInput
+                type="email"
+                value={candidate.email}
+                onChange={(value) => setCandidate("email", value)}
+              />
+            </label>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function BasicForm({ data, setField, disciplineRecords }) {
-  const isAchievement = data.awardType === "节能减排科技成就奖";
+  const isAchievement = data.awardType === AWARD_TYPES.ACHIEVEMENT;
+  if (isAchievement)
+    return <AchievementBasicForm data={data} setField={setField} />;
+  const profile = getAwardProfile(data.awardType);
   const toggleSource = (key) =>
     setField(
       "sources",
@@ -564,7 +774,7 @@ function BasicForm({ data, setField, disciplineRecords }) {
       <div className="section-heading">
         <div>
           <span className="section-index">01</span>
-          <h2>{isAchievement ? "候选人基本情况" : "项目基本情况"}</h2>
+          <h2>项目基本情况</h2>
         </div>
         <span className="section-status">
           <Check size={14} /> 已填写 13 项
@@ -589,33 +799,12 @@ function BasicForm({ data, setField, disciplineRecords }) {
           </select>
         </Field>
         <Field label="奖种" required>
-          <div className="segmented">
-            {awardOptions.map(({ value: option }) => (
-              <button
-                type="button"
-                key={option}
-                className={data.awardType === option ? "active" : ""}
-                onClick={() => {
-                  setField("awardType", option);
-                  setField(
-                    "applicationMode",
-                    option === "节能减排科技成就奖" ? "individual" : "project",
-                  );
-                }}
-              >
-                {option}
-              </button>
-            ))}
-          </div>
+          <AwardTypeLock profile={profile} />
         </Field>
         <Field
-          label={isAchievement ? "候选人姓名（中文）" : "项目名称（中文）"}
+          label="项目名称（中文）"
           required
-          hint={
-            isAchievement
-              ? "填写候选人本人姓名；申报年 12 月 31 日前年龄应在 60 周岁及以下。"
-              : "应准确、简明反映核心技术创新内容，不超过 30 个汉字。"
-          }
+          hint={"应准确、简明反映核心技术创新内容，不超过 30 个汉字。"}
         >
           <div className="control-with-count">
             <TextInput
@@ -627,7 +816,7 @@ function BasicForm({ data, setField, disciplineRecords }) {
           </div>
         </Field>
         <Field
-          label={isAchievement ? "候选人姓名（英文）" : "项目名称（英文）"}
+          label="项目名称（英文）"
           required
           hint="中文名称的规范英译文，不超过 200 个字符。"
         >
@@ -643,7 +832,7 @@ function BasicForm({ data, setField, disciplineRecords }) {
         <Field
           label="主要完成人"
           required
-          hint="按贡献大小排序。科技进步奖一等奖不超过 15 人，二等奖不超过 10 人。"
+          hint={`按贡献大小排序。本奖项单项授奖人数最多不超过 ${profile.maxPeople} 人，具体以拟申报等级要求为准。`}
         >
           <TagEditor
             values={data.people}
@@ -861,11 +1050,14 @@ function RecordsSection({
   number,
   title,
   type,
+  group: customGroup,
   records,
   onChange,
   supplement,
+  addLabel = "添加记录",
+  emptyLabel,
 }) {
-  const group = type === "ip" ? "ipRecords" : "awardRecords";
+  const group = customGroup || (type === "ip" ? "ipRecords" : "awardRecords");
   return (
     <section className="form-section">
       <div className="section-heading">
@@ -880,11 +1072,12 @@ function RecordsSection({
         group={group}
         value={records}
         onChange={onChange}
-        addLabel="添加记录"
+        addLabel={addLabel}
         emptyLabel={
-          type === "ip"
+          emptyLabel ||
+          (type === "ip"
             ? "暂无知识产权记录，可手动添加"
-            : "暂无记录，无相关奖励时可保持为空"
+            : "暂无记录，无相关内容时可保持为空")
         }
         className="records-collection"
       />
@@ -972,26 +1165,34 @@ function EconomicCollection({
   );
 }
 
-function RecommendationUploadSection({ applicationId, onFilesChange }) {
-  const category = "recommendation_signed";
+function RecommendationUploadSection({
+  applicationId,
+  awardType,
+  onFilesChange,
+}) {
+  const profile = getAwardProfile(awardType);
+  const isAchievement = profile.code === "achievement";
+  const categories = profile.recommendationMaterials;
   const [files, setFiles] = useState([]);
-  const [uploading, setUploading] = useState(false);
+  const [uploading, setUploading] = useState("");
   const loadFiles = async () => {
     const response = await apiFetch(`/api/applications/${applicationId}/files`);
     const payload = await response.json();
     if (payload.ok) {
       onFilesChange?.(payload.list || []);
       setFiles(
-        (payload.list || []).filter((file) => file.file_type === category),
+        (payload.list || []).filter((file) =>
+          categories.some(([category]) => category === file.file_type),
+        ),
       );
     }
   };
   useEffect(() => {
     loadFiles();
   }, [applicationId]);
-  const uploadFile = async (file) => {
+  const uploadFile = async (category, file) => {
     if (!file) return;
-    setUploading(true);
+    setUploading(category);
     const body = new FormData();
     body.append("file", file);
     body.append("category", category);
@@ -1007,7 +1208,7 @@ function RecommendationUploadSection({ applicationId, onFilesChange }) {
     } catch (error) {
       window.alert(error.message);
     } finally {
-      setUploading(false);
+      setUploading("");
     }
   };
   const removeFile = async (file) => {
@@ -1021,96 +1222,95 @@ function RecommendationUploadSection({ applicationId, onFilesChange }) {
     <section className="form-section">
       <div className="section-heading">
         <div>
-          <span className="section-index">10</span>
-          <h2>申报、推荐单位意见</h2>
+          <span className="section-index">{isAchievement ? "08" : "10"}</span>
+          <h2>{isAchievement ? "推荐函与承诺函" : "申报、推荐单位意见"}</h2>
         </div>
       </div>
-      <div className="recommendation-upload">
-        <div className="recommendation-upload-main">
-          <span className="recommendation-upload-icon">
-            <FileCheck2 size={25} />
-          </span>
-          <span>
-            <b>签章意见附件</b>
-            <small>上传已填写并加盖单位公章的 PDF 或扫描图片</small>
-          </span>
-          <span
-            className={
-              files.length ? "attachment-state done" : "attachment-state"
-            }
-          >
-            {files.length ? `已上传 ${files.length} 件` : "未上传"}
-          </span>
-          <label className="primary-button recommendation-upload-button">
-            {uploading ? (
-              <LoaderCircle className="spin" size={16} />
-            ) : (
-              <Upload size={16} />
-            )}
-            {uploading ? "上传中" : "上传附件"}
-            <input
-              hidden
-              type="file"
-              accept=".pdf,.jpg,.jpeg,.png"
-              disabled={uploading}
-              onChange={(event) => uploadFile(event.target.files?.[0])}
-            />
-          </label>
-        </div>
-        {files.map((file) => (
-          <div className="uploaded-file recommendation-file" key={file.id}>
-            <FileText size={15} />
-            <span>{file.file_name}</span>
-            <small>
-              {file.page_count || 1} 页 ·{" "}
-              {(file.file_size / 1024 / 1024).toFixed(2)} MB
-            </small>
-            <a
-              className="icon-button icon-button--small"
-              title="查看附件"
-              target="_blank"
-              href={`/api/applications/${applicationId}/files/${file.id}/download?inline=1`}
-            >
-              <Eye size={14} />
-            </a>
-            <button
-              className="icon-button icon-button--small"
-              type="button"
-              title="删除附件"
-              onClick={() => removeFile(file)}
-            >
-              <X size={14} />
-            </button>
+      {categories.map(([category, label, description]) => {
+        const categoryFiles = files.filter(
+          (file) => file.file_type === category,
+        );
+        return (
+          <div className="recommendation-upload" key={category}>
+            <div className="recommendation-upload-main">
+              <span className="recommendation-upload-icon">
+                <FileCheck2 size={25} />
+              </span>
+              <span>
+                <b>{label}</b>
+                <small>{description}</small>
+              </span>
+              <span
+                className={
+                  categoryFiles.length
+                    ? "attachment-state done"
+                    : "attachment-state"
+                }
+              >
+                {categoryFiles.length
+                  ? `已上传 ${categoryFiles.length} 件`
+                  : "未上传"}
+              </span>
+              <label className="primary-button recommendation-upload-button">
+                {uploading === category ? (
+                  <LoaderCircle className="spin" size={16} />
+                ) : (
+                  <Upload size={16} />
+                )}
+                {uploading === category ? "上传中" : "上传附件"}
+                <input
+                  hidden
+                  type="file"
+                  accept=".pdf,.jpg,.jpeg,.png"
+                  disabled={Boolean(uploading)}
+                  onChange={(event) =>
+                    uploadFile(category, event.target.files?.[0])
+                  }
+                />
+              </label>
+            </div>
+            {categoryFiles.map((file) => (
+              <div className="uploaded-file recommendation-file" key={file.id}>
+                <FileText size={15} />
+                <span>{file.file_name}</span>
+                <small>
+                  {file.page_count || 1} 页 ·{" "}
+                  {(file.file_size / 1024 / 1024).toFixed(2)} MB
+                </small>
+                <a
+                  className="icon-button icon-button--small"
+                  title="查看附件"
+                  target="_blank"
+                  href={`/api/applications/${applicationId}/files/${file.id}/download?inline=1`}
+                >
+                  <Eye size={14} />
+                </a>
+                <button
+                  className="icon-button icon-button--small"
+                  type="button"
+                  title="删除附件"
+                  onClick={() => removeFile(file)}
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
+        );
+      })}
     </section>
   );
 }
 
-function AttachmentSection({ applicationId, workflowMode, onFilesChange }) {
-  const items = [
-    [
-      "ip",
-      "知识产权证明",
-      "授权发明专利、软件著作权、标准等与项目创新内容直接相关的证明。",
-    ],
-    [
-      "evaluation",
-      "评价证明及审批文件",
-      "评价证明出具时间应在 2025 年 1 月 1 日后；同时上传国家法律法规要求的审批文件。",
-    ],
-    [
-      "application",
-      "主要应用证明",
-      "由应用单位出具，说明应用时间、范围、效果及节能减排或经济社会效益。",
-    ],
-    [
-      "other",
-      "其他证明",
-      "查新报告、检测报告、获奖证明及其他可支撑申报内容的材料。",
-    ],
-  ];
+function AttachmentSection({
+  applicationId,
+  workflowMode,
+  awardType,
+  onFilesChange,
+}) {
+  const profile = getAwardProfile(awardType);
+  const isAchievement = profile.code === "achievement";
+  const items = profile.attachmentMaterials;
   const [files, setFiles] = useState([]);
   const [uploading, setUploading] = useState("");
   const loadFiles = async () => {
@@ -1168,8 +1368,8 @@ function AttachmentSection({ applicationId, workflowMode, onFilesChange }) {
     <section className="form-section">
       <div className="section-heading">
         <div>
-          <span className="section-index">11</span>
-          <h2>附件目录</h2>
+          <span className="section-index">{isAchievement ? "08" : "11"}</span>
+          <h2>{isAchievement ? "证明材料" : "附件目录"}</h2>
         </div>
       </div>
       {sourceFile && (
@@ -1200,13 +1400,17 @@ function AttachmentSection({ applicationId, workflowMode, onFilesChange }) {
       )}
       <div
         className={
-          totalPages > 40 ? "attachment-summary over" : "attachment-summary"
+          !isAchievement && totalPages > 40
+            ? "attachment-summary over"
+            : "attachment-summary"
         }
       >
         <Info size={17} />
         <span>
           <b>
-            附件共 {attachmentFiles.length} 件，合计 {totalPages} / 40 页
+            {isAchievement
+              ? `证明附件共 ${attachmentFiles.length} 件，合计 ${totalPages} 页`
+              : `附件共 ${attachmentFiles.length} 件，合计 ${totalPages} / 40 页`}
           </b>
           <small>
             支持 PDF、JPG、PNG，单个文件不超过 100 MB；多页图片请先合并为
@@ -1214,9 +1418,11 @@ function AttachmentSection({ applicationId, workflowMode, onFilesChange }) {
           </small>
         </span>
         <strong>
-          {totalPages > 40
-            ? `超出 ${totalPages - 40} 页`
-            : `还可上传 ${40 - totalPages} 页`}
+          {isAchievement
+            ? "按材料类型分别上传"
+            : totalPages > 40
+              ? `超出 ${totalPages - 40} 页`
+              : `还可上传 ${40 - totalPages} 页`}
         </strong>
       </div>
       <div className="attachment-list">
@@ -1295,7 +1501,7 @@ function AttachmentSection({ applicationId, workflowMode, onFilesChange }) {
           );
         })}
       </div>
-      {workflowMode === "document" && !sourceFile && (
+      {!isAchievement && workflowMode === "document" && !sourceFile && (
         <div className="warning-row">
           <AlertCircle size={16} />
           当前为整本材料导入模式，请点击右上角“PDF 智能导入”上传最终签章合并版。
@@ -1569,7 +1775,10 @@ function PreviewPageOne({ data, disciplineRecords }) {
       </header>
       <h3>一、项目基本情况</h3>
       <p className="preview-award-kind">
-        奖种： □节能减排科技进步奖&nbsp;&nbsp;□节能减排技术发明奖
+        奖种： {data.awardType === AWARD_TYPES.PROGRESS ? "☑" : "□"}
+        节能减排科技进步奖&nbsp;&nbsp;
+        {data.awardType === AWARD_TYPES.INVENTION ? "☑" : "□"}
+        节能减排技术发明奖
       </p>
       <table>
         <colgroup>
@@ -1709,6 +1918,95 @@ function PreviewPageOne({ data, disciplineRecords }) {
                 <span>{formatDate(data.endDate)}</span>
               </div>
             </td>
+          </tr>
+        </tbody>
+      </table>
+      <footer>1</footer>
+    </article>
+  );
+}
+
+function PreviewAchievementPageOne({ data }) {
+  const candidate = data.candidate || {};
+  return (
+    <article className="preview-page preview-basic-page preview-achievement-basic">
+      <header>
+        <h1>中国节能协会创新奖</h1>
+        <h2>科技成就奖申报书</h2>
+        <p>（{data.year} 年度）</p>
+      </header>
+      <h3>一、候选人基本情况</h3>
+      <table aria-label="候选人基本情况">
+        <tbody>
+          <tr>
+            <th>姓 名</th>
+            <td>{data.projectName}</td>
+            <th>英文姓名</th>
+            <td>{data.projectNameEn}</td>
+          </tr>
+          <tr>
+            <th>性 别</th>
+            <td>{candidate.gender}</td>
+            <th>出生年月</th>
+            <td>{candidate.birthDate}</td>
+          </tr>
+          <tr>
+            <th>出生地</th>
+            <td>{candidate.birthPlace}</td>
+            <th>籍 贯</th>
+            <td>{candidate.nativePlace}</td>
+          </tr>
+          <tr>
+            <th>民 族</th>
+            <td>{candidate.ethnicity}</td>
+            <th>国 籍</th>
+            <td>{candidate.nationality}</td>
+          </tr>
+          <tr>
+            <th>政治面貌</th>
+            <td>{candidate.politicalAffiliation}</td>
+            <th>身份证号</th>
+            <td>{candidate.idNumber}</td>
+          </tr>
+          <tr>
+            <th>工作单位</th>
+            <td colSpan="3">{candidate.workUnit}</td>
+          </tr>
+          <tr>
+            <th>行政职务</th>
+            <td>{candidate.administrativePosition}</td>
+            <th>技术职称</th>
+            <td>{candidate.technicalTitle}</td>
+          </tr>
+          <tr>
+            <th>最高学位</th>
+            <td>{candidate.highestDegree}</td>
+            <th>毕业学校</th>
+            <td>{candidate.graduateSchool}</td>
+          </tr>
+          <tr>
+            <th>专业、专长</th>
+            <td colSpan="3">{candidate.specialty}</td>
+          </tr>
+          <tr>
+            <th>通讯地址</th>
+            <td colSpan="3">{candidate.mailingAddress}</td>
+          </tr>
+          <tr>
+            <th>办公电话</th>
+            <td>{candidate.officePhone}</td>
+            <th>移动电话</th>
+            <td>{candidate.mobilePhone}</td>
+          </tr>
+          <tr>
+            <th>电子邮箱</th>
+            <td>{candidate.email}</td>
+            <th>邮政编码</th>
+            <td>{candidate.postalCode}</td>
+          </tr>
+          <tr>
+            <th>推荐单位</th>
+            <td colSpan="3">{data.applicantUnit}</td>
           </tr>
         </tbody>
       </table>
@@ -2235,19 +2533,9 @@ function splitPreviewContent(content, maxLength = 1250) {
 
 function buildPreviewSections(sourceData) {
   const data = normalizeApplicationData(sourceData);
-  const textSections = [
-    ["二、项目简介", data.introduction],
-    ["三、项目详细内容（1. 立项背景）", data.background],
-    [
-      "三、项目详细内容（2. 详细技术内容或科学研究内容）",
-      data.technicalContent,
-    ],
-    ["三、项目详细内容（3. 主要技术创新点）", data.innovations],
-    ["三、项目详细内容（4. 与当前国内外同类技术比较）", data.comparison],
-    ["三、项目详细内容（5. 应用情况）", data.application],
-  ];
+  const profile = getAwardProfile(data.awardType);
   const pages = [];
-  const addTablePages = (title, group, records, pageSize) => {
+  const addTablePages = (title, group, records, pageSize = 8) => {
     const source = records?.length ? records : [];
     const chunks = source.length
       ? Array.from(
@@ -2268,6 +2556,58 @@ function buildPreviewSections(sourceData) {
       }),
     );
   };
+  if (profile.code === "achievement") {
+    addTablePages(
+      "二、所获科技奖励和荣誉称号情况",
+      "awardRecords",
+      data.awardRecords,
+      10,
+    );
+    addTablePages(
+      "三、发表论文和专著情况",
+      "paperRecords",
+      data.paperRecords,
+      8,
+    );
+    addTablePages("四、所获知识产权证书", "ipRecords", data.ipRecords, 6);
+    addTablePages(
+      "五、承担科研项目情况",
+      "researchRecords",
+      data.researchRecords,
+      7,
+    );
+    addTablePages(
+      "六、参与重大工程技术项目情况",
+      "engineeringRecords",
+      data.engineeringRecords,
+      7,
+    );
+    splitPreviewContent(data.transformation).forEach((body, index) =>
+      pages.push({
+        kind: "text",
+        title: `七、科技成果转化及推广情况${index ? "（续）" : ""}`,
+        body,
+      }),
+    );
+    pages.push({
+      kind: "text",
+      title: "八、附件",
+      body: "推荐函、候选人承诺函及各项证明材料以系统上传附件为准。",
+    });
+    return pages;
+  }
+  const textSections = [
+    ["二、项目简介", data.introduction],
+    ...profile.detailFields.map(([key, label]) => [
+      `三、${profile.sections.find(([sectionKey]) => sectionKey === "details")?.[1]}（${label}）`,
+      data[key],
+    ]),
+    [
+      `四、${profile.sections.find(([sectionKey]) => sectionKey === "comparison")?.[1]}`,
+      data.comparison,
+    ],
+    ["五、应用及效益（应用情况）", data.application],
+  ];
   for (const [title, content = ""] of textSections) {
     splitPreviewContent(content).forEach((body, index) => {
       pages.push({
@@ -2465,7 +2805,11 @@ function PreviewDialog({
           ))}
         </aside>
         <main className="preview-pages" ref={pagesRef}>
-          <PreviewPageOne data={data} disciplineRecords={disciplineRecords} />
+          {getAwardProfile(data.awardType).code === "achievement" ? (
+            <PreviewAchievementPageOne data={data} />
+          ) : (
+            <PreviewPageOne data={data} disciplineRecords={disciplineRecords} />
+          )}
           {previewPages.map((page, index) => {
             const pageNumber = index + 2;
             if (page.kind === "award") {
@@ -2550,7 +2894,9 @@ function CreateApplicationDialog({ onClose, onCreated }) {
   const selectedAward = awardOptions.find(
     (option) => option.value === form.awardType,
   );
-  const isAchievement = form.awardType === "节能减排科技成就奖";
+  const isAchievement =
+    form.awardType === AWARD_TYPES.ACHIEVEMENT ||
+    selectedAward?.code === "achievement";
   const submit = async (event) => {
     event.preventDefault();
     if (!form.title.trim()) {
@@ -2626,8 +2972,15 @@ function CreateApplicationDialog({ onClose, onCreated }) {
                     name="awardType"
                     value={option.value}
                     checked={form.awardType === option.value}
-                    onChange={() =>
-                      setForm({ ...form, awardType: option.value })
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        awardType: event.target.value,
+                        workflowMode:
+                          option.code === "achievement"
+                            ? "form"
+                            : current.workflowMode,
+                      }))
                     }
                   />
                   <span className="award-choice-head">
@@ -2667,29 +3020,32 @@ function CreateApplicationDialog({ onClose, onCreated }) {
                   </small>
                 </span>
               </label>
-              <label
-                className={
-                  form.workflowMode === "document"
-                    ? "workflow-choice active"
-                    : "workflow-choice"
-                }
-              >
-                <input
-                  type="radio"
-                  name="workflowMode"
-                  checked={form.workflowMode === "document"}
-                  onChange={() =>
-                    setForm({ ...form, workflowMode: "document" })
+              {!isAchievement && (
+                <label
+                  className={
+                    form.workflowMode === "document"
+                      ? "workflow-choice active"
+                      : "workflow-choice"
                   }
-                />
-                <ScanText size={20} />
-                <span>
-                  <b>导入完整材料</b>
-                  <small>
-                    上传已合并、签章的 PDF，识别回填字段并保留原件用于最终导出。
-                  </small>
-                </span>
-              </label>
+                >
+                  <input
+                    type="radio"
+                    name="workflowMode"
+                    checked={form.workflowMode === "document"}
+                    onChange={() =>
+                      setForm({ ...form, workflowMode: "document" })
+                    }
+                  />
+                  <ScanText size={20} />
+                  <span>
+                    <b>导入完整材料</b>
+                    <small>
+                      上传已合并、签章的
+                      PDF，识别回填字段并保留原件用于最终导出。
+                    </small>
+                  </span>
+                </label>
+              )}
             </div>
           </fieldset>
           <label>
@@ -3403,12 +3759,31 @@ function EditorApp({ application, onHome }) {
     } catch {
       localDraft = {};
     }
+    const canonicalAwardType =
+      application.award_type || stored.awardType || application.awardType;
+    const profile = getAwardProfile(canonicalAwardType);
+    const emptyData = createEmptyData(application);
+    const { candidate: emptyCandidate, ...emptyFields } = emptyData;
     const merged = {
-      ...createEmptyData(application),
+      ...emptyFields,
       ...stored,
       ...localDraft,
+      awardType: profile.value,
+      applicationMode: profile.mode,
+      profileCode: profile.code,
+      schemaVersion: 2,
     };
-    return normalizeApplicationData(merged);
+    if (stored.candidate || localDraft.candidate) {
+      merged.candidate = {
+        ...(stored.candidate || {}),
+        ...(localDraft.candidate || {}),
+      };
+    } else {
+      delete merged.candidate;
+    }
+    const normalized = normalizeApplicationData(merged);
+    normalized.candidate = { ...emptyCandidate, ...normalized.candidate };
+    return normalized;
   });
   useEffect(() => {
     let active = true;
@@ -3423,13 +3798,20 @@ function EditorApp({ application, onHome }) {
   const [saveState, setSaveState] = useState("saved");
   const [savedAt, setSavedAt] = useState("");
   const [showImport, setShowImport] = useState(
-    application.data?.workflowMode === "document",
+    getAwardProfile(application.award_type || application.data?.awardType)
+      .mode === "project" && application.data?.workflowMode === "document",
   );
   const [showWordImport, setShowWordImport] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sourceFile, setSourceFile] = useState(null);
   const [applicationFiles, setApplicationFiles] = useState([]);
+  const awardProfile = getAwardProfile(data.awardType);
+  const sections = useMemo(
+    () =>
+      getAwardSections(data.awardType).map(({ key, label }) => [key, label]),
+    [data.awardType],
+  );
   const autosaveTimer = useRef(null);
   const latestData = useRef(data);
   const saveQueue = useRef(Promise.resolve());
@@ -3531,9 +3913,8 @@ function EditorApp({ application, onHome }) {
       const source = String(value || "");
       return (
         /<img\b/i.test(source) ||
-        source
-          .replace(/<[^>]*>/g, "")
-          .replace(/&nbsp;/gi, "")
+        richTextToPlain(source)
+          .replace(/\u00a0/g, "")
           .trim().length > 0
       );
     };
@@ -3541,6 +3922,35 @@ function EditorApp({ application, onHome }) {
       (records || []).some((record) =>
         getPdfFields(group).some((field) => hasContent(record?.[field.key])),
       );
+    if (awardProfile.code === "achievement") {
+      return {
+        basic: [
+          data.projectName,
+          data.applicantUnit,
+          data.candidate?.birthDate,
+          data.candidate?.workUnit,
+        ].every(hasContent),
+        honors: hasRecord(data.awardRecords, "awardRecords"),
+        publications: hasRecord(data.paperRecords, "paperRecords"),
+        achievementIp: hasRecord(data.ipRecords, "ipRecords"),
+        research: hasRecord(data.researchRecords, "researchRecords"),
+        engineering: hasRecord(data.engineeringRecords, "engineeringRecords"),
+        transformation: hasContent(data.transformation),
+        recommendation: awardProfile.recommendationMaterials.every(
+          ([category]) =>
+            applicationFiles.some((file) => file.file_type === category),
+        ),
+        attachments: awardProfile.requiredAttachmentGroups.every(
+          ({ categories }) =>
+            categories.some((category) =>
+              applicationFiles.some((file) => file.file_type === category),
+            ),
+        ),
+      };
+    }
+    const hasCompleteSourcePdf =
+      data.workflowMode === "document" &&
+      applicationFiles.some((file) => file.file_type === "source_pdf");
     return {
       basic: [
         data.projectName,
@@ -3582,38 +3992,24 @@ function EditorApp({ application, onHome }) {
             hasContent(typeof unit === "string" ? unit : unit?.name) &&
             hasContent(typeof unit === "string" ? "" : unit?.contribution),
         ),
-      recommendation: applicationFiles.some(
-        (file) => file.file_type === "recommendation_signed",
-      ),
-      attachments: applicationFiles.some((file) =>
-        ["ip", "evaluation", "application", "other", "source_pdf"].includes(
-          file.file_type,
+      recommendation:
+        hasCompleteSourcePdf ||
+        awardProfile.recommendationMaterials.every(([category]) =>
+          applicationFiles.some((file) => file.file_type === category),
         ),
+      attachments: applicationFiles.some(
+        (file) =>
+          file.file_type === "source_pdf" ||
+          awardProfile.attachmentMaterials.some(
+            ([category]) => category === file.file_type,
+          ),
       ),
     };
-  }, [applicationFiles, data]);
-  const completeCount = useMemo(
-    () =>
-      [
-        "year",
-        "awardType",
-        "projectName",
-        "projectNameEn",
-        "applicantUnit",
-        "contact",
-        "phone",
-        "email",
-        "industry",
-        "startDate",
-        "endDate",
-        "introduction",
-      ].filter((key) => data[key]).length +
-      (data.people.length ? 1 : 0) +
-      (data.units.length ? 1 : 0) +
-      (derivePrimaryDiscipline(data.disciplines) ? 1 : 0),
-    [data],
-  );
-  const completion = Math.round((completeCount / 15) * 100);
+  }, [applicationFiles, awardProfile.code, data]);
+  const completeCount = sections.filter(
+    ([key]) => sectionCompletion[key],
+  ).length;
+  const completion = Math.round((completeCount / sections.length) * 100);
   const applyImport = (fields, result) => {
     setData((current) => normalizeApplicationData({ ...current, ...fields }));
     if (result?.sourceFile) {
@@ -3643,6 +4039,103 @@ function EditorApp({ application, onHome }) {
           disciplineRecords={disciplineRecords}
         />
       );
+    if (awardProfile.code === "achievement") {
+      if (active === "honors")
+        return (
+          <RecordsSection
+            number={2}
+            title="所获科技奖励和荣誉称号"
+            group="awardRecords"
+            records={data.awardRecords}
+            onChange={(value) => setField("awardRecords", value)}
+            addLabel="添加奖励或荣誉"
+            emptyLabel="暂无奖励或荣誉记录"
+          />
+        );
+      if (active === "publications")
+        return (
+          <RecordsSection
+            number={3}
+            title="发表论文和专著情况"
+            group="paperRecords"
+            records={data.paperRecords}
+            onChange={(value) => setField("paperRecords", value)}
+            addLabel="添加论文或专著"
+            emptyLabel="暂无论文或专著记录，代表性成果不超过 10 篇（册）"
+          />
+        );
+      if (active === "achievementIp")
+        return (
+          <RecordsSection
+            number={4}
+            title="所获知识产权证书"
+            type="ip"
+            records={data.ipRecords}
+            onChange={(value) => setField("ipRecords", value)}
+            addLabel="添加知识产权"
+            emptyLabel="暂无知识产权记录，代表性知识产权不超过 10 项"
+          />
+        );
+      if (active === "research")
+        return (
+          <RecordsSection
+            number={5}
+            title="承担科研项目情况"
+            group="researchRecords"
+            records={data.researchRecords}
+            onChange={(value) => setField("researchRecords", value)}
+            addLabel="添加科研项目"
+            emptyLabel="暂无科研项目记录"
+          />
+        );
+      if (active === "engineering")
+        return (
+          <RecordsSection
+            number={6}
+            title="参与重大工程技术项目情况"
+            group="engineeringRecords"
+            records={data.engineeringRecords}
+            onChange={(value) => setField("engineeringRecords", value)}
+            addLabel="添加工程项目"
+            emptyLabel="暂无重大工程技术项目记录"
+          />
+        );
+      if (active === "transformation")
+        return (
+          <LongTextSection
+            number={7}
+            title="科技成果转化及推广情况"
+            description="突出候选人在节能减排领域的核心贡献、成果转化规模和实际效益。"
+            fields={[
+              {
+                key: "transformation",
+                label: "科技成果转化及推广情况",
+                required: true,
+                max: 500,
+              },
+            ]}
+            data={data}
+            setField={setField}
+            applicationId={application.id}
+          />
+        );
+      if (active === "recommendation")
+        return (
+          <RecommendationUploadSection
+            applicationId={application.id}
+            awardType={data.awardType}
+            onFilesChange={setApplicationFiles}
+          />
+        );
+      return (
+        <AttachmentSection
+          applicationId={application.id}
+          workflowMode={data.workflowMode}
+          awardType={data.awardType}
+          onFilesChange={setApplicationFiles}
+        />
+      );
+    }
     if (active === "introduction")
       return (
         <LongTextSection
@@ -3666,27 +4159,14 @@ function EditorApp({ application, onHome }) {
       return (
         <LongTextSection
           number={3}
-          title="项目详细内容"
-          description="按照申报书栏目系统阐述项目研发背景、技术方案和创新成果。"
-          fields={[
-            {
-              key: "background",
-              label: "1. 立项背景",
-              required: true,
-              max: 800,
-            },
-            {
-              key: "technicalContent",
-              label: "2. 详细技术内容或科学研究内容",
-              required: true,
-            },
-            {
-              key: "innovations",
-              label: "3. 主要技术创新点",
-              required: true,
-              max: 800,
-            },
-          ]}
+          title={awardProfile.sections.find(([key]) => key === "details")?.[1]}
+          description={awardProfile.comparisonGuidance}
+          fields={awardProfile.detailFields.map(([key, label]) => ({
+            key,
+            label,
+            required: true,
+            max: key === "innovations" ? 800 : undefined,
+          }))}
           data={data}
           setField={setField}
           applicationId={application.id}
@@ -3696,12 +4176,14 @@ function EditorApp({ application, onHome }) {
       return (
         <LongTextSection
           number={4}
-          title="与当前国内外同类技术比较"
-          description="从技术参数、节能减排效益和市场竞争力三个维度进行对比，不超过两页。"
+          title={
+            awardProfile.sections.find(([key]) => key === "comparison")?.[1]
+          }
+          description={awardProfile.comparisonGuidance}
           fields={[
             {
               key: "comparison",
-              label: "主要参数、节能减排效益和市场竞争力比较",
+              label: awardProfile.comparisonLabel,
               required: true,
             },
           ]}
@@ -3872,6 +4354,7 @@ function EditorApp({ application, onHome }) {
       return (
         <RecommendationUploadSection
           applicationId={application.id}
+          awardType={data.awardType}
           onFilesChange={setApplicationFiles}
         />
       );
@@ -3879,6 +4362,7 @@ function EditorApp({ application, onHome }) {
       <AttachmentSection
         applicationId={application.id}
         workflowMode={data.workflowMode}
+        awardType={data.awardType}
         onFilesChange={setApplicationFiles}
       />
     );
@@ -3944,20 +4428,24 @@ function EditorApp({ application, onHome }) {
             <Home size={17} />
             项目中心
           </button>
-          <button
-            className="secondary-button import-button"
-            onClick={() => setShowImport(true)}
-          >
-            <ScanText size={17} />
-            PDF 智能导入
-          </button>
-          <button
-            className="secondary-button import-button"
-            onClick={() => setShowWordImport(true)}
-          >
-            <FileInput size={17} />
-            Word 导入
-          </button>
+          {awardProfile.mode === "project" && (
+            <>
+              <button
+                className="secondary-button import-button"
+                onClick={() => setShowImport(true)}
+              >
+                <ScanText size={17} />
+                PDF 智能导入
+              </button>
+              <button
+                className="secondary-button import-button"
+                onClick={() => setShowWordImport(true)}
+              >
+                <FileInput size={17} />
+                Word 导入
+              </button>
+            </>
+          )}
           {sourceFile && (
             <a
               className="secondary-button final-export-top"
@@ -4016,7 +4504,9 @@ function EditorApp({ application, onHome }) {
             <div className="progress-track">
               <i style={{ width: `${completion}%` }} />
             </div>
-            <small>{completeCount} / 15 项核心信息已填写</small>
+            <small>
+              {completeCount} / {sections.length} 个章节已完成
+            </small>
           </div>
           <nav>
             <p>申报内容</p>
@@ -4106,14 +4596,14 @@ function EditorApp({ application, onHome }) {
           </div>
         </main>
       </div>
-      {showImport && (
+      {showImport && awardProfile.mode === "project" && (
         <ImportDialog
           applicationId={application.id}
           onClose={() => setShowImport(false)}
           onApply={applyImport}
         />
       )}
-      {showWordImport && (
+      {showWordImport && awardProfile.mode === "project" && (
         <WordImportDialog
           applicationId={application.id}
           currentData={data}

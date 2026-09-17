@@ -14,6 +14,53 @@
   --surface: #fff;
 }
 
+.award-type-lock {
+  min-height: 58px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid #cbd8e7;
+  border-radius: 6px;
+  background: #f5f8fc;
+  color: #33445b;
+}
+
+.award-type-lock > span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.award-type-lock b {
+  font-size: 14px;
+  color: #18283d;
+}
+
+.award-type-lock small {
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.award-type-lock i {
+  padding: 3px 7px;
+  border-radius: 4px;
+  background: #e6eef8;
+  color: #315d8f;
+  font-size: 12px;
+  font-style: normal;
+  white-space: nowrap;
+}
+
+.preview-achievement-basic table th {
+  width: 18%;
+}
+
+.preview-achievement-basic table td {
+  width: 32%;
+}
+
 * {
   box-sizing: border-box;
 }
