@@ -1995,7 +1995,7 @@ function PreviewRichValue({ value, className = "" }) {
   return isHtmlContent(value) ? (
     <div
       className={`preview-cell-rich ${className}`}
-      dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(value) }}
+      dangerouslySetInnerHTML={{ __html: sanitizeRichText(value) }}
     />
   ) : (
     <div className={`preview-cell-rich ${className}`}>{value || ""}</div>

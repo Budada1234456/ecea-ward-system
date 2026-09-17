@@ -64,6 +64,7 @@ test("structured forms, entity ordering and discipline tree work responsively", 
               { unitName: "示范应用单位", technology: "节能技术" },
             ],
             economicSummary: { totalInvestment: "200", paybackYears: "3" },
+            economic: "<p><strong>富文本计算依据</strong></p>",
             economicRecords: [{ year: "2025", newSales: "100" }],
             cooperationRecords: [
               { method: "共同研发", collaborators: "甲完成人、乙完成人" },
@@ -272,6 +273,7 @@ test("structured forms, entity ordering and discipline tree work responsively", 
     await expect(economicPreview).toContainText("创收外汇（万美元）");
     await expect(economicPreview).toContainText("新增销售额");
     await expect(economicPreview).toContainText("100");
+    await expect(economicPreview).toContainText("富文本计算依据");
     const awardPreview = page.getByRole("table", {
       name: "四、本项目曾获奖励情况",
     });
