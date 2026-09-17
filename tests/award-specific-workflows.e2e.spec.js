@@ -59,6 +59,18 @@ test("each award loads its own form, validation and preview profile", async ({
     );
     return response;
   };
+  const uploadSourcePdf = (applicationId, buffer) =>
+    page.request.post(`${baseUrl}/api/extract-pdf`, {
+      multipart: {
+        applicationId: String(applicationId),
+        file: {
+          name: "complete-signed-application.pdf",
+          mimeType: "application/pdf",
+          buffer,
+        },
+      },
+      timeout: 120_000,
+    });
 
   const achievementTitle = `科技成就候选人-${suffix}`;
   const progressTitle = `科技进步项目-${suffix}`;
@@ -268,7 +280,7 @@ test("each award loads its own form, validation and preview profile", async ({
       }
     };
 
-    await seedProject(progress, "2025-10", "2026-09");
+    await seedProject(progress, "2025-10", "2026-09", false);
     const shortProgressSubmit = await page.request.post(
       `${baseUrl}/api/applications/${progress.id}/submit`,
     );
@@ -309,11 +321,24 @@ test("each award loads its own form, validation and preview profile", async ({
     expect((await invalidDateSubmit.json()).missing).toContain(
       "至少一家应用单位的实际应用时间须满 1 年",
     );
+    const blankEntities = await page.request.put(
+      `${baseUrl}/api/applications/${progress.id}`,
+      { data: { data: { people: [{}], units: [{}] } } },
+    );
+    expect(blankEntities.ok(), await blankEntities.text()).toBe(true);
+    const blankEntitiesSubmit = await page.request.post(
+      `${baseUrl}/api/applications/${progress.id}/submit`,
+    );
+    const blankEntityErrors = (await blankEntitiesSubmit.json()).missing;
+    expect(blankEntityErrors).toContain("主要完成人");
+    expect(blankEntityErrors).toContain("主要完成单位");
     const validProgress = await page.request.put(
       `${baseUrl}/api/applications/${progress.id}`,
       {
         data: {
           data: {
+            people: [{ name: "完成人", contribution: "主要贡献" }],
+            units: [{ name: "完成单位", contribution: "主要贡献" }],
             applicationUnits: [
               {
                 unitName: "示范应用单位",
@@ -326,6 +351,28 @@ test("each award loads its own form, validation and preview profile", async ({
       },
     );
     expect(validProgress.ok(), await validProgress.text()).toBe(true);
+    const missingProjectFiles = await page.request.post(
+      `${baseUrl}/api/applications/${progress.id}/submit`,
+    );
+    const missingProjectFileErrors = (await missingProjectFiles.json()).missing;
+    expect(missingProjectFileErrors).toContain("签章意见附件");
+    expect(missingProjectFileErrors).toContain("项目证明材料");
+    const recommendationUpload = await uploadMaterial(
+      progress.id,
+      "recommendation_signed",
+    );
+    expect(recommendationUpload.ok(), await recommendationUpload.text()).toBe(
+      true,
+    );
+    const missingProjectProof = await page.request.post(
+      `${baseUrl}/api/applications/${progress.id}/submit`,
+    );
+    const missingProjectProofErrors = (await missingProjectProof.json())
+      .missing;
+    expect(missingProjectProofErrors).not.toContain("签章意见附件");
+    expect(missingProjectProofErrors).toContain("项目证明材料");
+    const proofUpload = await uploadMaterial(progress.id, "application");
+    expect(proofUpload.ok(), await proofUpload.text()).toBe(true);
     const progressSubmit = await page.request.post(
       `${baseUrl}/api/applications/${progress.id}/submit`,
     );
@@ -362,15 +409,13 @@ test("each award loads its own form, validation and preview profile", async ({
     expect(inventionSubmit.ok(), await inventionSubmit.text()).toBe(true);
 
     await seedProject(documentProgress, "2025-08", "2026-09", false);
-    const sourceUpload = await uploadMaterial(
+    const forgedSource = await uploadMaterial(
       documentProgress.id,
       "source_pdf",
-      {
-        name: "complete-signed-application.pdf",
-        mimeType: "application/pdf",
-        buffer: longPdf,
-      },
     );
+    expect(forgedSource.status()).toBe(422);
+    expect((await forgedSource.json()).message).toBe("附件类别无效");
+    const sourceUpload = await uploadSourcePdf(documentProgress.id, longPdf);
     expect(sourceUpload.ok(), await sourceUpload.text()).toBe(true);
     const documentSubmit = await page.request.post(
       `${baseUrl}/api/applications/${documentProgress.id}/submit`,
@@ -424,6 +469,14 @@ test("each award loads its own form, validation and preview profile", async ({
     ).toBeVisible();
     await expect(page.getByRole("heading", { name: "八、附件" })).toBeVisible();
     await expect(page.getByText("九、", { exact: false })).toHaveCount(0);
+    const downloadPromise = page.waitForEvent("download");
+    await page.getByRole("button", { name: "导出系统生成 PDF" }).click();
+    const download = await downloadPromise;
+    const stream = await download.createReadStream();
+    let downloadedBytes = 0;
+    for await (const chunk of stream) downloadedBytes += chunk.length;
+    expect(download.suggestedFilename()).toMatch(/\.pdf$/i);
+    expect(downloadedBytes).toBeGreaterThan(10_000);
     await page.screenshot({
       path: "test-results/award-achievement-preview.png",
       fullPage: true,
@@ -447,12 +500,8 @@ test("each award loads its own form, validation and preview profile", async ({
     await page
       .getByRole("button", { name: /技术原理、技术方法与核心措施/ })
       .click();
-    await expect(
-      page.getByText("2. 产品、工艺或材料发明内容"),
-    ).toBeVisible();
-    await expect(
-      page.getByText("3. 核心技术措施与技术发明点"),
-    ).toBeVisible();
+    await expect(page.getByText("2. 产品、工艺或材料发明内容")).toBeVisible();
+    await expect(page.getByText("3. 核心技术措施与技术发明点")).toBeVisible();
     await expect(
       page.getByText(/首创性、技术发明点与知识产权权利要求/),
     ).toBeVisible();

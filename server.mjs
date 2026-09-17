@@ -610,7 +610,20 @@ function applicationPlainText(value) {
 
 function hasApplicationValue(data, key) {
   const value = applicationValue(data, key);
-  if (Array.isArray(value)) return value.length > 0;
+  if (Array.isArray(value)) {
+    if (key === "people" || key === "units") {
+      return value.some(
+        (record) =>
+          applicationPlainText(
+            typeof record === "string" ? record : record?.name,
+          ).length > 0 &&
+          applicationPlainText(
+            typeof record === "string" ? "" : record?.contribution,
+          ).length > 0,
+      );
+    }
+    return value.length > 0;
+  }
   const source = String(value || "");
   if (/<img\b[^>]*>/i.test(source)) return true;
   return applicationPlainText(source).length > 0;
@@ -1389,8 +1402,11 @@ app.post("/api/applications/:id/submit", (req, res) => {
     .map(({ label }) => label);
   if (profile.code === "achievement") {
     if (data.candidate?.birthDate) {
-      const birthYear = Number(String(data.candidate.birthDate).slice(0, 4));
-      if (birthYear && Number(data.year || row.year) - birthYear > 60)
+      const birthDate = parseApplicationDate(data.candidate.birthDate, "start");
+      const applicationYear = Number(data.year || row.year);
+      if (!birthDate || birthDate > new Date(Date.UTC(applicationYear, 11, 31)))
+        missing.push("候选人出生年月格式无效");
+      else if (applicationYear - birthDate.getUTCFullYear() > 60)
         missing.push("候选人申报年末年龄须在 60 周岁及以下");
     }
     if ((data.paperRecords || []).length > 10)
@@ -1491,6 +1507,14 @@ app.post(
     const category = String(req.body.category || "other");
     const profile = getAwardProfile(exists.award_type);
     const isContentImage = category.startsWith("content_image:");
+    const allowedCategories = new Set([
+      ...profile.recommendationMaterials.map(([value]) => value),
+      ...profile.attachmentMaterials.map(([value]) => value),
+    ]);
+    if (!isContentImage && !allowedCategories.has(category)) {
+      await fsPromises.unlink(req.file.path).catch(() => {});
+      return res.status(422).json({ ok: false, message: "附件类别无效" });
+    }
     if (
       isContentImage &&
       !String(req.file.mimetype || "").startsWith("image/")
