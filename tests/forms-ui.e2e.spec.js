@@ -274,6 +274,9 @@ test("structured forms, entity ordering and discipline tree work responsively", 
     await expect(economicPreview).toContainText("新增销售额");
     await expect(economicPreview).toContainText("100");
     await expect(economicPreview).toContainText("富文本计算依据");
+    await expect(
+      economicPreview.locator(".preview-economic-basis td"),
+    ).toHaveAttribute("colspan", "6");
     const awardPreview = page.getByRole("table", {
       name: "四、本项目曾获奖励情况",
     });

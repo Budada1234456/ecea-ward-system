@@ -88,6 +88,17 @@ test("field guidance and pinned table columns work at desktop and narrow widths"
       endVisible: true,
     });
 
+    await page.getByRole("button", { name: /项目详细内容/ }).click();
+    const richEditor = page.locator(".rich-editor").first();
+    const zoomControls = richEditor.getByLabel("编辑器视图缩放");
+    await expect(zoomControls).toContainText("100%");
+    await richEditor.locator(".rich-editor-canvas").dispatchEvent("wheel", {
+      deltaY: -120,
+      ctrlKey: true,
+    });
+    await expect(zoomControls).toContainText("110%");
+
+    await page.getByRole("button", { name: /曾获奖励情况/ }).click();
     await page.setViewportSize({ width: 360, height: 800 });
     expect(
       await page.evaluate(

@@ -1978,7 +1978,7 @@ function PreviewEconomicPage({ data, pageNumber }) {
         </tbody>
         <tbody className="preview-economic-basis">
           <tr>
-            <td colSpan="5">
+            <td colSpan={amountFields.length + 1}>
               <strong>各栏目的计算依据：</strong>
               <PreviewRichValue value={data.economic} />
               <span className="preview-word-limit">（限 300 字）</span>
