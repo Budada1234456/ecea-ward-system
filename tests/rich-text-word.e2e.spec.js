@@ -650,7 +650,6 @@ test("maps every A rich-text editor to official-template guidance without data f
     "economic",
     "social",
     "technicalEvaluation",
-    "peopleCooperation",
     "person-1-contribution",
     "unit-1-contribution",
   ];
@@ -660,6 +659,7 @@ test("maps every A rich-text editor to official-template guidance without data f
     assert.ok(guidance.text);
   }
   assert.equal(getRichTextGuidance("unknown-field"), null);
+  assert.equal(getRichTextGuidance("peopleCooperation"), null);
   assert.match(getRichTextGuidance("introduction").text, /核心科技内容/);
   assert.match(getRichTextGuidance("comparison").text, /两页/);
   assert.equal(getRichTextGuidance("unit-1-contribution").max, 500);

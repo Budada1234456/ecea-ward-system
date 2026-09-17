@@ -171,7 +171,7 @@ async function main() {
 
   const tunnel = launch(
     process.env.CLOUDFLARED_BIN || "cloudflared",
-    ["tunnel", "--no-autoupdate", "--protocol", "http2", "--url", localUrl],
+    ["tunnel", "--no-autoupdate", "--protocol", "quic", "--url", localUrl],
     "cloudflared",
   );
   const publicUrl = await waitForCloudflareUrl(tunnel);
