@@ -13,6 +13,8 @@ export const FIELD_GROUPS = [
   "economicSummary",
   "economicRecords",
   "cooperationRecords",
+  "researchRecords",
+  "engineeringRecords",
   "people",
   "units",
 ];
@@ -238,6 +240,57 @@ const baseTableFields = {
       minWidth: 180,
     }),
   ],
+  researchRecords: [
+    multilineField("name", "科研项目名称", {
+      group: "researchRecords",
+      required: true,
+      width: "minmax(240px, 1.8fr)",
+      minWidth: 250,
+    }),
+    textField("source", "项目来源及编号", {
+      group: "researchRecords",
+      width: "minmax(190px, 1.2fr)",
+      minWidth: 200,
+    }),
+    textField("period", "起止时间", {
+      group: "researchRecords",
+      width: "170px",
+      minWidth: 170,
+    }),
+    textField("role", "本人角色", {
+      group: "researchRecords",
+      width: "140px",
+      minWidth: 140,
+    }),
+    multilineField("result", "完成情况及代表性成果", {
+      group: "researchRecords",
+      width: "minmax(260px, 1.8fr)",
+      minWidth: 280,
+    }),
+  ],
+  engineeringRecords: [
+    multilineField("name", "重大工程技术项目名称", {
+      group: "engineeringRecords",
+      required: true,
+      width: "minmax(250px, 1.8fr)",
+      minWidth: 260,
+    }),
+    textField("period", "参与时间", {
+      group: "engineeringRecords",
+      width: "170px",
+      minWidth: 170,
+    }),
+    textField("role", "本人角色", {
+      group: "engineeringRecords",
+      width: "140px",
+      minWidth: 140,
+    }),
+    multilineField("contribution", "主要技术贡献", {
+      group: "engineeringRecords",
+      width: "minmax(300px, 2fr)",
+      minWidth: 320,
+    }),
+  ],
   people: [
     textField("name", "姓名", { group: "people", required: true }),
     textField("gender", "性别", { group: "people" }),
@@ -360,6 +413,19 @@ const FIELD_GUIDANCE = {
     output: "填写合作形成的具体成果",
     evidence: "填写对应证明材料的名称或编号",
     notes: "填写需要补充说明的合作情况",
+  },
+  researchRecords: {
+    name: "填写候选人承担的科研项目正式名称",
+    source: "填写计划、基金来源及项目编号",
+    period: "填写项目起止年月",
+    role: "填写负责人、课题负责人或主要参与人等",
+    result: "填写项目完成情况及形成的代表性成果",
+  },
+  engineeringRecords: {
+    name: "填写候选人参与的重大工程技术项目正式名称",
+    period: "填写实际参与项目的起止时间",
+    role: "填写候选人在项目中的职责",
+    contribution: "说明候选人解决的关键技术问题及实际贡献",
   },
   people: {
     name: "填写与身份证件一致的姓名",

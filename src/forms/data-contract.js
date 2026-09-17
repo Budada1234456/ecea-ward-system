@@ -211,6 +211,17 @@ export function normalizeApplicationData(value) {
   if (normalized.disciplines.length) {
     normalized.disciplines[0] = derivePrimaryDiscipline(normalized.disciplines);
   }
+  const legacyCandidate =
+    source.applicationMode === "individual" ||
+    source.awardType === "节能减排科技成就奖"
+      ? normalized.people[0] || {}
+      : {};
+  normalized.candidate = {
+    ...legacyCandidate,
+    ...(source.candidate && typeof source.candidate === "object"
+      ? source.candidate
+      : {}),
+  };
   return normalized;
 }
 

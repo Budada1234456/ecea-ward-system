@@ -19,6 +19,12 @@ import {
 import { extractProjectSourceFields } from "./lib/pdf-fields.mjs";
 import { createWordImportRouter } from "./routes/word-import.mjs";
 import { sanitizeApplicationRichTextData } from "./src/editor/rich-text-node.mjs";
+import {
+  AWARD_TYPES,
+  awardProfiles,
+  getAwardProfile,
+  getSubmissionRequirements,
+} from "./src/award-profiles.js";
 
 const execFileAsync = promisify(execFile);
 const app = express();
@@ -561,6 +567,14 @@ function applicationFromRow(row) {
 }
 
 function calculateProgress(data) {
+  const profile = getAwardProfile(data?.awardType);
+  if (profile.code === "achievement") {
+    const requirements = getSubmissionRequirements(profile.value);
+    const complete = requirements.filter(({ key }) =>
+      hasApplicationValue(data, key),
+    ).length;
+    return Math.min(100, Math.round((complete / requirements.length) * 100));
+  }
   const keys = [
     "year",
     "awardType",
@@ -581,6 +595,80 @@ function calculateProgress(data) {
   if (Array.isArray(data?.disciplines) && data.disciplines.some(Boolean))
     complete += 1;
   return Math.min(100, Math.round((complete / 15) * 100));
+}
+
+function applicationValue(data, key) {
+  return key.split(".").reduce((value, part) => value?.[part], data);
+}
+
+function applicationPlainText(value) {
+  return String(value || "")
+    .replace(/<[^>]*>/g, "")
+    .replace(/&(?:nbsp|#160);/gi, "")
+    .trim();
+}
+
+function hasApplicationValue(data, key) {
+  const value = applicationValue(data, key);
+  if (Array.isArray(value)) return value.length > 0;
+  const source = String(value || "");
+  if (/<img\b[^>]*>/i.test(source)) return true;
+  return applicationPlainText(source).length > 0;
+}
+
+function parseApplicationDate(value, boundary) {
+  const match = String(value || "")
+    .trim()
+    .match(/^(\d{4})-(\d{2})(?:-(\d{2}))?$/);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  if (month < 1 || month > 12) return null;
+  const day = match[3]
+    ? Number(match[3])
+    : boundary === "end"
+      ? new Date(Date.UTC(year, month, 0)).getUTCDate()
+      : 1;
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  )
+    return null;
+  return date;
+}
+
+function hasMinimumApplicationDuration(records, years, applicationYear) {
+  const now = new Date();
+  const today = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+  );
+  const yearEnd = new Date(Date.UTC(applicationYear, 11, 31));
+  if (Number.isNaN(yearEnd.getTime())) return false;
+  const referenceDate = today < yearEnd ? today : yearEnd;
+  return (records || []).some((record) => {
+    const start = parseApplicationDate(record?.startDate, "start");
+    const endValue = String(record?.endDate || "").trim();
+    const declaredEnd = endValue
+      ? parseApplicationDate(endValue, "end")
+      : referenceDate;
+    if (!start || !declaredEnd || start > referenceDate) return false;
+    const end = declaredEnd < referenceDate ? declaredEnd : referenceDate;
+    if (end < start) return false;
+    const minimumEnd = new Date(start);
+    minimumEnd.setUTCFullYear(minimumEnd.getUTCFullYear() + years);
+    return end >= minimumEnd;
+  });
+}
+
+function exceedsCharacterLimit(value, limit) {
+  let count = 0;
+  for (const _character of applicationPlainText(value)) {
+    count += 1;
+    if (count > limit) return true;
+  }
+  return false;
 }
 
 function writeAudit(applicationId, action, detail = "") {
@@ -1142,19 +1230,30 @@ app.get("/api/applications", (req, res) => {
 
 app.post("/api/applications", (req, res) => {
   const title = String(req.body.title || "").trim();
-  const awardType = String(req.body.awardType || "节能减排科技进步奖");
+  const requestedAwardType = String(req.body.awardType || AWARD_TYPES.PROGRESS);
+  const profile = getAwardProfile(requestedAwardType);
+  const awardType = profile.value;
   const year = Number(req.body.year || new Date().getFullYear());
   const applicationChannel = String(req.body.applicationChannel || "自由申报");
   const applicantUnit = String(req.body.applicantUnit || "").trim();
   const workflowMode =
-    req.body.workflowMode === "document" ? "document" : "form";
+    profile.mode === "project" && req.body.workflowMode === "document"
+      ? "document"
+      : "form";
+  if (!awardProfiles.some(({ value }) => value === requestedAwardType))
+    return res.status(422).json({ ok: false, message: "请选择有效的奖项类别" });
   if (!title)
-    return res.status(422).json({ ok: false, message: "请填写项目名称" });
+    return res.status(422).json({
+      ok: false,
+      message:
+        profile.mode === "individual" ? "请填写候选人姓名" : "请填写项目名称",
+    });
   const data = {
+    schemaVersion: 2,
+    profileCode: profile.code,
     year: String(year),
     awardType,
-    applicationMode:
-      awardType === "节能减排科技成就奖" ? "individual" : "project",
+    applicationMode: profile.mode,
     applicationChannel,
     applicantUnit,
     projectName: title,
@@ -1203,10 +1302,15 @@ app.put("/api/applications/:id", (req, res) => {
     ...parseData(row.data_json),
     ...(req.body.data || {}),
   });
+  const profile = getAwardProfile(row.award_type);
+  data.awardType = profile.value;
+  data.applicationMode = profile.mode;
+  data.profileCode = profile.code;
+  data.schemaVersion = 2;
   const title =
     String(data.projectName || req.body.title || row.title).trim() ||
     "未命名申报项目";
-  const awardType = String(data.awardType || row.award_type);
+  const awardType = profile.value;
   const year = Number(data.year || row.year);
   const status = String(req.body.status || row.status);
   const progress = calculateProgress(data);
@@ -1273,18 +1377,65 @@ app.post("/api/applications/:id/submit", (req, res) => {
   if (!row)
     return res.status(404).json({ ok: false, message: "申报项目不存在" });
   const data = parseData(row.data_json);
-  const requirements = [
-    ["projectName", "项目名称"],
-    ["applicantUnit", "第一申报单位"],
-    ["introduction", "项目简介"],
-  ];
-  const missing = requirements
-    .filter(([key]) => !String(data[key] || "").trim())
-    .map(([, label]) => label);
-  if (!Array.isArray(data.people) || !data.people.length)
-    missing.push("主要完成人");
-  if (!Array.isArray(data.units) || !data.units.length)
-    missing.push("主要完成单位");
+  const profile = getAwardProfile(row.award_type);
+  const files = db
+    .prepare(
+      "SELECT DISTINCT file_type FROM application_files WHERE application_id = ?",
+    )
+    .all(id);
+  const fileTypes = new Set(files.map(({ file_type: fileType }) => fileType));
+  const missing = getSubmissionRequirements(profile.value)
+    .filter(({ key }) => !hasApplicationValue(data, key))
+    .map(({ label }) => label);
+  if (profile.code === "achievement") {
+    if (data.candidate?.birthDate) {
+      const birthYear = Number(String(data.candidate.birthDate).slice(0, 4));
+      if (birthYear && Number(data.year || row.year) - birthYear > 60)
+        missing.push("候选人申报年末年龄须在 60 周岁及以下");
+    }
+    if ((data.paperRecords || []).length > 10)
+      missing.push("代表性论文和专著不得超过 10 篇（册）");
+    if ((data.ipRecords || []).length > 10)
+      missing.push("代表性知识产权不得超过 10 项");
+    if (exceedsCharacterLimit(data.transformation, 500))
+      missing.push("科技成果转化及推广情况不得超过 500 字");
+  }
+  if (profile.mode === "project") {
+    if ((data.people || []).length > profile.maxPeople)
+      missing.push(`主要完成人不得超过 ${profile.maxPeople} 人`);
+    if (profile.maxUnits && (data.units || []).length > profile.maxUnits)
+      missing.push(`主要完成单位不得超过 ${profile.maxUnits} 个`);
+    if (
+      !hasMinimumApplicationDuration(
+        data.applicationUnits,
+        profile.minimumApplicationYears,
+        Number(data.year || row.year),
+      )
+    )
+      missing.push(
+        `至少一家应用单位的实际应用时间须满 ${profile.minimumApplicationYears} 年`,
+      );
+  }
+  const hasCompleteSourcePdf =
+    profile.mode === "project" &&
+    data.workflowMode === "document" &&
+    fileTypes.has("source_pdf");
+  if (!hasCompleteSourcePdf) {
+    for (const [category, label] of profile.recommendationMaterials) {
+      if (!fileTypes.has(category)) missing.push(label);
+    }
+    if (profile.requiredAttachmentGroups.length) {
+      for (const { categories, label } of profile.requiredAttachmentGroups) {
+        if (!categories.some((category) => fileTypes.has(category)))
+          missing.push(label);
+      }
+    } else {
+      const hasSupportingMaterial = profile.attachmentMaterials.some(
+        ([category]) => fileTypes.has(category),
+      );
+      if (!hasSupportingMaterial) missing.push("项目证明材料");
+    }
+  }
   if (missing.length) {
     return res.status(422).json({
       ok: false,
@@ -1337,6 +1488,35 @@ app.post(
     if (!req.file)
       return res.status(400).json({ ok: false, message: "请选择附件" });
     const fileName = normalizeUploadedName(req.file.originalname);
+    const category = String(req.body.category || "other");
+    const profile = getAwardProfile(exists.award_type);
+    const isContentImage = category.startsWith("content_image:");
+    if (
+      isContentImage &&
+      !String(req.file.mimetype || "").startsWith("image/")
+    ) {
+      await fsPromises.unlink(req.file.path).catch(() => {});
+      return res
+        .status(422)
+        .json({ ok: false, message: "正文中只能插入 JPG 或 PNG 图片" });
+    }
+    const categoryLimit = profile.fileLimits[category];
+    if (categoryLimit) {
+      const categoryCount = Number(
+        db
+          .prepare(
+            "SELECT COUNT(*) AS total FROM application_files WHERE application_id = ? AND file_type = ?",
+          )
+          .get(applicationId, category).total || 0,
+      );
+      if (categoryCount >= categoryLimit) {
+        await fsPromises.unlink(req.file.path).catch(() => {});
+        return res.status(422).json({
+          ok: false,
+          message: `该类材料不得超过 ${categoryLimit} 个文件`,
+        });
+      }
+    }
     const projectDir = path.join(dataDir, "files", String(applicationId));
     await fsPromises.mkdir(projectDir, { recursive: true });
     const safeName = fileName.replace(/[<>:"/\\|?*\x00-\x1f]/g, "_");
@@ -1345,36 +1525,27 @@ app.post(
       `${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safeName}`,
     );
     await persistUploadedFile(req.file.path, storedPath);
-    const category = String(req.body.category || "other");
-    const isContentImage = category.startsWith("content_image:");
-    if (
-      isContentImage &&
-      !String(req.file.mimetype || "").startsWith("image/")
-    ) {
-      await fsPromises.unlink(storedPath).catch(() => {});
-      return res
-        .status(422)
-        .json({ ok: false, message: "正文中只能插入 JPG 或 PNG 图片" });
-    }
     const extension = path.extname(fileName).toLowerCase();
     const pageCount = extension === ".pdf" ? await pdfPageCount(storedPath) : 1;
-    const currentPages = Number(
-      db
-        .prepare(
-          "SELECT COALESCE(SUM(page_count), 0) AS total FROM application_files WHERE application_id = ? AND file_type != 'source_pdf' AND file_type NOT LIKE 'content_image:%'",
-        )
-        .get(applicationId).total || 0,
-    );
-    if (
+    const shouldLimitPages =
+      profile.mode === "project" &&
       !isContentImage &&
-      category !== "source_pdf" &&
-      currentPages + pageCount > 40
-    ) {
-      await fsPromises.unlink(storedPath).catch(() => {});
-      return res.status(422).json({
-        ok: false,
-        message: `附件总页数不得超过 40 页；当前 ${currentPages} 页，本文件 ${pageCount} 页`,
-      });
+      category !== "source_pdf";
+    if (shouldLimitPages) {
+      const currentPages = Number(
+        db
+          .prepare(
+            "SELECT COALESCE(SUM(page_count), 0) AS total FROM application_files WHERE application_id = ? AND file_type != 'source_pdf' AND file_type NOT LIKE 'content_image:%'",
+          )
+          .get(applicationId).total || 0,
+      );
+      if (currentPages + pageCount > 40) {
+        await fsPromises.unlink(storedPath).catch(() => {});
+        return res.status(422).json({
+          ok: false,
+          message: `附件总页数不得超过 40 页；当前 ${currentPages} 页，本文件 ${pageCount} 页`,
+        });
+      }
     }
     const timestamp = now();
     const result = db

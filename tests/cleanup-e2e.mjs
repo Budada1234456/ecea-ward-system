@@ -3,7 +3,12 @@ import { rmSync } from "node:fs";
 import { dirname } from "node:path";
 import { pathToFileURL } from "node:url";
 
-const testUserPatterns = ["formtest%", "threefixes%", "reorder%"];
+const testUserPatterns = [
+  "formtest%",
+  "threefixes%",
+  "reorder%",
+  "awardprofiles%",
+];
 const testUserPredicate = testUserPatterns
   .map(() => "username LIKE ?")
   .join(" OR ");
