@@ -228,7 +228,12 @@ test("structured forms, entity ordering and discipline tree work responsively", 
     );
     await expect(page.getByLabel("年度")).toHaveValue("2025");
     await page.getByRole("button", { name: /主要完成人/ }).click();
-    await expect(page.getByLabel("合作方式")).toHaveValue("共同研发");
+    await expect(
+      page.getByText("完成人合作关系说明", { exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByText("完成人合作关系情况汇总表", { exact: true }),
+    ).toHaveCount(0);
     await page.getByRole("button", { name: /主要完成单位/ }).click();
     await expect(page.getByLabel("完成单位列表")).toContainText("甲完成单位");
     await page
@@ -258,6 +263,8 @@ test("structured forms, entity ordering and discipline tree work responsively", 
 
     await page.getByRole("button", { name: "预览当前申报书" }).click();
     await expect(page.getByText("申报书预览", { exact: true })).toBeVisible();
+    await expect(page.getByText(/完成人合作关系说明/)).toHaveCount(0);
+    await expect(page.getByText(/完成人合作关系情况汇总表/)).toHaveCount(0);
     const basicPreview = page.locator(".preview-basic-page");
     await expect(basicPreview.locator(".preview-date-range-value")).toHaveCount(
       2,
