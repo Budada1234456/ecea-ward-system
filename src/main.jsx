@@ -2668,19 +2668,6 @@ function buildPreviewSections(sourceData) {
       index,
     }),
   );
-  splitPreviewContent(data.peopleCooperation).forEach((body, index) =>
-    pages.push({
-      kind: "text",
-      title: `六、完成人合作关系说明${index ? "（续）" : ""}`,
-      body,
-    }),
-  );
-  addTablePages(
-    "六、完成人合作关系情况汇总表",
-    "cooperationRecords",
-    data.cooperationRecords,
-    10,
-  );
   data.units.forEach((unit, index) =>
     pages.push({
       kind: "unit",
@@ -4299,30 +4286,6 @@ function EditorApp({ application, onHome }) {
               </div>
             ) : null
           }
-          afterFields={() => (
-            <div className="form-grid entity-project-fields">
-              <Field label="完成人合作关系说明">
-                <RichTextEditor
-                  value={data.peopleCooperation || ""}
-                  onChange={(value) => setField("peopleCooperation", value)}
-                  applicationId={application.id}
-                  fieldKey="peopleCooperation"
-                  label="完成人合作关系说明"
-                />
-              </Field>
-              <Field label="完成人合作关系情况汇总表">
-                <StructuredTable
-                  group="cooperationRecords"
-                  title="完成人合作关系情况汇总表"
-                  value={data.cooperationRecords || []}
-                  onChange={(value) => setField("cooperationRecords", value)}
-                  addLabel="添加合作关系"
-                  emptyLabel="暂无合作关系记录"
-                  className="cooperation-record-collection"
-                />
-              </Field>
-            </div>
-          )}
         />
       );
     if (active === "units")
