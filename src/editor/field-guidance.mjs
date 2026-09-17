@@ -32,7 +32,6 @@ const GUIDANCE = Object.freeze({
   technicalEvaluation: {
     text: "2. 技术评价证明及行业审批文件目录",
   },
-  peopleCooperation: { text: "完成人合作关系说明" },
   personContribution: {
     text: "对本项目主要科学技术贡献：（简明阐述核心贡献，与创新点对应）",
   },
