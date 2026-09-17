@@ -1808,6 +1808,10 @@ select.control {
   height: auto;
   margin: 14px auto;
 }
+.preview-rich-text img {
+  max-height: 135mm;
+  object-fit: contain;
+}
 .rich-editor-content img.ProseMirror-selectednode {
   outline: 2px solid #2684e8;
 }
