@@ -70,6 +70,11 @@ import {
   getAwardProfile,
   getAwardSections,
 } from "./award-profiles.js";
+import {
+  LONG_TEXT_LIMITS,
+  validateApplication,
+  validateSection,
+} from "./forms/application-validation.js";
 import "./styles.css";
 
 const awardOptions = awardProfiles.map((profile) => ({
@@ -1080,6 +1085,7 @@ function RecordsSection({
             : "暂无记录，无相关内容时可保持为空")
         }
         className="records-collection"
+        confirmRemoval={group === "ipRecords"}
       />
       {supplement}
     </section>
@@ -3847,6 +3853,15 @@ function EditorApp({ application, onHome }) {
     return saveQueue.current;
   };
   const submitApplication = async () => {
+    const validationErrors = validateApplication({
+      data,
+      awardType: awardProfile.value,
+      files: applicationFiles,
+    });
+    if (validationErrors.length) {
+      showValidationErrors(validationErrors, "提交前请完善以下内容");
+      return;
+    }
     await saveToDatabase(data);
     const response = await apiFetch(
       `/api/applications/${application.id}/submit`,
@@ -3997,6 +4012,45 @@ function EditorApp({ application, onHome }) {
     ([key]) => sectionCompletion[key],
   ).length;
   const completion = Math.round((completeCount / sections.length) * 100);
+  const showValidationErrors = (errors, heading) => {
+    if (!errors.length) return false;
+    const firstSection = errors[0].sectionKey;
+    if (sections.some(([key]) => key === firstSection)) setActive(firstSection);
+    const visibleErrors = errors
+      .slice(0, 8)
+      .map(({ message }) => `- ${message}`);
+    if (errors.length > visibleErrors.length) {
+      visibleErrors.push(
+        `- 另有 ${errors.length - visibleErrors.length} 项待完善`,
+      );
+    }
+    window.alert(`${heading}：\n${visibleErrors.join("\n")}`);
+    return true;
+  };
+  const openPreview = () => {
+    const errors = validateApplication({
+      data,
+      awardType: awardProfile.value,
+      files: applicationFiles,
+    });
+    if (showValidationErrors(errors, "生成预览前请完善以下内容")) return;
+    setShowPreview(true);
+  };
+  const continueFromSection = () => {
+    const errors = validateSection({
+      data,
+      sectionKey: active,
+      awardType: awardProfile.value,
+      files: applicationFiles,
+    });
+    if (showValidationErrors(errors, "本页尚未完成")) return;
+    if (active === "attachments") {
+      submitApplication();
+      return;
+    }
+    const index = sections.findIndex(([key]) => key === active);
+    if (index < sections.length - 1) setActive(sections[index + 1][0]);
+  };
   const applyImport = (fields, result) => {
     setData((current) => normalizeApplicationData({ ...current, ...fields }));
     if (result?.sourceFile) {
@@ -4098,7 +4152,7 @@ function EditorApp({ application, onHome }) {
                 key: "transformation",
                 label: "科技成果转化及推广情况",
                 required: true,
-                max: 500,
+                max: LONG_TEXT_LIMITS.transformation,
               },
             ]}
             data={data}
@@ -4134,7 +4188,7 @@ function EditorApp({ application, onHome }) {
               key: "introduction",
               label: "项目简介",
               required: true,
-              max: 800,
+              max: LONG_TEXT_LIMITS.introduction,
             },
           ]}
           data={data}
@@ -4152,7 +4206,7 @@ function EditorApp({ application, onHome }) {
             key,
             label,
             required: true,
-            max: key === "innovations" ? 800 : undefined,
+            max: LONG_TEXT_LIMITS[key],
           }))}
           data={data}
           setField={setField}
@@ -4185,9 +4239,22 @@ function EditorApp({ application, onHome }) {
           number={5}
           title="应用及效益"
           fields={[
-            { key: "application", label: "应用情况", required: true, max: 800 },
-            { key: "economic", label: "各栏目的计算依据", max: 300 },
-            { key: "social", label: "社会效益", max: 300 },
+            {
+              key: "application",
+              label: "应用情况",
+              required: true,
+              max: LONG_TEXT_LIMITS.application,
+            },
+            {
+              key: "economic",
+              label: "各栏目的计算依据",
+              max: LONG_TEXT_LIMITS.economic,
+            },
+            {
+              key: "social",
+              label: "社会效益",
+              max: LONG_TEXT_LIMITS.social,
+            },
           ]}
           data={data}
           setField={setField}
@@ -4255,7 +4322,7 @@ function EditorApp({ application, onHome }) {
                   />
                   <CharacterCount
                     value={data.technicalEvaluation || ""}
-                    max={800}
+                    max={LONG_TEXT_LIMITS.technicalEvaluation}
                   />
                 </div>
               </Field>
@@ -4425,10 +4492,7 @@ function EditorApp({ application, onHome }) {
           >
             <Save size={18} />
           </button>
-          <button
-            className="primary-button"
-            onClick={() => setShowPreview(true)}
-          >
+          <button className="primary-button" onClick={openPreview}>
             <Eye size={17} />
             生成预览
           </button>
@@ -4530,25 +4594,11 @@ function EditorApp({ application, onHome }) {
           </div>
           {currentContent()}
           <div className="bottom-actions">
-            <button
-              className="secondary-button"
-              onClick={() => setShowPreview(true)}
-            >
+            <button className="secondary-button" onClick={openPreview}>
               <Eye size={17} />
               预览当前申报书
             </button>
-            <button
-              className="primary-button"
-              onClick={() => {
-                if (active === "attachments") {
-                  submitApplication();
-                  return;
-                }
-                const index = sections.findIndex(([key]) => key === active);
-                if (index < sections.length - 1)
-                  setActive(sections[index + 1][0]);
-              }}
-            >
+            <button className="primary-button" onClick={continueFromSection}>
               {active === "attachments" ? "提交形式审查" : "保存并进入下一项"}
               {active === "attachments" ? (
                 <ShieldCheck size={17} />

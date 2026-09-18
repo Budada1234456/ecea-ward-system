@@ -6,6 +6,7 @@ import {
 } from "../src/data/disciplines.js";
 import {
   getDisciplineOptions,
+  isDisciplineSelectable,
   SEARCH_RESULT_LIMIT,
 } from "../src/forms/discipline-options.js";
 
@@ -78,6 +79,10 @@ assert.ok(
 assert.ok(
   getDisciplineOptions(disciplines, "学").length <= SEARCH_RESULT_LIMIT,
 );
+
+assert.equal(isDisciplineSelectable(byCode.get("480")), true);
+assert.equal(isDisciplineSelectable(byCode.get("48060")), true);
+assert.equal(isDisciplineSelectable(byCode.get("4806010")), true);
 
 console.log(
   `Validated ${disciplines.length} GB/T 13745-2009 discipline records.`,

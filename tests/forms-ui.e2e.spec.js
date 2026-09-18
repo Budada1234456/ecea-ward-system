@@ -1,4 +1,10 @@
 import { expect, test } from "@playwright/test";
+import {
+  completePerson,
+  completeProjectData,
+  completeUnit,
+  tinyPng,
+} from "./application-fixtures.mjs";
 
 const baseUrl = process.env.TEST_BASE_URL || "http://127.0.0.1:4174";
 
@@ -52,8 +58,8 @@ test("structured forms, entity ordering and discipline tree work responsively", 
       `${baseUrl}/api/applications/${applicationId}`,
       {
         data: {
-          data: {
-            projectName: title,
+          data: completeProjectData(title, {
+            disciplines: [],
             awardRecords: [{ name: "节能技术成果奖", award: "示范奖" }],
             ipRecords: [
               { name: "旧数据专利", number: "CN-LEGACY-1" },
@@ -71,22 +77,43 @@ test("structured forms, entity ordering and discipline tree work responsively", 
             ],
             people: [
               {
+                ...completePerson("甲完成人"),
                 id: "person-a",
-                name: "甲完成人",
                 nativePlace: "北京市",
                 contribution: "贡献甲",
               },
-              { id: "person-b", name: "乙完成人", contribution: "贡献乙" },
+              {
+                ...completePerson("乙完成人"),
+                id: "person-b",
+                contribution: "贡献乙",
+              },
             ],
             units: [
-              { name: "甲完成单位", contribution: "贡献甲" },
-              { name: "乙完成单位", contribution: "贡献乙" },
+              { ...completeUnit("甲完成单位"), contribution: "贡献甲" },
+              { ...completeUnit("乙完成单位"), contribution: "贡献乙" },
             ],
-          },
+          }),
         },
       },
     );
     expect(seedResponse.ok(), await seedResponse.text()).toBe(true);
+
+    for (const category of ["recommendation_signed", "application"]) {
+      const upload = await page.request.post(
+        `${baseUrl}/api/applications/${applicationId}/files`,
+        {
+          multipart: {
+            category,
+            file: {
+              name: `${category}.png`,
+              mimeType: "image/png",
+              buffer: tinyPng,
+            },
+          },
+        },
+      );
+      expect(upload.ok(), await upload.text()).toBe(true);
+    }
 
     await page.goto(baseUrl);
     await expect(
@@ -100,6 +127,12 @@ test("structured forms, entity ordering and discipline tree work responsively", 
       name: /能源科学技术.*480/,
     });
     await expect(energyOption).toBeVisible();
+    await energyOption.click();
+    await expect(page.getByLabel("已选学科")).toContainText(
+      "能源科学技术（480）",
+    );
+
+    await disciplineInput.focus();
     await page
       .getByRole("button", { name: "展开能源科学技术的下级学科" })
       .click();
@@ -109,7 +142,13 @@ test("structured forms, entity ordering and discipline tree work responsively", 
     const levelTwoOption = page.getByRole("option", {
       name: /一次能源.*48060/,
     });
-    await expect(levelTwoOption).toBeDisabled();
+    await expect(levelTwoOption).toBeEnabled();
+    await levelTwoOption.click();
+    await expect(page.getByLabel("已选学科")).toContainText(
+      "能源科学技术（480） / 一次能源（48060）",
+    );
+
+    await disciplineInput.focus();
     await page.getByRole("button", { name: "展开一次能源的下级学科" }).click();
     await page.getByRole("option", { name: /煤炭能.*4806010/ }).click();
     await expect(page.getByLabel("已选学科")).toContainText(
@@ -126,6 +165,10 @@ test("structured forms, entity ordering and discipline tree work responsively", 
     await page
       .getByRole("region", { name: "结构化数据表" })
       .getByRole("button", { name: "删除第2条记录" })
+      .click();
+    await page
+      .getByRole("alertdialog", { name: "确认删除" })
+      .getByRole("button", { name: "确认删除" })
       .click();
     await expect(names).toHaveCount(2);
     await expect(page.getByText("请填写授权（申请）项目名称")).toBeVisible();
@@ -271,7 +314,7 @@ test("structured forms, entity ordering and discipline tree work responsively", 
     );
     await expect(
       basicPreview.locator(".preview-date-range-value").first(),
-    ).toContainText("起始：年　　月　　日");
+    ).toContainText("起始：2024 年 01 月 01 日");
     await expect(
       page.getByRole("table", { name: "经济效益数据" }),
     ).toContainText("2025");

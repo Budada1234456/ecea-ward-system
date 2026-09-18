@@ -1,5 +1,9 @@
 const SEARCH_RESULT_LIMIT = 50;
 
+export function isDisciplineSelectable(item) {
+  return Boolean(item?.code && item?.name && Number(item.level) >= 1);
+}
+
 function matchesDisciplineQuery(item, normalizedQuery) {
   return `${item.code || ""} ${item.name || ""}`
     .toLowerCase()

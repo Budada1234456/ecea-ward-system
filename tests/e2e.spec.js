@@ -125,7 +125,7 @@ test("project center, attachment workflow and PDF export", async ({
     await disciplineInput.focus();
     await expect(disciplineResults).toBeVisible();
     await expect(
-      page.getByText("请选择终端二级学科或三级学科", { exact: false }),
+      page.getByText("可选择一级、二级或三级学科", { exact: false }),
     ).toBeVisible();
     await expect(
       disciplineResults.getByRole("option", { name: /能源科学技术.*480/ }),
@@ -202,15 +202,16 @@ test("project center, attachment workflow and PDF export", async ({
     await page.getByRole("button", { name: "提交形式审查" }).click();
     await expect.poll(() => validationMessage).toContain("提交前请完善");
 
+    let previewValidationMessage = "";
+    page.once("dialog", async (browserDialog) => {
+      previewValidationMessage = browserDialog.message();
+      await browserDialog.accept();
+    });
     await page.getByRole("button", { name: "预览当前申报书" }).click();
-    await expect(
-      page.getByRole("button", { name: "导出系统生成 PDF" }),
-    ).toBeVisible();
-
-    const downloadPromise = page.waitForEvent("download");
-    await page.getByRole("button", { name: "导出系统生成 PDF" }).click();
-    const download = await downloadPromise;
-    expect(download.suggestedFilename()).toMatch(/\.pdf$/i);
+    await expect
+      .poll(() => previewValidationMessage)
+      .toContain("生成预览前请完善");
+    await expect(page.getByText("申报书预览", { exact: true })).toHaveCount(0);
   } finally {
     if (applicationId) {
       const filesResponse = await request.get(

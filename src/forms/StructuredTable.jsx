@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Plus, X } from "lucide-react";
 import { tableFields } from "../schema/table-fields.js";
+import { ConfirmDialog } from "./ConfirmDialog.jsx";
 import { createDefaultTableRecord } from "./data-contract.js";
 
 function valueFor(record, field) {
@@ -87,10 +88,12 @@ export function StructuredTable({
   emptyLabel = "暂无记录",
   className = "",
   showIndex = false,
+  confirmRemoval = false,
 }) {
   const fields = customFields || tableFields[group] || [];
   const records = Array.isArray(value) ? value : [];
   const [touched, setTouched] = useState(() => new Set());
+  const [pendingRemovalIndex, setPendingRemovalIndex] = useState(null);
   const controlRefs = useRef(new Map());
   const pendingFocus = useRef(null);
   const recordKey = (record, index) => record.id || `row-${index}`;
@@ -273,7 +276,11 @@ export function StructuredTable({
                     type="button"
                     aria-label={`删除第${rowIndex + 1}条记录`}
                     title="删除"
-                    onClick={() => removeRecord(rowIndex)}
+                    onClick={() =>
+                      confirmRemoval
+                        ? setPendingRemovalIndex(rowIndex)
+                        : removeRecord(rowIndex)
+                    }
                   >
                     <X size={15} />
                   </button>
@@ -283,6 +290,17 @@ export function StructuredTable({
           </div>
         </div>
       )}
+      <ConfirmDialog
+        open={pendingRemovalIndex != null}
+        message={`确定删除知识产权“${
+          records[pendingRemovalIndex]?.name || "未命名"
+        }”吗？删除后无法撤销。`}
+        onCancel={() => setPendingRemovalIndex(null)}
+        onConfirm={() => {
+          removeRecord(pendingRemovalIndex);
+          setPendingRemovalIndex(null);
+        }}
+      />
     </section>
   );
 }

@@ -19,6 +19,7 @@ import {
 import { extractProjectSourceFields } from "./lib/pdf-fields.mjs";
 import { createWordImportRouter } from "./routes/word-import.mjs";
 import { sanitizeApplicationRichTextData } from "./src/editor/rich-text-node.mjs";
+import { validateApplication } from "./src/forms/application-validation.js";
 import {
   AWARD_TYPES,
   awardProfiles,
@@ -673,15 +674,6 @@ function hasMinimumApplicationDuration(records, years, applicationYear) {
     minimumEnd.setUTCFullYear(minimumEnd.getUTCFullYear() + years);
     return end >= minimumEnd;
   });
-}
-
-function exceedsCharacterLimit(value, limit) {
-  let count = 0;
-  for (const _character of applicationPlainText(value)) {
-    count += 1;
-    if (count > limit) return true;
-  }
-  return false;
 }
 
 function writeAudit(applicationId, action, detail = "") {
@@ -1396,10 +1388,11 @@ app.post("/api/applications/:id/submit", (req, res) => {
       "SELECT DISTINCT file_type FROM application_files WHERE application_id = ?",
     )
     .all(id);
-  const fileTypes = new Set(files.map(({ file_type: fileType }) => fileType));
-  const missing = getSubmissionRequirements(profile.value)
-    .filter(({ key }) => !hasApplicationValue(data, key))
-    .map(({ label }) => label);
+  const missing = validateApplication({
+    data,
+    awardType: profile.value,
+    files,
+  }).map(({ message }) => message.replace(/^请(?:填写|上传)/, ""));
   if (profile.code === "achievement") {
     if (data.candidate?.birthDate) {
       const birthDate = parseApplicationDate(data.candidate.birthDate, "start");
@@ -1413,8 +1406,6 @@ app.post("/api/applications/:id/submit", (req, res) => {
       missing.push("代表性论文和专著不得超过 10 篇（册）");
     if ((data.ipRecords || []).length > 10)
       missing.push("代表性知识产权不得超过 10 项");
-    if (exceedsCharacterLimit(data.transformation, 500))
-      missing.push("科技成果转化及推广情况不得超过 500 字");
   }
   if (profile.mode === "project") {
     if ((data.people || []).length > profile.maxPeople)
@@ -1431,26 +1422,6 @@ app.post("/api/applications/:id/submit", (req, res) => {
       missing.push(
         `至少一家应用单位的实际应用时间须满 ${profile.minimumApplicationYears} 年`,
       );
-  }
-  const hasCompleteSourcePdf =
-    profile.mode === "project" &&
-    data.workflowMode === "document" &&
-    fileTypes.has("source_pdf");
-  if (!hasCompleteSourcePdf) {
-    for (const [category, label] of profile.recommendationMaterials) {
-      if (!fileTypes.has(category)) missing.push(label);
-    }
-    if (profile.requiredAttachmentGroups.length) {
-      for (const { categories, label } of profile.requiredAttachmentGroups) {
-        if (!categories.some((category) => fileTypes.has(category)))
-          missing.push(label);
-      }
-    } else {
-      const hasSupportingMaterial = profile.attachmentMaterials.some(
-        ([category]) => fileTypes.has(category),
-      );
-      if (!hasSupportingMaterial) missing.push("项目证明材料");
-    }
   }
   if (missing.length) {
     return res.status(422).json({

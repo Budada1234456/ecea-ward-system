@@ -16,6 +16,7 @@ import {
   getDisciplineChildren,
   getDisciplineOptions,
   getDisciplinePath,
+  isDisciplineSelectable,
 } from "./discipline-options.js";
 import { moveItem } from "../utils/reorder.js";
 import { ConfirmDialog } from "./ConfirmDialog.jsx";
@@ -101,7 +102,6 @@ export function DisciplineSelector({
   }, [selection]);
 
   const hasChildren = (item) => Boolean(childCounts.get(item.code));
-  const isSelectable = (item) => Number(item.level) >= 2 && !hasChildren(item);
   const pathLabel = (item) =>
     getDisciplinePath(disciplines, item.code, byCode)
       .map((node) => `${node.name}（${node.code}）`)
@@ -125,7 +125,7 @@ export function DisciplineSelector({
   };
   const selectDiscipline = (item) => {
     if (
-      !isSelectable(item) ||
+      !isDisciplineSelectable(item) ||
       selection.length >= maxSelections ||
       selectedCodes.has(item.code)
     ) {
@@ -242,7 +242,7 @@ export function DisciplineSelector({
         >
           {!isSearching && (
             <div className="discipline-selector__browse">
-              <p>请选择终端二级学科或三级学科，每个已选项保存一条完整路径。</p>
+              <p>可选择一级、二级或三级学科，每个已选项保存一条完整路径。</p>
               <nav aria-label="学科层级路径">
                 <button type="button" onClick={() => browseTo(null)}>
                   全部一级学科
@@ -268,7 +268,7 @@ export function DisciplineSelector({
             {results.length ? (
               results.map((item) => {
                 const expandable = hasChildren(item);
-                const selectable = isSelectable(item);
+                const selectable = isDisciplineSelectable(item);
                 return (
                   <div className="discipline-selector__option" key={item.code}>
                     <button
@@ -281,7 +281,9 @@ export function DisciplineSelector({
                         selection.length >= maxSelections
                       }
                       title={
-                        expandable ? "请展开并选择下级学科" : "选择此学科路径"
+                        expandable
+                          ? "选择此学科；也可展开下级学科"
+                          : "选择此学科路径"
                       }
                       onClick={() => selectDiscipline(item)}
                     >

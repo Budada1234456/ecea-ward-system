@@ -1,5 +1,10 @@
 import { expect, test } from "@playwright/test";
 import { jsPDF } from "jspdf";
+import {
+  completePerson,
+  completeProjectData,
+  completeUnit,
+} from "./application-fixtures.mjs";
 
 const baseUrl = process.env.TEST_BASE_URL || "http://127.0.0.1:4174";
 const tinyPng = Buffer.from(
@@ -249,17 +254,7 @@ test("each award loads its own form, validation and preview profile", async ({
         `${baseUrl}/api/applications/${application.id}`,
         {
           data: {
-            data: {
-              projectName: application.title,
-              applicantUnit: "中国节能测试单位",
-              introduction: "<p>项目简介</p>",
-              background: "<p>项目背景</p>",
-              technicalContent: "<p>技术方案</p>",
-              innovations: "<p>创新内容</p>",
-              comparison: "<p>技术比较</p>",
-              application: "<p>应用情况</p>",
-              people: [{ name: "完成人", contribution: "主要贡献" }],
-              units: [{ name: "完成单位", contribution: "主要贡献" }],
+            data: completeProjectData(application.title, {
               applicationUnits: [
                 {
                   unitName: "示范应用单位",
@@ -267,7 +262,7 @@ test("each award loads its own form, validation and preview profile", async ({
                   endDate,
                 },
               ],
-            },
+            }),
           },
         },
       );
@@ -337,8 +332,8 @@ test("each award loads its own form, validation and preview profile", async ({
       {
         data: {
           data: {
-            people: [{ name: "完成人", contribution: "主要贡献" }],
-            units: [{ name: "完成单位", contribution: "主要贡献" }],
+            people: [completePerson()],
+            units: [completeUnit()],
             applicationUnits: [
               {
                 unitName: "示范应用单位",
