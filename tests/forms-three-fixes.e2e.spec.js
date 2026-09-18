@@ -109,9 +109,7 @@ test("field guidance and pinned table columns work at desktop and narrow widths"
       endVisible: true,
     });
 
-    await page
-      .getByRole("button", { name: /总体思路、技术方案与实施效果/ })
-      .click();
+    await page.getByRole("button", { name: /项目详细内容/ }).click();
     const richEditor = page.locator(".rich-editor").first();
     const zoomControls = richEditor.getByLabel("编辑器视图缩放");
     await expect(zoomControls).toContainText("100%");

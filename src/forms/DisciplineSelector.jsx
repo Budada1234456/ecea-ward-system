@@ -34,6 +34,7 @@ export function DisciplineSelector({
   disciplines = [],
   maxSelections = MAX_SELECTIONS,
   label = "学科分类名称",
+  hierarchical = true,
 }) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
@@ -103,10 +104,13 @@ export function DisciplineSelector({
 
   const hasChildren = (item) => Boolean(childCounts.get(item.code));
   const pathLabel = (item) =>
-    getDisciplinePath(disciplines, item.code, byCode)
-      .map((node) => `${node.name}（${node.code}）`)
-      .join(" / ");
+    hierarchical
+      ? getDisciplinePath(disciplines, item.code, byCode)
+          .map((node) => `${node.name}（${node.code}）`)
+          .join(" / ")
+      : item.name;
   const selectedPathLabel = (item) => {
+    if (!hierarchical) return item.name;
     const nodes = (item.path || [])
       .map((code) => byCode.get(code))
       .filter(Boolean);
@@ -226,7 +230,7 @@ export function DisciplineSelector({
           aria-controls={resultsId}
           aria-expanded={open}
           value={query}
-          placeholder="输入学科名称或代码"
+          placeholder={hierarchical ? "输入学科名称或代码" : "输入学科分类名称"}
           onFocus={() => setOpen(true)}
           onChange={(event) => {
             setQuery(event.target.value);
@@ -242,32 +246,38 @@ export function DisciplineSelector({
         >
           {!isSearching && (
             <div className="discipline-selector__browse">
-              <p>可选择一级、二级或三级学科，每个已选项保存一条完整路径。</p>
-              <nav aria-label="学科层级路径">
-                <button type="button" onClick={() => browseTo(null)}>
-                  全部一级学科
-                </button>
-                {browsePath.map((item, index) => (
-                  <React.Fragment key={item.code}>
-                    <ChevronRight size={13} aria-hidden="true" />
-                    <button
-                      type="button"
-                      aria-current={
-                        index === browsePath.length - 1 ? "page" : undefined
-                      }
-                      onClick={() => browseTo(item.code)}
-                    >
-                      {item.name}
-                    </button>
-                  </React.Fragment>
-                ))}
-              </nav>
+              <p>
+                {hierarchical
+                  ? "可选择一级、二级或三级学科，每个已选项保存一条完整路径。"
+                  : "请从以下学科分类中选择，最多选择3项。"}
+              </p>
+              {hierarchical && (
+                <nav aria-label="学科层级路径">
+                  <button type="button" onClick={() => browseTo(null)}>
+                    全部一级学科
+                  </button>
+                  {browsePath.map((item, index) => (
+                    <React.Fragment key={item.code}>
+                      <ChevronRight size={13} aria-hidden="true" />
+                      <button
+                        type="button"
+                        aria-current={
+                          index === browsePath.length - 1 ? "page" : undefined
+                        }
+                        onClick={() => browseTo(item.code)}
+                      >
+                        {item.name}
+                      </button>
+                    </React.Fragment>
+                  ))}
+                </nav>
+              )}
             </div>
           )}
           <div className="discipline-selector__options">
             {results.length ? (
               results.map((item) => {
-                const expandable = hasChildren(item);
+                const expandable = hierarchical && hasChildren(item);
                 const selectable = isDisciplineSelectable(item);
                 return (
                   <div className="discipline-selector__option" key={item.code}>
@@ -288,10 +298,12 @@ export function DisciplineSelector({
                       onClick={() => selectDiscipline(item)}
                     >
                       <span>{item.name}</span>
-                      <small>
-                        {disciplineMeta(item)}
-                        {isSearching && <em>{pathLabel(item)}</em>}
-                      </small>
+                      {hierarchical && (
+                        <small>
+                          {disciplineMeta(item)}
+                          {isSearching && <em>{pathLabel(item)}</em>}
+                        </small>
+                      )}
                     </button>
                     {expandable && (
                       <button

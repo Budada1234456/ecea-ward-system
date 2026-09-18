@@ -13,8 +13,7 @@ test("achievement applications use a candidate-specific material structure", () 
   assert.equal(profile.mode, "individual");
   assert.equal(profile.subjectLabel, "候选人姓名");
   assert.equal(profile.fileLimits.achievement_other, 20);
-  assert.equal(profile.fileLimits.achievement_papers, 5);
-  assert.equal(profile.fileLimits.achievement_books, 8);
+  assert.equal(profile.fileLimits.achievement_publications, 5);
   assert.equal(profile.requiredAttachmentGroups.length, 5);
   assert.deepEqual(
     getAwardSections(profile.value).map(({ key }) => key),
@@ -26,8 +25,9 @@ test("achievement applications use a candidate-specific material structure", () 
       "research",
       "engineering",
       "transformation",
-      "recommendation",
       "attachments",
+      "authenticity",
+      "integrity",
     ],
   );
   assert.equal(
@@ -41,6 +41,7 @@ test("achievement applications use a candidate-specific material structure", () 
       "applicantUnit",
       "candidate.workUnit",
       "candidate.birthDate",
+      "workSummary",
       "transformation",
     ],
   );
@@ -68,6 +69,11 @@ test("project awards share a skeleton but keep distinct guidance and limits", ()
   assert.equal(invention.minimumApplicationYears, 2);
   assert.equal(progress.maxPeople, 15);
   assert.equal(invention.maxPeople, 10);
+  assert.equal(getAwardSections(progress.value).length, 13);
+  assert.equal(
+    getAwardSections(invention.value)[12].templateFile,
+    "十三、诚信承诺书.doc",
+  );
 });
 
 test("unknown award values fall back to the progress profile", () => {

@@ -11,6 +11,15 @@ const tinyPng = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2ZQAAAABJRU5ErkJggg==",
   "base64",
 );
+const requiredProjectMaterials = [
+  "technical_proof",
+  "application_proof",
+  "evaluation_report",
+  "novelty_report",
+  "patent_proof",
+  "inventor_id",
+  "unit_license",
+];
 
 function createPdf(pageCount) {
   const document = new jsPDF();
@@ -125,8 +134,7 @@ test("each award loads its own form, validation and preview profile", async ({
     const incomplete = await incompleteSubmit.json();
     expect(incomplete.missing).toContain("候选人工作单位");
     expect(incomplete.missing).toContain("科技成果转化及推广");
-    expect(incomplete.missing).toContain("候选人承诺函");
-    expect(incomplete.missing).toContain("推荐函");
+    expect(incomplete.missing).toContain("节能减排相关工作总结");
     expect(incomplete.missing).toContain("科技奖励和荣誉证明");
     expect(incomplete.missing).toContain("代表性论文或专著");
     expect(incomplete.missing).toContain("知识产权证明");
@@ -149,6 +157,7 @@ test("each award loads its own form, validation and preview profile", async ({
             },
             transformation:
               '<img src="/api/content-image.png" alt="成果转化说明">',
+            workSummary: "候选人长期从事节能减排科技工作。",
             awardRecords: Array.from({ length: 11 }, (_, index) => ({
               name: `代表性奖励 ${index + 1}`,
               award: "节能科技奖励",
@@ -191,10 +200,6 @@ test("each award loads its own form, validation and preview profile", async ({
       "科技奖励和荣誉证明",
     );
 
-    for (const category of ["commitment_letter", "recommendation_letter"]) {
-      const upload = await uploadMaterial(achievement.id, category);
-      expect(upload.ok(), await upload.text()).toBe(true);
-    }
     for (const category of [
       "achievement_honors",
       "achievement_ip",
@@ -204,12 +209,15 @@ test("each award loads its own form, validation and preview profile", async ({
       expect(upload.ok(), await upload.text()).toBe(true);
     }
     for (let index = 0; index < 5; index += 1) {
-      const upload = await uploadMaterial(achievement.id, "achievement_papers");
+      const upload = await uploadMaterial(
+        achievement.id,
+        "achievement_publications",
+      );
       expect(upload.ok(), await upload.text()).toBe(true);
     }
     const extraPaper = await uploadMaterial(
       achievement.id,
-      "achievement_papers",
+      "achievement_publications",
     );
     expect(extraPaper.status()).toBe(422);
     expect((await extraPaper.json()).message).toContain("不得超过 5 个文件");
@@ -268,7 +276,7 @@ test("each award loads its own form, validation and preview profile", async ({
       );
       expect(response.ok(), await response.text()).toBe(true);
       if (uploadSeparateMaterials) {
-        for (const category of ["recommendation_signed", "application"]) {
+        for (const category of requiredProjectMaterials) {
           const upload = await uploadMaterial(application.id, category);
           expect(upload.ok(), await upload.text()).toBe(true);
         }
@@ -350,24 +358,21 @@ test("each award loads its own form, validation and preview profile", async ({
       `${baseUrl}/api/applications/${progress.id}/submit`,
     );
     const missingProjectFileErrors = (await missingProjectFiles.json()).missing;
-    expect(missingProjectFileErrors).toContain("签章意见附件");
-    expect(missingProjectFileErrors).toContain("项目证明材料");
-    const recommendationUpload = await uploadMaterial(
-      progress.id,
-      "recommendation_signed",
+    expect(missingProjectFileErrors).toEqual(
+      expect.arrayContaining([
+        "1. 技术证明材料",
+        "2. 应用证明",
+        "3. 科技成果评价报告",
+        "4. 科技查新报告",
+        "5. 国家发明专利证明",
+        "6. 主要完成人身份证",
+        "7. 主要完成单位营业执照",
+      ]),
     );
-    expect(recommendationUpload.ok(), await recommendationUpload.text()).toBe(
-      true,
-    );
-    const missingProjectProof = await page.request.post(
-      `${baseUrl}/api/applications/${progress.id}/submit`,
-    );
-    const missingProjectProofErrors = (await missingProjectProof.json())
-      .missing;
-    expect(missingProjectProofErrors).not.toContain("签章意见附件");
-    expect(missingProjectProofErrors).toContain("项目证明材料");
-    const proofUpload = await uploadMaterial(progress.id, "application");
-    expect(proofUpload.ok(), await proofUpload.text()).toBe(true);
+    for (const category of requiredProjectMaterials) {
+      const upload = await uploadMaterial(progress.id, category);
+      expect(upload.ok(), await upload.text()).toBe(true);
+    }
     const progressSubmit = await page.request.post(
       `${baseUrl}/api/applications/${progress.id}/submit`,
     );
@@ -421,12 +426,10 @@ test("each award loads its own form, validation and preview profile", async ({
     await page
       .getByRole("button", { name: achievementTitle, exact: true })
       .click();
-    await expect(
-      page.getByRole("heading", { name: "候选人基本情况" }),
-    ).toBeVisible();
+    await expect(page.getByRole("heading", { name: "基本情况" })).toBeVisible();
     await expect(page.getByText("奖项在创建后锁定")).toBeVisible();
     await expect(
-      page.getByRole("button", { name: /科技奖励与荣誉称号/ }),
+      page.getByRole("button", { name: /所获科技奖励和荣誉称号情况/ }),
     ).toBeVisible();
     await expect(
       page.getByRole("button", { name: /承担科研项目/ }),
@@ -463,7 +466,9 @@ test("each award loads its own form, validation and preview profile", async ({
       page.getByRole("heading", { name: "七、科技成果转化及推广情况" }),
     ).toBeVisible();
     await expect(page.getByRole("heading", { name: "八、附件" })).toBeVisible();
-    await expect(page.getByText("九、", { exact: false })).toHaveCount(0);
+    await expect(
+      page.getByRole("heading", { name: "九、真实性承诺书" }),
+    ).toBeVisible();
     const downloadPromise = page.waitForEvent("download");
     await page.getByRole("button", { name: "导出系统生成 PDF" }).click();
     const download = await downloadPromise;
@@ -482,24 +487,34 @@ test("each award loads its own form, validation and preview profile", async ({
     await page
       .getByRole("button", { name: progressTitle, exact: true })
       .click();
-    await page
-      .getByRole("button", { name: /总体思路、技术方案与实施效果/ })
-      .click();
-    await expect(page.getByText("2. 总体思路与技术方案")).toBeVisible();
-    await expect(page.getByText("3. 实施效果与技术创新点")).toBeVisible();
+    await page.getByRole("button", { name: /项目详细内容/ }).click();
+    await expect(
+      page.locator(".field-label", {
+        hasText: "2．详细技术内容或科学研究内容",
+      }),
+    ).toBeVisible();
+    await expect(
+      page.locator(".field-label", {
+        hasText: "3．主要发现点或技术发明点或技术创新点",
+      }),
+    ).toBeVisible();
     await page.getByRole("button", { name: "项目中心" }).click();
 
     await page
       .getByRole("button", { name: inventionTitle, exact: true })
       .click();
-    await page
-      .getByRole("button", { name: /技术原理、技术方法与核心措施/ })
-      .click();
-    await expect(page.getByText("2. 产品、工艺或材料发明内容")).toBeVisible();
-    await expect(page.getByText("3. 核心技术措施与技术发明点")).toBeVisible();
+    await page.getByRole("button", { name: /项目详细内容/ }).click();
     await expect(
-      page.getByText(/首创性、技术发明点与知识产权权利要求/),
+      page.locator(".field-label", {
+        hasText: "2．详细技术内容或科学研究内容",
+      }),
     ).toBeVisible();
+    await expect(
+      page.locator(".field-label", {
+        hasText: "3．主要发现点或技术发明点或技术创新点",
+      }),
+    ).toBeVisible();
+    await expect(page.getByText(/国内外同类技术比较不超过两页/)).toBeVisible();
   } finally {
     for (const applicationId of applications) {
       await page.request.delete(`${baseUrl}/api/applications/${applicationId}`);

@@ -156,8 +156,13 @@ const materialUpload = multer({
   limits: { fileSize: 100 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     const extension = path.extname(file.originalname).toLowerCase();
-    const allowed = [".pdf", ".jpg", ".jpeg", ".png"].includes(extension);
-    cb(allowed ? null : new Error("附件仅支持 PDF、JPG、PNG"), allowed);
+    const allowed = [".pdf", ".jpg", ".jpeg", ".png", ".doc", ".docx"].includes(
+      extension,
+    );
+    cb(
+      allowed ? null : new Error("附件仅支持 PDF、JPG、PNG、DOC、DOCX"),
+      allowed,
+    );
   },
 });
 
@@ -1478,11 +1483,19 @@ app.post(
     const category = String(req.body.category || "other");
     const profile = getAwardProfile(exists.award_type);
     const isContentImage = category.startsWith("content_image:");
+    const isSectionWord = category.startsWith("section_word:");
+    const validSectionWord = new RegExp(
+      `^section_word:${profile.code}:[a-zA-Z]+$`,
+    ).test(category);
     const allowedCategories = new Set([
       ...profile.recommendationMaterials.map(([value]) => value),
       ...profile.attachmentMaterials.map(([value]) => value),
     ]);
-    if (!isContentImage && !allowedCategories.has(category)) {
+    if (
+      !isContentImage &&
+      !allowedCategories.has(category) &&
+      !validSectionWord
+    ) {
       await fsPromises.unlink(req.file.path).catch(() => {});
       return res.status(422).json({ ok: false, message: "附件类别无效" });
     }
@@ -1494,6 +1507,25 @@ app.post(
       return res
         .status(422)
         .json({ ok: false, message: "正文中只能插入 JPG 或 PNG 图片" });
+    }
+    const extension = path.extname(fileName).toLowerCase();
+    if (isSectionWord && ![".doc", ".docx"].includes(extension)) {
+      await fsPromises.unlink(req.file.path).catch(() => {});
+      return res.status(422).json({
+        ok: false,
+        message: "章节文件仅支持 .doc 或 .docx Word 文档",
+      });
+    }
+    if (
+      !isSectionWord &&
+      !isContentImage &&
+      ![".pdf", ".jpg", ".jpeg", ".png"].includes(extension)
+    ) {
+      await fsPromises.unlink(req.file.path).catch(() => {});
+      return res.status(422).json({
+        ok: false,
+        message: "证明附件仅支持 PDF、JPG、PNG",
+      });
     }
     const categoryLimit = profile.fileLimits[category];
     if (categoryLimit) {
@@ -1520,11 +1552,11 @@ app.post(
       `${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safeName}`,
     );
     await persistUploadedFile(req.file.path, storedPath);
-    const extension = path.extname(fileName).toLowerCase();
     const pageCount = extension === ".pdf" ? await pdfPageCount(storedPath) : 1;
     const shouldLimitPages =
       profile.mode === "project" &&
       !isContentImage &&
+      !isSectionWord &&
       category !== "source_pdf";
     if (shouldLimitPages) {
       const currentPages = Number(

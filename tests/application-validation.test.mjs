@@ -8,14 +8,15 @@ import {
   validateSection,
 } from "../src/forms/application-validation.js";
 
-test("long-text limits add 200 characters to the published limits", () => {
-  assert.equal(LONG_TEXT_LIMITS.introduction, 1000);
-  assert.equal(LONG_TEXT_LIMITS.innovations, 1000);
-  assert.equal(LONG_TEXT_LIMITS.application, 1000);
-  assert.equal(LONG_TEXT_LIMITS.economic, 500);
-  assert.equal(LONG_TEXT_LIMITS.social, 500);
-  assert.equal(LONG_TEXT_LIMITS.transformation, 700);
-  assert.equal(LONG_TEXT_LIMITS.unitContribution, 700);
+test("long-text limits match the split Word templates", () => {
+  assert.equal(LONG_TEXT_LIMITS.introduction, 800);
+  assert.equal(LONG_TEXT_LIMITS.innovations, 800);
+  assert.equal(LONG_TEXT_LIMITS.application, 800);
+  assert.equal(LONG_TEXT_LIMITS.economic, 300);
+  assert.equal(LONG_TEXT_LIMITS.social, 300);
+  assert.equal(LONG_TEXT_LIMITS.transformation, 800);
+  assert.equal(LONG_TEXT_LIMITS.workSummary, 1000);
+  assert.equal(LONG_TEXT_LIMITS.unitContribution, 500);
 });
 
 test("a section rejects missing required fields and text over its limit", () => {
@@ -36,7 +37,7 @@ test("a section rejects missing required fields and text over its limit", () => 
   });
   assert.deepEqual(
     overLimit.map(({ message }) => message),
-    ["项目简介不得超过 1000 字（当前 1001 字）"],
+    ["项目简介不得超过 800 字（当前 1001 字）"],
   );
 });
 

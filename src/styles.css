@@ -1550,6 +1550,108 @@ button {
   font-size: 11px;
   color: #8c97a6;
 }
+.section-template-bar {
+  min-height: 76px;
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) minmax(150px, auto) auto;
+  align-items: center;
+  gap: 14px;
+  margin-top: 18px;
+  padding: 13px 15px;
+  border: 1px solid #d9e2ec;
+  border-left: 4px solid #1769d2;
+  border-radius: 6px;
+  background: #f8fbff;
+}
+.section-template-copy {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.section-template-copy > span:last-child {
+  min-width: 0;
+}
+.section-template-icon {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  color: #1769d2;
+  border: 1px solid #c7daf1;
+  border-radius: 5px;
+  background: #fff;
+}
+.section-template-copy b,
+.section-template-copy small {
+  display: block;
+}
+.section-template-copy b {
+  color: #26364a;
+  font-size: 13px;
+}
+.section-template-copy small {
+  max-width: 760px;
+  margin-top: 4px;
+  color: #657388;
+  font-size: 11px;
+  line-height: 1.55;
+}
+.section-template-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.section-word-status {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #237251;
+  font-size: 11px;
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.section-word-status:hover {
+  color: #15593d;
+  text-decoration: underline;
+}
+.template-requirements {
+  max-width: 920px;
+  padding: 18px 20px;
+  border: 1px solid #e0e5eb;
+  border-radius: 6px;
+  background: #fff;
+}
+.template-requirements h3 {
+  margin: 0 0 12px;
+  color: #26364a;
+  font-size: 15px;
+}
+.template-requirements ol {
+  margin: 0;
+  padding-left: 22px;
+  color: #46566b;
+  font-size: 13px;
+  line-height: 1.75;
+}
+.template-requirements li + li {
+  margin-top: 5px;
+}
+.template-requirements p {
+  margin: 14px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid #e7ebf0;
+  color: #69778a;
+  font-size: 12px;
+}
+.chapter-file-only span {
+  display: grid;
+  gap: 3px;
+}
 .form-section {
   padding: 25px 0 12px;
 }
@@ -3632,6 +3734,25 @@ select.control {
   font-size: 11px;
 }
 
+.attachment-guidance {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0 0 16px;
+  padding: 10px 12px;
+  border: 1px solid var(--line, #d8dee8);
+  border-radius: 6px;
+  color: var(--muted, #5d6878);
+  background: var(--surface-subtle, #f7f9fb);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.attachment-guidance svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+
 .preview-shell {
   min-height: 100vh;
   background: #dde2e8;
@@ -4867,6 +4988,27 @@ select.control {
   .content {
     padding: 0 12px 24px;
   }
+  .section-template-bar {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+    gap: 10px;
+    padding: 12px;
+  }
+  .section-word-status {
+    width: 100%;
+  }
+  .section-template-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+  .section-template-actions .primary-button,
+  .section-template-actions .secondary-button {
+    width: 100%;
+    min-width: 0;
+    padding: 0 8px;
+    white-space: normal;
+    text-align: center;
+  }
   .field-row {
     grid-template-columns: 1fr;
   }
@@ -4920,6 +5062,100 @@ select.control {
     transform-origin: top left;
     width: 210mm;
   }
+}
+
+/* Independent stamp-ready exports and larger working typography. */
+.seal-export-menu {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-left: 4px;
+  padding-left: 10px;
+  border-left: 1px solid #d9e1ea;
+}
+.seal-export-menu > span {
+  width: 100%;
+  color: #66758a;
+  font-size: 12px;
+  font-weight: 600;
+}
+.seal-export-menu .secondary-button {
+  min-height: 32px;
+  padding: 0 9px;
+  font-size: 12px;
+}
+.preview-recommendation-block {
+  min-height: 96mm;
+  margin: 10mm 0 0;
+  padding: 7mm;
+  border: 1px solid #3e4a59;
+}
+.preview-recommendation-block h4 {
+  margin: 0 0 6mm;
+  font-size: 14pt;
+}
+.preview-recommendation-block .preview-cell-rich {
+  min-height: 30mm;
+  font-size: 12pt;
+  line-height: 1.8;
+}
+.preview-signature-area {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 12mm;
+  font-size: 12pt;
+}
+.preview-blank-lines {
+  min-height: 45mm;
+  font-size: 12pt;
+  line-height: 1.8;
+}
+.preview-blank-lines p {
+  margin: 0 0 5mm;
+}
+.preview-blank-lines i {
+  display: block;
+  height: 9mm;
+  border-bottom: 1px solid #9aa5b2;
+}
+
+.body-shell .field-label,
+.body-shell .control,
+.body-shell .rich-editor,
+.body-shell .structured-table__cell,
+.body-shell .entity-editor__fields,
+.body-shell .records-row,
+.body-shell .section-note,
+.body-shell .field-hint {
+  font-size: 15px;
+}
+.body-shell .field-label {
+  font-size: 14px;
+}
+.body-shell .control {
+  min-height: 42px;
+  padding: 9px 11px;
+}
+.body-shell textarea.control {
+  font-size: 15px;
+}
+.body-shell .section-heading h2 {
+  font-size: 22px;
+}
+.body-shell .section-template-copy b {
+  font-size: 15px;
+}
+.body-shell .section-template-copy small,
+.body-shell .section-template-bar,
+.body-shell .section-status {
+  font-size: 14px;
+}
+.body-shell .field-hint {
+  font-size: 13px;
+}
+.body-shell .sidebar nav button {
+  font-size: 15px;
 }
 
 @media print {

@@ -2,15 +2,16 @@ import { getAwardProfile, getAwardSections } from "../award-profiles.js";
 import { tableFields } from "../schema/table-fields.js";
 
 export const LONG_TEXT_LIMITS = Object.freeze({
-  introduction: 1000,
-  background: 1000,
-  innovations: 1000,
-  application: 1000,
-  economic: 500,
-  social: 500,
-  transformation: 700,
+  introduction: 800,
+  background: 800,
+  innovations: 800,
+  application: 800,
+  economic: 300,
+  social: 300,
+  transformation: 800,
+  workSummary: 1000,
   technicalEvaluation: 1000,
-  unitContribution: 700,
+  unitContribution: 500,
 });
 
 const PROJECT_BASIC_FIELDS = [
@@ -37,6 +38,7 @@ const ACHIEVEMENT_BASIC_FIELDS = [
   ["candidate.workUnit", "候选人工作单位"],
   ["applicantUnit", "推荐单位"],
   ["applicationChannel", "申报渠道"],
+  ["workSummary", "节能减排相关工作总结"],
 ];
 
 const PROJECT_BASIC_LIMITS = [
@@ -198,8 +200,17 @@ function attachmentErrors({ data, files, profile, sectionKey }) {
 }
 
 function sectionTextFields(profile, sectionKey) {
+  if (sectionKey === "basic" && profile.code === "achievement")
+    return [["workSummary", "节能减排相关工作总结"]];
   if (sectionKey === "introduction") return [["introduction", "项目简介"]];
-  if (sectionKey === "details") return profile.detailFields || [];
+  if (sectionKey === "details")
+    return [
+      ...(profile.detailFields || []),
+      ["comparison", "与当前国内外同类技术的比较"],
+      ["application", "应用情况"],
+      ["economic", "各栏目的计算依据"],
+      ["social", "社会效益"],
+    ];
   if (sectionKey === "comparison")
     return [["comparison", profile.comparisonLabel || "同类技术比较"]];
   if (sectionKey === "application")
@@ -217,7 +228,12 @@ function sectionTextFields(profile, sectionKey) {
 
 function requiredTextFields(profile, sectionKey) {
   if (sectionKey === "introduction") return [["introduction", "项目简介"]];
-  if (sectionKey === "details") return profile.detailFields || [];
+  if (sectionKey === "details")
+    return [
+      ...(profile.detailFields || []),
+      ["comparison", "与当前国内外同类技术的比较"],
+      ["application", "应用情况"],
+    ];
   if (sectionKey === "comparison")
     return [["comparison", profile.comparisonLabel || "同类技术比较"]];
   if (sectionKey === "application") return [["application", "应用情况"]];

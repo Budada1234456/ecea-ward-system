@@ -125,26 +125,17 @@ test("project center, attachment workflow and PDF export", async ({
     await disciplineInput.focus();
     await expect(disciplineResults).toBeVisible();
     await expect(
-      page.getByText("可选择一级、二级或三级学科", { exact: false }),
+      page.getByText("请从以下学科分类中选择", { exact: false }),
     ).toBeVisible();
-    await expect(
-      disciplineResults.getByRole("option", { name: /能源科学技术.*480/ }),
-    ).toBeVisible();
-    await page
-      .getByRole("button", { name: "展开能源科学技术的下级学科" })
-      .click();
-    await expect(
-      page.getByRole("navigation", { name: "学科层级路径" }),
-    ).toContainText("能源科学技术");
-    await page.getByRole("button", { name: "展开一次能源的下级学科" }).click();
+    await expect(disciplineResults.getByRole("option")).toHaveCount(7);
     const terminalDiscipline = disciplineResults.getByRole("option", {
-      name: /煤炭能.*4806010/,
+      name: "环境科学技术(废物处理与综合利用)",
     });
     await expect(terminalDiscipline).toBeVisible();
     await terminalDiscipline.click();
     await expect(disciplineResults).toBeHidden();
     await expect(page.getByRole("list", { name: "已选学科" })).toContainText(
-      "能源科学技术（480） / 一次能源（48060） / 煤炭能（4806010）",
+      "环境科学技术(废物处理与综合利用)",
     );
 
     await disciplineInput.focus();

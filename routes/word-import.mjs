@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
 import {
+  extractLegacyWordFields,
   extractWordFields,
   WORD_IMPORT_LIMITS,
   WordImportError,
@@ -24,21 +25,27 @@ export function createWordImportRouter({
   ownsApplication,
   temporaryRoot = path.join(os.tmpdir(), "ceca-award-word-imports"),
   extractFields = extractWordFields,
+  extractLegacyFields = extractLegacyWordFields,
 }) {
   const router = express.Router();
   const upload = multer({
     storage: multer.diskStorage({
       destination: (request, _file, callback) =>
         callback(null, request.wordImportTempDir),
-      filename: (_request, _file, callback) =>
-        callback(null, `${crypto.randomUUID()}.docx`),
+      filename: (_request, file, callback) =>
+        callback(
+          null,
+          `${crypto.randomUUID()}${path.extname(normalizeUploadedName(file.originalname)).toLowerCase()}`,
+        ),
     }),
     limits: { fileSize: WORD_IMPORT_LIMITS.maxFileBytes, files: 1 },
     fileFilter: (_request, file, callback) => {
       const name = normalizeUploadedName(file.originalname).toLowerCase();
-      const allowed = name.endsWith(".docx") && !name.endsWith(".docm");
+      const allowed =
+        (name.endsWith(".doc") || name.endsWith(".docx")) &&
+        !name.endsWith(".docm");
       callback(
-        allowed ? null : new Error("仅支持不含宏的 .docx 文件"),
+        allowed ? null : new Error("仅支持 .doc 或不含宏的 .docx 文件"),
         allowed,
       );
     },
@@ -86,7 +93,7 @@ export function createWordImportRouter({
         if (!request.file)
           return response
             .status(400)
-            .json({ ok: false, message: "请选择 .docx 文件" });
+            .json({ ok: false, message: "请选择 .doc 或 .docx 文件" });
         const applicationId = Number(request.body.applicationId || 0);
         if (!Number.isInteger(applicationId) || applicationId <= 0)
           return response
@@ -98,10 +105,10 @@ export function createWordImportRouter({
             .json({ ok: false, message: "申报项目不存在" });
 
         const buffer = await fsPromises.readFile(temporaryPath);
-        const result = await extractFields(
-          buffer,
-          normalizeUploadedName(request.file.originalname),
-        );
+        const originalName = normalizeUploadedName(request.file.originalname);
+        const result = originalName.toLowerCase().endsWith(".docx")
+          ? await extractFields(buffer, originalName)
+          : await extractLegacyFields(buffer, originalName);
         return response.json({ ok: true, ...result });
       } catch (error) {
         const status = error instanceof WordImportError ? 422 : 500;
@@ -124,7 +131,7 @@ export function createWordImportRouter({
     if (response.headersSent || response.destroyed) return;
     const isLimit = error?.code === "LIMIT_FILE_SIZE";
     const message = isLimit
-      ? "DOCX 文件大小不能超过 20 MB"
+      ? "Word 文件大小不能超过 20 MB"
       : error?.message || "Word 文件上传失败";
     response.status(isLimit ? 422 : 400).json({
       ok: false,

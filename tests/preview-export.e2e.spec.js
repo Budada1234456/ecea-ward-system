@@ -8,6 +8,15 @@ import {
 } from "./application-fixtures.mjs";
 
 const baseUrl = process.env.TEST_BASE_URL || "http://127.0.0.1:4174";
+const requiredProjectMaterials = [
+  "technical_proof",
+  "application_proof",
+  "evaluation_report",
+  "novelty_report",
+  "patent_proof",
+  "inventor_id",
+  "unit_license",
+];
 
 function crc32(buffer) {
   let crc = 0xffffffff;
@@ -150,7 +159,10 @@ test("rich media, entity pages and the complete PDF export stay intact", async (
     );
     expect(seedResponse.ok(), await seedResponse.text()).toBe(true);
 
-    for (const category of ["recommendation_signed", "application"]) {
+    for (const category of [
+      "recommendation_signed",
+      ...requiredProjectMaterials,
+    ]) {
       const upload = await page.request.post(
         `${baseUrl}/api/applications/${applicationId}/files`,
         {

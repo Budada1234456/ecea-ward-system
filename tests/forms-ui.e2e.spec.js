@@ -7,6 +7,15 @@ import {
 } from "./application-fixtures.mjs";
 
 const baseUrl = process.env.TEST_BASE_URL || "http://127.0.0.1:4174";
+const requiredProjectMaterials = [
+  "technical_proof",
+  "application_proof",
+  "evaluation_report",
+  "novelty_report",
+  "patent_proof",
+  "inventor_id",
+  "unit_license",
+];
 
 test("structured forms, entity ordering and discipline tree work responsively", async ({
   page,
@@ -98,7 +107,10 @@ test("structured forms, entity ordering and discipline tree work responsively", 
     );
     expect(seedResponse.ok(), await seedResponse.text()).toBe(true);
 
-    for (const category of ["recommendation_signed", "application"]) {
+    for (const category of [
+      "recommendation_signed",
+      ...requiredProjectMaterials,
+    ]) {
       const upload = await page.request.post(
         `${baseUrl}/api/applications/${applicationId}/files`,
         {
@@ -124,35 +136,28 @@ test("structured forms, entity ordering and discipline tree work responsively", 
     const disciplineInput = page.getByRole("combobox", { name: "检索学科" });
     await disciplineInput.focus();
     const energyOption = page.getByRole("option", {
-      name: /能源科学技术.*480/,
+      name: "能源动力系统节能与减排技术",
     });
     await expect(energyOption).toBeVisible();
     await energyOption.click();
     await expect(page.getByLabel("已选学科")).toContainText(
-      "能源科学技术（480）",
+      "能源动力系统节能与减排技术",
     );
 
     await disciplineInput.focus();
-    await page
-      .getByRole("button", { name: "展开能源科学技术的下级学科" })
-      .click();
-    await expect(
-      page.getByRole("navigation", { name: "学科层级路径" }),
-    ).toContainText("能源科学技术");
     const levelTwoOption = page.getByRole("option", {
-      name: /一次能源.*48060/,
+      name: "石油、天然气、化工工艺系统节能与减排技术",
     });
     await expect(levelTwoOption).toBeEnabled();
     await levelTwoOption.click();
     await expect(page.getByLabel("已选学科")).toContainText(
-      "能源科学技术（480） / 一次能源（48060）",
+      "石油、天然气、化工工艺系统节能与减排技术",
     );
 
     await disciplineInput.focus();
-    await page.getByRole("button", { name: "展开一次能源的下级学科" }).click();
-    await page.getByRole("option", { name: /煤炭能.*4806010/ }).click();
+    await page.getByRole("option", { name: "动力装备节能与减排技术" }).click();
     await expect(page.getByLabel("已选学科")).toContainText(
-      "能源科学技术（480） / 一次能源（48060） / 煤炭能（4806010）",
+      "动力装备节能与减排技术",
     );
 
     await page.setViewportSize({ width: 1100, height: 900 });
@@ -263,13 +268,12 @@ test("structured forms, entity ordering and discipline tree work responsively", 
     await expect(page.getByLabel("授权（申请）项目名称").last()).toHaveValue(
       "新增专利",
     );
-    await expect(page.getByLabel("论著名称")).toHaveValue("节能技术论著");
-    await page.getByRole("button", { name: /应用及效益/ }).click();
     await expect(page.getByLabel("应用单位名称")).toHaveValue("示范应用单位");
+    await page.getByRole("button", { name: /项目详细内容/ }).click();
     await expect(page.getByLabel("项目总投资额（万元人民币）")).toHaveValue(
       "200",
     );
-    await expect(page.getByLabel("年度")).toHaveValue("2025");
+    await expect(page.getByLabel("年份")).toHaveValue("2025");
     await page.getByRole("button", { name: /主要完成人/ }).click();
     await expect(
       page.getByText("完成人合作关系说明", { exact: true }),

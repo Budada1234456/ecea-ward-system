@@ -135,7 +135,7 @@ test("people, units and disciplines support mouse, touch, keyboard and confirmed
     await page.goto(baseUrl);
     await page.getByRole("button", { name: title, exact: true }).click();
 
-    await page.getByRole("button", { name: /^1 基本情况$/ }).click();
+    await page.getByRole("button", { name: /^1 项目基本情况$/ }).click();
     const peopleTags = page
       .getByLabel("主要完成人排序列表")
       .locator(".entry-tag");
@@ -238,7 +238,7 @@ test("people, units and disciplines support mouse, touch, keyboard and confirmed
       "单位乙",
     ]);
 
-    await page.getByRole("button", { name: /^1 基本情况$/ }).click();
+    await page.getByRole("button", { name: /^1 项目基本情况$/ }).click();
     let disciplines = page.getByLabel("已选学科").locator("li");
     await disciplines
       .nth(0)
@@ -286,7 +286,7 @@ test("people, units and disciplines support mouse, touch, keyboard and confirmed
       "单位甲",
       "单位乙",
     ]);
-    await page.getByRole("button", { name: /^1 基本情况$/ }).click();
+    await page.getByRole("button", { name: /^1 项目基本情况$/ }).click();
     await expectDisciplineOrder(page, ["水能", "石油、天然气能"]);
   } finally {
     if (applicationId) {
