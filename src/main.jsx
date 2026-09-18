@@ -3815,13 +3815,15 @@ function EditorApp({ application, onHome }) {
       `/api/applications/${application.id}/files`,
     );
     const payload = await response.json();
-    if (payload.ok) {
-      setApplicationFiles(payload.list || []);
-      setSourceFile(
-        (payload.list || []).find((file) => file.file_type === "source_pdf") ||
-          null,
-      );
+    if (!response.ok || !payload.ok) {
+      throw new Error(payload.message || "附件清单加载失败");
     }
+    const files = payload.list || [];
+    setApplicationFiles(files);
+    setSourceFile(
+      files.find((file) => file.file_type === "source_pdf") || null,
+    );
+    return files;
   };
   const saveToDatabase = (nextData = latestData.current) => {
     const snapshot = normalizeApplicationData(structuredClone(nextData));
@@ -3853,10 +3855,17 @@ function EditorApp({ application, onHome }) {
     return saveQueue.current;
   };
   const submitApplication = async () => {
+    let currentFiles;
+    try {
+      currentFiles = await loadSourceFile();
+    } catch (error) {
+      window.alert(error.message);
+      return;
+    }
     const validationErrors = validateApplication({
       data,
       awardType: awardProfile.value,
-      files: applicationFiles,
+      files: currentFiles,
     });
     if (validationErrors.length) {
       showValidationErrors(validationErrors, "提交前请完善以下内容");
@@ -3889,7 +3898,7 @@ function EditorApp({ application, onHome }) {
     return () => clearTimeout(autosaveTimer.current);
   }, [data]);
   useEffect(() => {
-    loadSourceFile();
+    loadSourceFile().catch(() => {});
     const flush = () => {
       clearTimeout(autosaveTimer.current);
       fetch(`/api/applications/${application.id}`, {
@@ -4027,11 +4036,18 @@ function EditorApp({ application, onHome }) {
     window.alert(`${heading}：\n${visibleErrors.join("\n")}`);
     return true;
   };
-  const openPreview = () => {
+  const openPreview = async () => {
+    let currentFiles;
+    try {
+      currentFiles = await loadSourceFile();
+    } catch (error) {
+      window.alert(error.message);
+      return;
+    }
     const errors = validateApplication({
       data,
       awardType: awardProfile.value,
-      files: applicationFiles,
+      files: currentFiles,
     });
     if (showValidationErrors(errors, "生成预览前请完善以下内容")) return;
     setShowPreview(true);

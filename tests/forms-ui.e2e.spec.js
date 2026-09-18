@@ -12,7 +12,7 @@ test("structured forms, entity ordering and discipline tree work responsively", 
   page,
 }) => {
   test.setTimeout(120_000);
-  page.setDefaultTimeout(5_000);
+  page.setDefaultTimeout(baseUrl.startsWith("https://") ? 30_000 : 5_000);
   const suffix = `${Date.now()}${Math.floor(Math.random() * 1000)}`;
   const username = `formtest${suffix}`;
   const password = `FormTest-${suffix}`;

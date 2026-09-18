@@ -167,6 +167,14 @@ test("rich media, entity pages and the complete PDF export stay intact", async (
       expect(upload.ok(), await upload.text()).toBe(true);
     }
 
+    await page.route(
+      `**/api/applications/${applicationId}/files`,
+      async (route) => {
+        await new Promise((resolve) => setTimeout(resolve, 400));
+        await route.continue();
+      },
+    );
+
     await page.goto(baseUrl);
     await page.getByRole("button", { name: title, exact: true }).click();
     await page.getByRole("button", { name: "预览当前申报书" }).click();
