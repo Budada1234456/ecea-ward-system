@@ -27,6 +27,9 @@ const RICH_FIELDS = new Set([
   "social",
   "technicalEvaluation",
   "recommendation",
+  "transformation",
+  "workSummary",
+  "resume",
 ]);
 const MAX_WORD_FILE_BYTES = 20 * 1024 * 1024;
 
@@ -38,6 +41,12 @@ function displayValue(value) {
       .join("、");
   if (value && typeof value === "object") return JSON.stringify(value);
   return richTextToPlain(String(value || ""));
+}
+
+function valueAt(data, key) {
+  return String(key || "")
+    .split(".")
+    .reduce((value, part) => value?.[part], data);
 }
 
 function mergeRecords(currentRecords, importedRecords) {
@@ -138,6 +147,7 @@ async function uploadSelectedWordImages(
 export function WordImportDialog({
   applicationId,
   currentData,
+  section,
   onClose,
   onApply,
 }) {
@@ -147,6 +157,7 @@ export function WordImportDialog({
   const [status, setStatus] = useState("idle");
   const [result, setResult] = useState(null);
   const [selectedFields, setSelectedFields] = useState([]);
+  const [selectedFile, setSelectedFile] = useState(null);
   const [error, setError] = useState("");
 
   useEffect(
@@ -157,7 +168,13 @@ export function WordImportDialog({
     [],
   );
 
-  const recognized = result?.recognized || [];
+  const recognized = useMemo(() => {
+    const candidates = result?.recognized || [];
+    if (!section?.allowedFieldKeys?.length) return [];
+    return candidates.filter((candidate) =>
+      section.allowedFieldKeys.includes(candidate.key),
+    );
+  }, [result, section]);
   const selectedCandidates = useMemo(
     () =>
       recognized.filter((candidate) => selectedFields.includes(candidate.key)),
@@ -166,25 +183,27 @@ export function WordImportDialog({
 
   const chooseFile = async (file) => {
     if (!file) return;
-    if (!file.name.toLowerCase().endsWith(".docx")) {
-      setError("请选择 .docx 文件");
+    if (!/\.docx?$/i.test(file.name)) {
+      setError("请选择 .doc 或 .docx 文件");
       setStatus("error");
       return;
     }
     if (file.size > MAX_WORD_FILE_BYTES) {
-      setError("DOCX 文件大小不能超过 20 MB");
+      setError("Word 文件大小不能超过 20 MB");
       setStatus("error");
       return;
     }
     setStatus("parsing");
     setError("");
     setResult(null);
+    setSelectedFile(file);
     const controller = new AbortController();
     requestControllerRef.current = controller;
     try {
       const body = new FormData();
       body.append("file", file);
       body.append("applicationId", String(applicationId));
+      body.append("sectionKey", section?.key || "");
       const response = await apiFetch("/api/word-import", {
         method: "POST",
         body,
@@ -194,13 +213,18 @@ export function WordImportDialog({
       if (!response.ok || !payload.ok)
         throw new Error(payload.message || "Word 文档解析失败");
       setResult(payload);
-      const defaults = payload.recognized
-        .filter((candidate) => !displayValue(currentData[candidate.key]).trim())
+      const sectionCandidates = (payload.recognized || []).filter((candidate) =>
+        section?.allowedFieldKeys?.includes(candidate.key),
+      );
+      const defaults = sectionCandidates
+        .filter(
+          (candidate) =>
+            !displayValue(valueAt(currentData, candidate.key)).trim(),
+        )
         .map((candidate) => candidate.key);
       setSelectedFields(defaults);
-      const matched = payload.matchStats?.matched ?? payload.recognized.length;
-      const supported =
-        payload.matchStats?.supported ?? payload.recognized.length;
+      const matched = sectionCandidates.length;
+      const supported = section?.allowedFieldKeys?.length || 0;
       setStatus(
         matched === 0
           ? "no-match"
@@ -251,7 +275,7 @@ export function WordImportDialog({
               : candidate.value,
         ]),
       );
-      await onApply(fields, result);
+      await onApply(fields, result, selectedFile);
       setStatus("success");
     } catch (caught) {
       await deleteUploadedWordImages(applicationId, uploadedImageIds);
@@ -267,6 +291,7 @@ export function WordImportDialog({
   const retry = () => {
     setResult(null);
     setSelectedFields([]);
+    setSelectedFile(null);
     setError("");
     setStatus("idle");
   };
@@ -285,8 +310,8 @@ export function WordImportDialog({
               <FileInput size={19} />
             </span>
             <span>
-              <b id="word-import-title">Word 申报书导入</b>
-              <small>解析 .docx 标题、段落和表格，审阅后再应用到草稿</small>
+              <b id="word-import-title">{section?.label || "章节"} Word 上传</b>
+              <small>解析 .doc / .docx 内容，仅识别并回填当前章节</small>
             </span>
           </div>
           <button
@@ -311,17 +336,15 @@ export function WordImportDialog({
               onClick={() => inputRef.current?.click()}
             >
               <FileText size={36} />
-              <b>选择一份 .docx 申报书</b>
-              <span>
-                文件最大 20 MB；不支持 .doc、宏、加密文档或包含外部关系的文档
-              </span>
+              <b>选择本章节已填写的 Word</b>
+              <span>支持 .doc、.docx，最大 20 MB；文件会保存在当前章节</span>
             </button>
           )}
           <input
             ref={inputRef}
             hidden
             type="file"
-            accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            accept=".doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
             onChange={(event) => chooseFile(event.target.files?.[0])}
           />
 
@@ -347,8 +370,8 @@ export function WordImportDialog({
                   status === "apply-error"
                     ? () =>
                         setStatus(
-                          result?.matchStats?.matched <
-                            result?.matchStats?.supported
+                          recognized.length <
+                            (section?.allowedFieldKeys?.length || 0)
                             ? "partial-match"
                             : "review",
                         )
@@ -361,27 +384,20 @@ export function WordImportDialog({
           )}
 
           {status === "no-match" && (
-            <div className="error-box">
-              <AlertCircle size={20} />
+            <div className="warning-row chapter-file-only">
+              <FileText size={20} />
               <span>
-                <b>未找到匹配字段</b>
-                文档已成功解析，但标题或表格字段与当前申报模板不匹配。
+                <b>本章没有可自动回填的在线字段</b>
+                Word 已读取，可直接保存为本章节文件；现有草稿不会被修改。
               </span>
-              <button
-                className="secondary-button"
-                type="button"
-                onClick={retry}
-              >
-                重新选择
-              </button>
             </div>
           )}
 
           {status === "partial-match" && result && (
             <div className="warning-row">
               <AlertCircle size={16} />
-              仅匹配到 {result.matchStats.matched} /{" "}
-              {result.matchStats.supported}{" "}
+              仅匹配到 {recognized.length} /{" "}
+              {section?.allowedFieldKeys?.length || 0}{" "}
               个可导入字段；未匹配章节不会被修改，请审阅后选择需要应用的候选项。
             </div>
           )}
@@ -405,7 +421,7 @@ export function WordImportDialog({
                 <div className="recognition-list">
                   {recognized.map((candidate) => {
                     const currentValue = displayValue(
-                      currentData[candidate.key],
+                      valueAt(currentData, candidate.key),
                     );
                     const suggestedValue = displayValue(candidate.value);
                     const conflict = Boolean(currentValue.trim());
@@ -465,8 +481,9 @@ export function WordImportDialog({
               <Check size={34} />
               <b>候选字段已应用</b>
               <span>
-                仅更新了选中的 {selectedFields.length}{" "}
-                个字段，其余草稿内容保持不变。
+                {selectedFields.length
+                  ? `仅更新了选中的 ${selectedFields.length} 个字段，其余草稿内容保持不变。`
+                  : "章节 Word 已保存，现有草稿内容保持不变。"}
               </span>
             </div>
           )}
@@ -489,8 +506,12 @@ export function WordImportDialog({
             className="primary-button"
             type="button"
             disabled={
-              !(status === "review" || status === "partial-match") ||
-              selectedFields.length === 0
+              !(
+                status === "review" ||
+                status === "partial-match" ||
+                status === "no-match"
+              ) ||
+              (status !== "no-match" && selectedFields.length === 0)
             }
             onClick={applySelected}
           >
@@ -501,7 +522,9 @@ export function WordImportDialog({
             )}
             {status === "applying"
               ? "正在应用"
-              : `应用已选字段（${selectedFields.length}）`}
+              : selectedFields.length
+                ? `应用并保存（${selectedFields.length}）`
+                : "保存章节 Word"}
           </button>
         </div>
       </div>

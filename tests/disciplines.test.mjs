@@ -6,8 +6,24 @@ import {
 } from "../src/data/disciplines.js";
 import {
   getDisciplineOptions,
+  isDisciplineSelectable,
   SEARCH_RESULT_LIMIT,
 } from "../src/forms/discipline-options.js";
+import { awardDisciplines } from "../src/data/award-disciplines.js";
+
+assert.deepEqual(
+  awardDisciplines.map(({ name }) => name),
+  [
+    "能源动力系统节能与减排技术",
+    "石油、天然气、化工工艺系统节能与减排技术",
+    "矿业、冶金金工艺系统节能与减排技术",
+    "机械、轻工工艺系统节能与冰成排技术",
+    "动力装备节能与减排技术",
+    "矿山科学技术(尾矿综合利用工程)",
+    "环境科学技术(废物处理与综合利用)",
+  ],
+);
+assert.ok(awardDisciplines.every(isDisciplineSelectable));
 
 const byCode = new Map(disciplines.map((record) => [record.code, record]));
 
@@ -78,6 +94,10 @@ assert.ok(
 assert.ok(
   getDisciplineOptions(disciplines, "学").length <= SEARCH_RESULT_LIMIT,
 );
+
+assert.equal(isDisciplineSelectable(byCode.get("480")), true);
+assert.equal(isDisciplineSelectable(byCode.get("48060")), true);
+assert.equal(isDisciplineSelectable(byCode.get("4806010")), true);
 
 console.log(
   `Validated ${disciplines.length} GB/T 13745-2009 discipline records.`,

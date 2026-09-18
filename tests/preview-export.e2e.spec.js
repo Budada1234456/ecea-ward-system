@@ -1,7 +1,22 @@
 import { expect, test } from "@playwright/test";
 import { deflateSync } from "node:zlib";
+import {
+  completePerson,
+  completeProjectData,
+  completeUnit,
+  tinyPng,
+} from "./application-fixtures.mjs";
 
 const baseUrl = process.env.TEST_BASE_URL || "http://127.0.0.1:4174";
+const requiredProjectMaterials = [
+  "technical_proof",
+  "application_proof",
+  "evaluation_report",
+  "novelty_report",
+  "patent_proof",
+  "inventor_id",
+  "unit_license",
+];
 
 function crc32(buffer) {
   let crc = 0xffffffff;
@@ -112,38 +127,65 @@ test("rich media, entity pages and the complete PDF export stay intact", async (
       `${baseUrl}/api/applications/${applicationId}`,
       {
         data: {
-          data: {
-            projectName: title,
+          data: completeProjectData(title, {
             technicalContent: richContent,
             people: [
               {
+                ...completePerson("完成人甲"),
                 id: "person-preview-1",
-                name: "完成人甲",
                 contribution: "贡献甲",
               },
               {
+                ...completePerson("完成人乙"),
                 id: "person-preview-2",
-                name: "完成人乙",
                 contribution: "贡献乙",
               },
             ],
             units: [
               {
+                ...completeUnit("完成单位甲"),
                 id: "unit-preview-1",
-                name: "完成单位甲",
                 contribution: "贡献甲",
               },
               {
+                ...completeUnit("完成单位乙"),
                 id: "unit-preview-2",
-                name: "完成单位乙",
                 contribution: "贡献乙",
               },
             ],
-          },
+          }),
         },
       },
     );
     expect(seedResponse.ok(), await seedResponse.text()).toBe(true);
+
+    for (const category of [
+      "recommendation_signed",
+      ...requiredProjectMaterials,
+    ]) {
+      const upload = await page.request.post(
+        `${baseUrl}/api/applications/${applicationId}/files`,
+        {
+          multipart: {
+            category,
+            file: {
+              name: `${category}.png`,
+              mimeType: "image/png",
+              buffer: tinyPng,
+            },
+          },
+        },
+      );
+      expect(upload.ok(), await upload.text()).toBe(true);
+    }
+
+    await page.route(
+      `**/api/applications/${applicationId}/files`,
+      async (route) => {
+        await new Promise((resolve) => setTimeout(resolve, 400));
+        await route.continue();
+      },
+    );
 
     await page.goto(baseUrl);
     await page.getByRole("button", { name: title, exact: true }).click();

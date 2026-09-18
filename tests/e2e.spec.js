@@ -125,26 +125,17 @@ test("project center, attachment workflow and PDF export", async ({
     await disciplineInput.focus();
     await expect(disciplineResults).toBeVisible();
     await expect(
-      page.getByText("请选择终端二级学科或三级学科", { exact: false }),
+      page.getByText("请从以下学科分类中选择", { exact: false }),
     ).toBeVisible();
-    await expect(
-      disciplineResults.getByRole("option", { name: /能源科学技术.*480/ }),
-    ).toBeVisible();
-    await page
-      .getByRole("button", { name: "展开能源科学技术的下级学科" })
-      .click();
-    await expect(
-      page.getByRole("navigation", { name: "学科层级路径" }),
-    ).toContainText("能源科学技术");
-    await page.getByRole("button", { name: "展开一次能源的下级学科" }).click();
+    await expect(disciplineResults.getByRole("option")).toHaveCount(7);
     const terminalDiscipline = disciplineResults.getByRole("option", {
-      name: /煤炭能.*4806010/,
+      name: "环境科学技术(废物处理与综合利用)",
     });
     await expect(terminalDiscipline).toBeVisible();
     await terminalDiscipline.click();
     await expect(disciplineResults).toBeHidden();
     await expect(page.getByRole("list", { name: "已选学科" })).toContainText(
-      "能源科学技术（480） / 一次能源（48060） / 煤炭能（4806010）",
+      "环境科学技术(废物处理与综合利用)",
     );
 
     await disciplineInput.focus();
@@ -202,15 +193,16 @@ test("project center, attachment workflow and PDF export", async ({
     await page.getByRole("button", { name: "提交形式审查" }).click();
     await expect.poll(() => validationMessage).toContain("提交前请完善");
 
+    let previewValidationMessage = "";
+    page.once("dialog", async (browserDialog) => {
+      previewValidationMessage = browserDialog.message();
+      await browserDialog.accept();
+    });
     await page.getByRole("button", { name: "预览当前申报书" }).click();
-    await expect(
-      page.getByRole("button", { name: "导出系统生成 PDF" }),
-    ).toBeVisible();
-
-    const downloadPromise = page.waitForEvent("download");
-    await page.getByRole("button", { name: "导出系统生成 PDF" }).click();
-    const download = await downloadPromise;
-    expect(download.suggestedFilename()).toMatch(/\.pdf$/i);
+    await expect
+      .poll(() => previewValidationMessage)
+      .toContain("生成预览前请完善");
+    await expect(page.getByText("申报书预览", { exact: true })).toHaveCount(0);
   } finally {
     if (applicationId) {
       const filesResponse = await request.get(

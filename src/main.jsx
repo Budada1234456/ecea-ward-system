@@ -70,6 +70,12 @@ import {
   getAwardProfile,
   getAwardSections,
 } from "./award-profiles.js";
+import {
+  LONG_TEXT_LIMITS,
+  validateApplication,
+  validateSection,
+} from "./forms/application-validation.js";
+import { awardDisciplines } from "./data/award-disciplines.js";
 import "./styles.css";
 
 const awardOptions = awardProfiles.map((profile) => ({
@@ -181,7 +187,12 @@ function createEmptyData(meta = {}) {
       postalCode: "",
       officePhone: "",
       mobilePhone: "",
+      homePhone: "",
       email: "",
+      graduationDate: "",
+      homeAddress: "",
+      socialPositions: "",
+      academicPositions: "",
     },
     people: [],
     peopleCooperation: "",
@@ -208,6 +219,8 @@ function createEmptyData(meta = {}) {
     economic: "",
     social: "",
     transformation: "",
+    workSummary: "",
+    resume: "",
     awardRecords: [],
     ipRecords: [],
     paperRecords: [],
@@ -563,7 +576,7 @@ function AwardTypeLock({ profile }) {
   );
 }
 
-function AchievementBasicForm({ data, setField }) {
+function AchievementBasicForm({ data, setField, applicationId }) {
   const profile = getAwardProfile(data.awardType);
   const candidate = data.candidate || {};
   const setCandidate = (key, value) =>
@@ -573,7 +586,7 @@ function AchievementBasicForm({ data, setField }) {
       <div className="section-heading">
         <div>
           <span className="section-index">01</span>
-          <h2>候选人基本情况</h2>
+          <h2>基本情况</h2>
         </div>
       </div>
       <div className="section-note">
@@ -622,34 +635,10 @@ function AchievementBasicForm({ data, setField }) {
             onChange={(value) => setCandidate("birthDate", value)}
           />
         </Field>
-        <Field label="出生地">
-          <TextInput
-            value={candidate.birthPlace}
-            onChange={(value) => setCandidate("birthPlace", value)}
-          />
-        </Field>
-        <Field label="籍贯">
-          <TextInput
-            value={candidate.nativePlace}
-            onChange={(value) => setCandidate("nativePlace", value)}
-          />
-        </Field>
         <Field label="民族">
           <TextInput
             value={candidate.ethnicity}
             onChange={(value) => setCandidate("ethnicity", value)}
-          />
-        </Field>
-        <Field label="国籍">
-          <TextInput
-            value={candidate.nationality}
-            onChange={(value) => setCandidate("nationality", value)}
-          />
-        </Field>
-        <Field label="身份证号">
-          <TextInput
-            value={candidate.idNumber}
-            onChange={(value) => setCandidate("idNumber", value)}
           />
         </Field>
         <Field label="政治面貌">
@@ -676,22 +665,23 @@ function AchievementBasicForm({ data, setField }) {
             onChange={(value) => setCandidate("technicalTitle", value)}
           />
         </Field>
+        <Field label="学历">
+          <TextInput
+            value={candidate.education}
+            onChange={(value) => setCandidate("education", value)}
+          />
+        </Field>
         <Field label="最高学位">
           <TextInput
             value={candidate.highestDegree}
             onChange={(value) => setCandidate("highestDegree", value)}
           />
         </Field>
-        <Field label="毕业学校">
+        <Field label="毕业时间">
           <TextInput
-            value={candidate.graduateSchool}
-            onChange={(value) => setCandidate("graduateSchool", value)}
-          />
-        </Field>
-        <Field label="专业、专长">
-          <TextInput
-            value={candidate.specialty}
-            onChange={(value) => setCandidate("specialty", value)}
+            type="date"
+            value={candidate.graduationDate}
+            onChange={(value) => setCandidate("graduationDate", value)}
           />
         </Field>
         <Field label="推荐单位" required>
@@ -713,30 +703,30 @@ function AchievementBasicForm({ data, setField }) {
             ))}
           </select>
         </Field>
-        <Field label="通讯地址">
+        <Field label="单位地址及邮编">
           <TextInput
             value={candidate.mailingAddress}
             onChange={(value) => setCandidate("mailingAddress", value)}
           />
         </Field>
-        <Field label="邮政编码">
+        <Field label="家庭住址及邮编">
           <TextInput
-            value={candidate.postalCode}
-            onChange={(value) => setCandidate("postalCode", value)}
+            value={candidate.homeAddress}
+            onChange={(value) => setCandidate("homeAddress", value)}
           />
         </Field>
         <div className="field-row field-row--triple">
           <div className="field-label">联系信息</div>
           <div className="field-control triple-controls">
             <label>
-              <span>办公电话</span>
+              <span>单位电话</span>
               <TextInput
                 value={candidate.officePhone}
                 onChange={(value) => setCandidate("officePhone", value)}
               />
             </label>
             <label>
-              <span>移动电话</span>
+              <span>手机号码</span>
               <TextInput
                 value={candidate.mobilePhone}
                 onChange={(value) => setCandidate("mobilePhone", value)}
@@ -752,15 +742,73 @@ function AchievementBasicForm({ data, setField }) {
             </label>
           </div>
         </div>
+        <Field label="住宅电话">
+          <TextInput
+            value={candidate.homePhone}
+            onChange={(value) => setCandidate("homePhone", value)}
+          />
+        </Field>
+        <Field label="社会职务">
+          <textarea
+            className="control"
+            value={candidate.socialPositions || ""}
+            onChange={(event) =>
+              setCandidate("socialPositions", event.target.value)
+            }
+          />
+        </Field>
+        <Field label="国内外学术组织任职情况">
+          <textarea
+            className="control"
+            value={candidate.academicPositions || ""}
+            onChange={(event) =>
+              setCandidate("academicPositions", event.target.value)
+            }
+          />
+        </Field>
+        <Field
+          label="节能减排相关工作总结"
+          required
+          hint="限 1000 字，阐述本人在该领域的工作经历、核心贡献、行业影响力等。"
+        >
+          <div className="control-with-count">
+            <RichTextEditor
+              value={data.workSummary || ""}
+              onChange={(value) => setField("workSummary", value)}
+              fieldKey="workSummary"
+              label="节能减排相关工作总结"
+              applicationId={applicationId}
+            />
+            <CharacterCount value={data.workSummary || ""} max={1000} />
+          </div>
+        </Field>
+        <Field
+          label="本人简历（从高校填起）"
+          hint="按起止年月、单位（学校）、职务（专业）顺序填写。"
+        >
+          <RichTextEditor
+            value={data.resume || ""}
+            onChange={(value) => setField("resume", value)}
+            fieldKey="resume"
+            label="本人简历"
+            applicationId={applicationId}
+          />
+        </Field>
       </div>
     </section>
   );
 }
 
-function BasicForm({ data, setField, disciplineRecords }) {
+function BasicForm({ data, setField, disciplineRecords, applicationId }) {
   const isAchievement = data.awardType === AWARD_TYPES.ACHIEVEMENT;
   if (isAchievement)
-    return <AchievementBasicForm data={data} setField={setField} />;
+    return (
+      <AchievementBasicForm
+        data={data}
+        setField={setField}
+        applicationId={applicationId}
+      />
+    );
   const profile = getAwardProfile(data.awardType);
   const toggleSource = (key) =>
     setField(
@@ -908,13 +956,14 @@ function BasicForm({ data, setField, disciplineRecords }) {
         <Field
           label="学科分类名称"
           required
-          hint="依据 GB/T 13745-2009 按代码或名称检索，最多选择3项，并按主要技术创新点涉及学科的先后顺序排列。"
+          hint="最多选择3项，并按主要技术创新点涉及学科的先后顺序排列。"
         >
           <DisciplineSelector
             value={data.disciplines}
             onChange={(value) => setField("disciplines", value)}
             disciplines={disciplineRecords}
             label="检索学科"
+            hierarchical={false}
           />
         </Field>
         <Field label="所属国民经济行业" required>
@@ -923,7 +972,7 @@ function BasicForm({ data, setField, disciplineRecords }) {
             value={data.industry}
             onChange={(e) => setField("industry", e.target.value)}
           >
-            {industryOptions.map(([key, label]) => (
+            {industryOptions.slice(0, 16).map(([key, label]) => (
               <option key={key} value={key}>
                 {key} · {label}
               </option>
@@ -1024,7 +1073,11 @@ function LongTextSection({
         {fields.map((field) => (
           <React.Fragment key={field.key}>
             {prefixes[field.key]}
-            <Field label={field.label} required={field.required}>
+            <Field
+              label={field.label}
+              required={field.required}
+              hint={field.hint}
+            >
               <div className="control-with-count">
                 <RichTextEditor
                   value={data[field.key] || ""}
@@ -1056,6 +1109,8 @@ function RecordsSection({
   supplement,
   addLabel = "添加记录",
   emptyLabel,
+  fields,
+  showIndex = false,
 }) {
   const group = customGroup || (type === "ip" ? "ipRecords" : "awardRecords");
   return (
@@ -1070,6 +1125,7 @@ function RecordsSection({
       </div>
       <StructuredTable
         group={group}
+        fields={fields}
         value={records}
         onChange={onChange}
         addLabel={addLabel}
@@ -1080,11 +1136,78 @@ function RecordsSection({
             : "暂无记录，无相关内容时可保持为空")
         }
         className="records-collection"
+        confirmRemoval={group === "ipRecords"}
+        showIndex={showIndex}
       />
       {supplement}
     </section>
   );
 }
+
+const achievementRecordFields = Object.freeze({
+  honors: [
+    { key: "name", label: "奖励或荣誉名称", required: true, minWidth: 210 },
+    { key: "org", label: "授奖单位", minWidth: 180 },
+    { key: "date", label: "授奖日期", type: "date", minWidth: 140 },
+    { key: "totalPeople", label: "获奖总人数", minWidth: 110 },
+    { key: "personalRank", label: "本人排名", minWidth: 100 },
+  ],
+  publications: [
+    {
+      key: "title",
+      label:
+        "基本信息（名称 + 年份 + 本人排名 + 主要合作者 + 发表刊物 / 出版社）",
+      required: true,
+      multiline: true,
+      minWidth: 360,
+    },
+    {
+      key: "contribution",
+      label: "本人作用和主要贡献（限 100 字 / 项）",
+      multiline: true,
+      maxLength: 100,
+      minWidth: 320,
+    },
+  ],
+  achievementIp: [
+    { key: "type", label: "知识产权类别", minWidth: 140 },
+    { key: "name", label: "授权项目名称", required: true, minWidth: 220 },
+    { key: "country", label: "国（区）别", minWidth: 110 },
+    { key: "authorizationNumber", label: "授权号", minWidth: 150 },
+    { key: "authorizationDate", label: "授权日期", minWidth: 130 },
+    { key: "certificateNumber", label: "证书编号", minWidth: 140 },
+    { key: "owner", label: "权利人", minWidth: 150 },
+    { key: "inventorRank", label: "发明人排名", minWidth: 110 },
+    { key: "correspondingAchievement", label: "对应标志性成果", minWidth: 180 },
+    { key: "evidenceNumber", label: "证明材料编号", minWidth: 140 },
+  ],
+  research: [
+    { key: "name", label: "项目名称", required: true, minWidth: 210 },
+    { key: "funding", label: "研发经费（万元）", minWidth: 130 },
+    { key: "source", label: "项目来源", minWidth: 150 },
+    { key: "projectNumber", label: "项目编号", minWidth: 140 },
+    { key: "period", label: "研发起止时间", minWidth: 160 },
+    { key: "status", label: "状态（在研 / 已验收）", minWidth: 150 },
+    { key: "leader", label: "负责人", minWidth: 120 },
+    { key: "personalRank", label: "本人在项目成果中排序", minWidth: 150 },
+    { key: "evidenceNumber", label: "证明材料编号", minWidth: 140 },
+  ],
+  engineering: [
+    { key: "name", label: "项目名称", required: true, minWidth: 230 },
+    { key: "client", label: "项目委托单位", minWidth: 210 },
+    {
+      key: "participation",
+      label: "本人参与情况（核心职责 / 贡献）",
+      multiline: true,
+      minWidth: 280,
+    },
+    {
+      key: "economicBenefit",
+      label: "项目产生的经济效益（万元）",
+      minWidth: 180,
+    },
+  ],
+});
 
 function PapersTable({ records, onChange }) {
   return (
@@ -1105,6 +1228,26 @@ function ApplicationUnitsTable({ records, onChange }) {
   return (
     <StructuredTable
       group="applicationUnits"
+      fields={[
+        {
+          key: "unitName",
+          label: "应用单位名称",
+          required: true,
+          minWidth: 220,
+        },
+        {
+          key: "startDate",
+          label: "应用起始时间（年 / 月）",
+          type: "month",
+          minWidth: 170,
+        },
+        { key: "contactPhone", label: "联系人及电话", minWidth: 210 },
+        {
+          key: "economicBenefit",
+          label: "使用本项目产生的经济效益（万元）",
+          minWidth: 210,
+        },
+      ]}
       title="主要应用单位情况"
       value={records}
       onChange={onChange}
@@ -1154,6 +1297,17 @@ function EconomicCollection({
       </div>
       <StructuredTable
         group="economicRecords"
+        fields={[
+          { key: "year", label: "年份", minWidth: 100 },
+          { key: "newProfit", label: "新增利润", minWidth: 140 },
+          { key: "newTax", label: "新增税收", minWidth: 140 },
+          {
+            key: "foreignExchange",
+            label: "创收外汇（美元）",
+            minWidth: 160,
+          },
+          { key: "savingsTotal", label: "节支总额", minWidth: 140 },
+        ]}
         title="近三年新增直接效益"
         value={records}
         onChange={onRecordsChange}
@@ -1357,7 +1511,8 @@ function AttachmentSection({
   const attachmentFiles = files.filter(
     (file) =>
       file.file_type !== "source_pdf" &&
-      !file.file_type.startsWith("content_image:"),
+      !file.file_type.startsWith("content_image:") &&
+      !file.file_type.startsWith("section_word:"),
   );
   const sourceFile = files.find((file) => file.file_type === "source_pdf");
   const totalPages = attachmentFiles.reduce(
@@ -1368,10 +1523,20 @@ function AttachmentSection({
     <section className="form-section">
       <div className="section-heading">
         <div>
-          <span className="section-index">{isAchievement ? "08" : "11"}</span>
+          <span className="section-index">{isAchievement ? "08" : "10"}</span>
           <h2>{isAchievement ? "证明材料" : "附件目录"}</h2>
         </div>
       </div>
+      {!isAchievement && (
+        <div className="form-guidance attachment-guidance">
+          <Info size={16} />
+          <span>
+            依据《填写说明》，第 1 至 7 项为必备附件；第 8
+            项按项目实际情况提交。
+            请按每项标注的原件、复印件及盖章要求准备材料。
+          </span>
+        </div>
+      )}
       {sourceFile && (
         <div className="final-document-bar">
           <FileCheck2 size={20} />
@@ -1507,6 +1672,115 @@ function AttachmentSection({
           当前为整本材料导入模式，请点击右上角“PDF 智能导入”上传最终签章合并版。
         </div>
       )}
+    </section>
+  );
+}
+
+const PROJECT_TEMPLATE_DETAILS = Object.freeze({
+  unitRecommendation: [
+    "申报单位意见：明确表述对项目真实性、创新性、应用价值的审核意见及推荐申报意愿，并加盖申报单位公章。",
+    "推荐单位推荐意见：勾选一等奖、二等奖或三等奖，阐述推荐理由，并加盖推荐单位公章。",
+    "专家推荐申报不填写本章。",
+  ],
+  expertRecommendation: [
+    "由推荐专家独立填写，不得代填后签名。",
+    "完整填写姓名、性别、出生年月、工作单位、通讯地址、邮政编码、联系电话、技术职称、专业专长、现从事工作及专家类别。",
+    "推荐意见限 800 字，阐述主要技术内容、核心创新点、应用领域、经济和社会效益、技术水平，并明确建议奖励等级。",
+  ],
+  authenticity: [
+    "确认申报书及全部附件材料真实、合法、有效，不存在弄虚作假、剽窃他人成果或隐瞒相关信息。",
+    "由申报单位盖章并填写日期。",
+  ],
+  confidentiality: [
+    "完整填写单位名称、统一社会信用代码、法定代表人、项目名称、奖项类别、联系人、电话、邮箱和承诺日期。",
+    "对纸质版、电子版申报书及全部附件完成保密自查，确认不含国家秘密、工作秘密及敏感信息。",
+    "法定代表人亲笔签字并加盖单位公章。",
+  ],
+  integrity: [
+    "确认全部材料、数据、图片和证明文件真实、准确、完整、有效。",
+    "确认成果权属清晰且不侵犯任何第三方合法权益。",
+    "确认申报程序公平合规，近三年无重大事故、严重失信、行政处罚及学术不端行为。",
+    "承诺单位盖章、项目负责人签字，并填写统一社会信用代码、联系方式和日期。",
+  ],
+});
+
+const ACHIEVEMENT_TEMPLATE_DETAILS = Object.freeze({
+  authenticity: [
+    "确认本次提交的申报书及证明、报表、报告等资料真实、合法、有效且均为最新资料。",
+    "由申报单位盖章并填写日期。",
+  ],
+  integrity: PROJECT_TEMPLATE_DETAILS.integrity,
+});
+
+function TemplateOnlySection({ section, profile }) {
+  const details =
+    (profile.code === "achievement"
+      ? ACHIEVEMENT_TEMPLATE_DETAILS
+      : PROJECT_TEMPLATE_DETAILS)[section.key] || [];
+  return (
+    <section className="form-section template-only-section">
+      <div className="section-heading">
+        <div>
+          <span className="section-index">
+            {String(section.number).padStart(2, "0")}
+          </span>
+          <h2>{section.label}</h2>
+        </div>
+      </div>
+      <div className="section-note">
+        <Info size={16} />
+        <span>{section.requirement}</span>
+      </div>
+      <div className="template-requirements">
+        <h3>模板填写要求</h3>
+        <ol>
+          {details.map((detail) => (
+            <li key={detail}>{detail}</li>
+          ))}
+        </ol>
+        <p>请下载本章原始模板填写；完成后通过上方“上传本章 Word”留存并识别。</p>
+      </div>
+    </section>
+  );
+}
+
+function SectionTemplateBar({
+  applicationId,
+  section,
+  uploadedFile,
+  onUpload,
+}) {
+  return (
+    <section className="section-template-bar" aria-label="本章 Word 模板">
+      <div className="section-template-copy">
+        <span className="section-template-icon">
+          <FileText size={20} />
+        </span>
+        <span>
+          <b>{section.templateFile}</b>
+          <small>{section.requirement}</small>
+        </span>
+      </div>
+      {uploadedFile && (
+        <a
+          className="section-word-status"
+          href={`/api/applications/${applicationId}/files/${uploadedFile.id}/download`}
+          title={uploadedFile.file_name}
+        >
+          <Check size={14} />
+          已上传 {uploadedFile.file_name}
+        </a>
+      )}
+      <div className="section-template-actions">
+        <a className="secondary-button" href={section.templateHref} download>
+          <Download size={16} />
+          下载本章模板
+        </a>
+        <button className="primary-button" type="button" onClick={onUpload}>
+          <Upload size={16} />
+          {uploadedFile ? "重新上传本章 Word" : "上传本章 Word"}
+        </button>
+      </div>
     </section>
   );
 }
@@ -1871,7 +2145,7 @@ function PreviewPageOne({ data, disciplineRecords }) {
             <th colSpan="2">所属行业</th>
             <td colSpan="5">
               <div className="industry-letters">
-                {industryOptions.map(([key]) => (
+                {industryOptions.slice(0, 16).map(([key]) => (
                   <span
                     className={data.industry === key ? "selected-letter" : ""}
                     key={key}
@@ -2302,7 +2576,7 @@ function PreviewRichValue({ value, className = "" }) {
 
 function PreviewPersonPage({ person, index, pageNumber }) {
   return (
-    <article className="preview-page preview-form-page preview-entity-page">
+    <article className="preview-page preview-form-page preview-entity-page preview-person-page">
       <h3>六、主要完成人情况表</h3>
       <table aria-label={`第 ${index + 1} 完成人情况表`}>
         <colgroup>
@@ -2497,6 +2771,37 @@ function PreviewUnitPage({ unit, index, pageNumber }) {
   );
 }
 
+function PreviewRecommendationPage({ body, pageNumber }) {
+  return (
+    <article className="preview-page preview-form-page preview-recommendation-page">
+      <h3>八、申报、推荐单位意见</h3>
+      <div className="preview-recommendation-block">
+        <h4>申报单位意见</h4>
+        <PreviewRichValue value={body} />
+        <div className="preview-signature-area">
+          <span>申报单位（盖章）：</span>
+          <span>年&nbsp;&nbsp;&nbsp;&nbsp;月&nbsp;&nbsp;&nbsp;&nbsp;日</span>
+        </div>
+      </div>
+      <div className="preview-recommendation-block">
+        <h4>推荐单位推荐意见</h4>
+        <div className="preview-blank-lines">
+          <p>建议奖励等级：□ 一等奖　□ 二等奖　□ 三等奖</p>
+          <p>推荐理由及结论性意见：</p>
+          <i />
+          <i />
+          <i />
+        </div>
+        <div className="preview-signature-area">
+          <span>推荐单位（盖章）：</span>
+          <span>年&nbsp;&nbsp;&nbsp;&nbsp;月&nbsp;&nbsp;&nbsp;&nbsp;日</span>
+        </div>
+      </div>
+      <footer>{pageNumber}</footer>
+    </article>
+  );
+}
+
 function splitPreviewContent(content, maxLength = 1250) {
   const source = String(content || "").trim();
   if (!source) return ["尚未填写。"];
@@ -2592,21 +2897,28 @@ function buildPreviewSections(sourceData) {
     pages.push({
       kind: "text",
       title: "八、附件",
-      body: "推荐函、候选人承诺函及各项证明材料以系统上传附件为准。",
+      body: "科技奖励和荣誉、代表性论文专著、知识产权、科研项目、成果效益及其他证明材料以系统上传附件为准。",
+    });
+    pages.push({
+      kind: "text",
+      title: "九、真实性承诺书",
+      body: "以本章上传 Word 为准。",
+    });
+    pages.push({
+      kind: "text",
+      title: "十、诚信承诺书",
+      body: "以本章上传 Word 为准。",
     });
     return pages;
   }
   const textSections = [
     ["二、项目简介", data.introduction],
     ...profile.detailFields.map(([key, label]) => [
-      `三、${profile.sections.find(([sectionKey]) => sectionKey === "details")?.[1]}（${label}）`,
+      `三、项目详细内容（${label}）`,
       data[key],
     ]),
-    [
-      `四、${profile.sections.find(([sectionKey]) => sectionKey === "comparison")?.[1]}`,
-      data.comparison,
-    ],
-    ["五、应用及效益（应用情况）", data.application],
+    ["三、项目详细内容（4．与当前国内外同类技术的比较）", data.comparison],
+    ["三、项目详细内容（5．应用情况）", data.application],
   ];
   for (const [title, content = ""] of textSections) {
     splitPreviewContent(content).forEach((body, index) => {
@@ -2617,7 +2929,11 @@ function buildPreviewSections(sourceData) {
       });
     });
   }
-  pages.push({ kind: "economic", title: "经济效益数据", data });
+  pages.push({
+    kind: "economic",
+    title: "三、项目详细内容（6．经济效益）",
+    data,
+  });
   splitPreviewContent(data.social).forEach((body, index) =>
     pages.push({
       kind: "text",
@@ -2677,9 +2993,34 @@ function buildPreviewSections(sourceData) {
     }),
   );
   pages.push({
-    kind: "text",
+    kind: "recommendation",
     title: "八、申报、推荐单位意见",
-    body: "签章意见以系统上传附件为准。",
+    body: data.recommendation,
+  });
+  pages.push({
+    kind: "text",
+    title: "九、专家推荐意见",
+    body: "以本章上传 Word 为准。",
+  });
+  pages.push({
+    kind: "text",
+    title: "十、附件目录",
+    body: "证明材料以系统上传附件为准。",
+  });
+  pages.push({
+    kind: "text",
+    title: "十一、真实性承诺书",
+    body: "以本章上传 Word 为准。",
+  });
+  pages.push({
+    kind: "text",
+    title: "十二、不涉密承诺函",
+    body: "以本章上传 Word 为准。",
+  });
+  pages.push({
+    kind: "text",
+    title: "十三、诚信承诺书",
+    body: "以本章上传 Word 为准。",
   });
   return pages;
 }
@@ -2695,10 +3036,14 @@ function PreviewDialog({
   const [exporting, setExporting] = useState(false);
   const previewPages = useMemo(() => buildPreviewSections(data), [data]);
   const pageCount = previewPages.length + 1;
-  const exportPdf = async () => {
+  const exportSelectedPdf = async (label, selector, fileSuffix) => {
     setExporting(true);
     try {
-      const pages = [...pagesRef.current.querySelectorAll(".preview-page")];
+      const pages = [...pagesRef.current.querySelectorAll(selector)];
+      if (!pages.length) {
+        window.alert(`当前暂无可导出的${label}内容`);
+        return;
+      }
       const pdf = new jsPDF({
         orientation: "portrait",
         unit: "mm",
@@ -2720,11 +3065,15 @@ function PreviewDialog({
           297,
         );
       }
-      pdf.save(`${data.projectName || "中国节能协会创新奖申报书"}-预览.pdf`);
+      pdf.save(
+        `${data.projectName || "中国节能协会创新奖"}-${fileSuffix}-盖章版.pdf`,
+      );
     } finally {
       setExporting(false);
     }
   };
+  const exportPdf = () =>
+    exportSelectedPdf("申报书", ".preview-page", "申报书");
   return (
     <div className="preview-shell">
       <div className="preview-toolbar">
@@ -2751,6 +3100,49 @@ function PreviewDialog({
             )}
             {exporting ? "正在生成" : "导出系统生成 PDF"}
           </button>
+          <div className="seal-export-menu" aria-label="独立盖章导出">
+            <span>独立盖章导出</span>
+            <button
+              className="secondary-button"
+              disabled={exporting}
+              onClick={() =>
+                exportSelectedPdf("首页", ".preview-page:first-child", "首页")
+              }
+            >
+              首页
+            </button>
+            <button
+              className="secondary-button"
+              disabled={exporting}
+              onClick={() =>
+                exportSelectedPdf("完成人", ".preview-person-page", "完成人")
+              }
+            >
+              完成人
+            </button>
+            <button
+              className="secondary-button"
+              disabled={exporting}
+              onClick={() =>
+                exportSelectedPdf("完成单位", ".preview-unit-page", "完成单位")
+              }
+            >
+              完成单位
+            </button>
+            <button
+              className="secondary-button"
+              disabled={exporting}
+              onClick={() =>
+                exportSelectedPdf(
+                  "申报推荐单位意见",
+                  ".preview-recommendation-page",
+                  "申报推荐单位意见",
+                )
+              }
+            >
+              申报推荐单位意见
+            </button>
+          </div>
           {sourceFile && (
             <a
               className="primary-button"
@@ -2849,6 +3241,15 @@ function PreviewDialog({
                 <PreviewUnitPage
                   key={page.unit.id}
                   {...page}
+                  pageNumber={pageNumber}
+                />
+              );
+            }
+            if (page.kind === "recommendation") {
+              return (
+                <PreviewRecommendationPage
+                  key={`recommendation-${index}`}
+                  body={page.body}
                   pageNumber={pageNumber}
                 />
               );
@@ -3735,7 +4136,7 @@ function Dashboard({ onOpen, user, onLogout }) {
 }
 
 function EditorApp({ application, onHome }) {
-  const [disciplineRecords, setDisciplineRecords] = useState([]);
+  const disciplineRecords = awardDisciplines;
   const [data, setData] = useState(() => {
     const stored = application.data || {};
     let localDraft = {};
@@ -3772,15 +4173,6 @@ function EditorApp({ application, onHome }) {
     normalized.candidate = { ...emptyCandidate, ...normalized.candidate };
     return normalized;
   });
-  useEffect(() => {
-    let active = true;
-    import("./data/disciplines.js").then(({ disciplines: records }) => {
-      if (active) setDisciplineRecords(records);
-    });
-    return () => {
-      active = false;
-    };
-  }, []);
   const [active, setActive] = useState("basic");
   const [saveState, setSaveState] = useState("saved");
   const [savedAt, setSavedAt] = useState("");
@@ -3788,15 +4180,14 @@ function EditorApp({ application, onHome }) {
     getAwardProfile(application.award_type || application.data?.awardType)
       .mode === "project" && application.data?.workflowMode === "document",
   );
-  const [showWordImport, setShowWordImport] = useState(false);
+  const [wordImportSection, setWordImportSection] = useState(null);
   const [showPreview, setShowPreview] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sourceFile, setSourceFile] = useState(null);
   const [applicationFiles, setApplicationFiles] = useState([]);
   const awardProfile = getAwardProfile(data.awardType);
   const sections = useMemo(
-    () =>
-      getAwardSections(data.awardType).map(({ key, label }) => [key, label]),
+    () => getAwardSections(data.awardType),
     [data.awardType],
   );
   const autosaveTimer = useRef(null);
@@ -3809,13 +4200,15 @@ function EditorApp({ application, onHome }) {
       `/api/applications/${application.id}/files`,
     );
     const payload = await response.json();
-    if (payload.ok) {
-      setApplicationFiles(payload.list || []);
-      setSourceFile(
-        (payload.list || []).find((file) => file.file_type === "source_pdf") ||
-          null,
-      );
+    if (!response.ok || !payload.ok) {
+      throw new Error(payload.message || "附件清单加载失败");
     }
+    const files = payload.list || [];
+    setApplicationFiles(files);
+    setSourceFile(
+      files.find((file) => file.file_type === "source_pdf") || null,
+    );
+    return files;
   };
   const saveToDatabase = (nextData = latestData.current) => {
     const snapshot = normalizeApplicationData(structuredClone(nextData));
@@ -3847,6 +4240,22 @@ function EditorApp({ application, onHome }) {
     return saveQueue.current;
   };
   const submitApplication = async () => {
+    let currentFiles;
+    try {
+      currentFiles = await loadSourceFile();
+    } catch (error) {
+      window.alert(error.message);
+      return;
+    }
+    const validationErrors = validateApplication({
+      data,
+      awardType: awardProfile.value,
+      files: currentFiles,
+    });
+    if (validationErrors.length) {
+      showValidationErrors(validationErrors, "提交前请完善以下内容");
+      return;
+    }
     await saveToDatabase(data);
     const response = await apiFetch(
       `/api/applications/${application.id}/submit`,
@@ -3874,7 +4283,7 @@ function EditorApp({ application, onHome }) {
     return () => clearTimeout(autosaveTimer.current);
   }, [data]);
   useEffect(() => {
-    loadSourceFile();
+    loadSourceFile().catch(() => {});
     const flush = () => {
       clearTimeout(autosaveTimer.current);
       fetch(`/api/applications/${application.id}`, {
@@ -3909,6 +4318,10 @@ function EditorApp({ application, onHome }) {
       (records || []).some((record) =>
         getPdfFields(group).some((field) => hasContent(record?.[field.key])),
       );
+    const hasSectionWord = (key) =>
+      applicationFiles.some(
+        (file) => file.file_type === `section_word:${awardProfile.code}:${key}`,
+      );
     if (awardProfile.code === "achievement") {
       return {
         basic: [
@@ -3923,16 +4336,14 @@ function EditorApp({ application, onHome }) {
         research: hasRecord(data.researchRecords, "researchRecords"),
         engineering: hasRecord(data.engineeringRecords, "engineeringRecords"),
         transformation: hasContent(data.transformation),
-        recommendation: awardProfile.recommendationMaterials.every(
-          ([category]) =>
-            applicationFiles.some((file) => file.file_type === category),
-        ),
         attachments: awardProfile.requiredAttachmentGroups.every(
           ({ categories }) =>
             categories.some((category) =>
               applicationFiles.some((file) => file.file_type === category),
             ),
         ),
+        authenticity: hasSectionWord("authenticity"),
+        integrity: hasSectionWord("integrity"),
       };
     }
     const hasCompleteSourcePdf =
@@ -3955,11 +4366,13 @@ function EditorApp({ application, onHome }) {
         data.units?.length,
       ].every(hasContent),
       introduction: hasContent(data.introduction),
-      details: [data.background, data.technicalContent, data.innovations].every(
-        hasContent,
-      ),
-      comparison: hasContent(data.comparison),
-      application: hasContent(data.application),
+      details: [
+        data.background,
+        data.technicalContent,
+        data.innovations,
+        data.comparison,
+        data.application,
+      ].every(hasContent),
       awards: hasRecord(data.awardRecords, "awardRecords"),
       ip:
         hasRecord(data.ipRecords, "ipRecords") ||
@@ -3979,24 +4392,72 @@ function EditorApp({ application, onHome }) {
             hasContent(typeof unit === "string" ? unit : unit?.name) &&
             hasContent(typeof unit === "string" ? "" : unit?.contribution),
         ),
-      recommendation:
+      unitRecommendation:
+        hasCompleteSourcePdf || hasSectionWord("unitRecommendation"),
+      expertRecommendation: hasSectionWord("expertRecommendation"),
+      attachments:
         hasCompleteSourcePdf ||
-        awardProfile.recommendationMaterials.every(([category]) =>
-          applicationFiles.some((file) => file.file_type === category),
-        ),
-      attachments: applicationFiles.some(
-        (file) =>
-          file.file_type === "source_pdf" ||
-          awardProfile.attachmentMaterials.some(
-            ([category]) => category === file.file_type,
+        awardProfile.requiredAttachmentGroups.every(({ categories }) =>
+          categories.some((category) =>
+            applicationFiles.some((file) => file.file_type === category),
           ),
-      ),
+        ),
+      authenticity: hasSectionWord("authenticity"),
+      confidentiality: hasSectionWord("confidentiality"),
+      integrity: hasSectionWord("integrity"),
     };
   }, [applicationFiles, awardProfile.code, data]);
   const completeCount = sections.filter(
-    ([key]) => sectionCompletion[key],
+    ({ key }) => sectionCompletion[key],
   ).length;
   const completion = Math.round((completeCount / sections.length) * 100);
+  const showValidationErrors = (errors, heading) => {
+    if (!errors.length) return false;
+    const firstSection = errors[0].sectionKey;
+    if (sections.some(({ key }) => key === firstSection))
+      setActive(firstSection);
+    const visibleErrors = errors
+      .slice(0, 8)
+      .map(({ message }) => `- ${message}`);
+    if (errors.length > visibleErrors.length) {
+      visibleErrors.push(
+        `- 另有 ${errors.length - visibleErrors.length} 项待完善`,
+      );
+    }
+    window.alert(`${heading}：\n${visibleErrors.join("\n")}`);
+    return true;
+  };
+  const openPreview = async () => {
+    let currentFiles;
+    try {
+      currentFiles = await loadSourceFile();
+    } catch (error) {
+      window.alert(error.message);
+      return;
+    }
+    const errors = validateApplication({
+      data,
+      awardType: awardProfile.value,
+      files: currentFiles,
+    });
+    if (showValidationErrors(errors, "生成预览前请完善以下内容")) return;
+    setShowPreview(true);
+  };
+  const continueFromSection = () => {
+    const errors = validateSection({
+      data,
+      sectionKey: active,
+      awardType: awardProfile.value,
+      files: applicationFiles,
+    });
+    if (showValidationErrors(errors, "本页尚未完成")) return;
+    if (active === sections.at(-1)?.key) {
+      submitApplication();
+      return;
+    }
+    const index = sections.findIndex(({ key }) => key === active);
+    if (index < sections.length - 1) setActive(sections[index + 1].key);
+  };
   const applyImport = (fields, result) => {
     setData((current) => normalizeApplicationData({ ...current, ...fields }));
     if (result?.sourceFile) {
@@ -4012,11 +4473,49 @@ function EditorApp({ application, onHome }) {
     }
     setShowImport(false);
   };
-  const applyWordImport = async (fields) => {
-    const nextData = normalizeApplicationData({ ...data, ...fields });
+  const applyWordImport = async (fields, _result, file) => {
+    if (!wordImportSection || !file) throw new Error("未找到待保存的章节 Word");
+    const category = `section_word:${awardProfile.code}:${wordImportSection.key}`;
+    const body = new FormData();
+    body.append("file", file);
+    body.append("category", category);
+    const uploadResponse = await apiFetch(
+      `/api/applications/${application.id}/files`,
+      { method: "POST", body },
+    );
+    const uploadPayload = await uploadResponse.json();
+    if (!uploadResponse.ok || !uploadPayload.ok)
+      throw new Error(uploadPayload.message || "章节 Word 保存失败");
+
+    const directFields = {};
+    const candidateFields = {};
+    Object.entries(fields).forEach(([key, value]) => {
+      if (key.startsWith("candidate.")) candidateFields[key.slice(10)] = value;
+      else directFields[key] = value;
+    });
+    const nextData = normalizeApplicationData({
+      ...data,
+      ...directFields,
+      candidate: { ...data.candidate, ...candidateFields },
+    });
     await saveToDatabase(nextData);
     setData(nextData);
+    const previousFiles = applicationFiles.filter(
+      (existing) =>
+        existing.file_type === category &&
+        existing.id !== uploadPayload.file.id,
+    );
+    await Promise.allSettled(
+      previousFiles.map((existing) =>
+        apiFetch(`/api/applications/${application.id}/files/${existing.id}`, {
+          method: "DELETE",
+        }),
+      ),
+    );
+    await loadSourceFile();
   };
+  const currentSection =
+    sections.find((section) => section.key === active) || sections[0];
   const currentContent = () => {
     if (active === "basic")
       return (
@@ -4024,6 +4523,7 @@ function EditorApp({ application, onHome }) {
           data={data}
           setField={setField}
           disciplineRecords={disciplineRecords}
+          applicationId={application.id}
         />
       );
     if (awardProfile.code === "achievement") {
@@ -4031,10 +4531,11 @@ function EditorApp({ application, onHome }) {
         return (
           <RecordsSection
             number={2}
-            title="所获科技奖励和荣誉称号"
+            title="所获与节能减排相关科技奖励和荣誉称号情况"
             group="awardRecords"
             records={data.awardRecords}
             onChange={(value) => setField("awardRecords", value)}
+            fields={achievementRecordFields.honors}
             addLabel="添加奖励或荣誉"
             emptyLabel="暂无奖励或荣誉记录"
           />
@@ -4043,10 +4544,12 @@ function EditorApp({ application, onHome }) {
         return (
           <RecordsSection
             number={3}
-            title="发表论文和专著情况"
+            title="发表节能减排相关论文和专著情况"
             group="paperRecords"
             records={data.paperRecords}
             onChange={(value) => setField("paperRecords", value)}
+            fields={achievementRecordFields.publications}
+            showIndex
             addLabel="添加论文或专著"
             emptyLabel="暂无论文或专著记录，代表性成果不超过 10 篇（册）"
           />
@@ -4059,6 +4562,8 @@ function EditorApp({ application, onHome }) {
             type="ip"
             records={data.ipRecords}
             onChange={(value) => setField("ipRecords", value)}
+            fields={achievementRecordFields.achievementIp}
+            showIndex
             addLabel="添加知识产权"
             emptyLabel="暂无知识产权记录，代表性知识产权不超过 10 项"
           />
@@ -4067,10 +4572,12 @@ function EditorApp({ application, onHome }) {
         return (
           <RecordsSection
             number={5}
-            title="承担科研项目情况"
+            title="承担节能减排相关的科研项目情况"
             group="researchRecords"
             records={data.researchRecords}
             onChange={(value) => setField("researchRecords", value)}
+            fields={achievementRecordFields.research}
+            showIndex
             addLabel="添加科研项目"
             emptyLabel="暂无科研项目记录"
           />
@@ -4079,10 +4586,11 @@ function EditorApp({ application, onHome }) {
         return (
           <RecordsSection
             number={6}
-            title="参与重大工程技术项目情况"
+            title="参与节能减排相关的重大工程技术项目情况"
             group="engineeringRecords"
             records={data.engineeringRecords}
             onChange={(value) => setField("engineeringRecords", value)}
+            fields={achievementRecordFields.engineering}
             addLabel="添加工程项目"
             emptyLabel="暂无重大工程技术项目记录"
           />
@@ -4092,13 +4600,13 @@ function EditorApp({ application, onHome }) {
           <LongTextSection
             number={7}
             title="科技成果转化及推广情况"
-            description="突出候选人在节能减排领域的核心贡献、成果转化规模和实际效益。"
+            description="限 800 字，阐述本人主导或参与的科技成果转化路径、推广范围、转化效果和行业带动作用。"
             fields={[
               {
                 key: "transformation",
                 label: "科技成果转化及推广情况",
                 required: true,
-                max: 500,
+                max: LONG_TEXT_LIMITS.transformation,
               },
             ]}
             data={data}
@@ -4106,21 +4614,17 @@ function EditorApp({ application, onHome }) {
             applicationId={application.id}
           />
         );
-      if (active === "recommendation")
+      if (active === "attachments")
         return (
-          <RecommendationUploadSection
+          <AttachmentSection
             applicationId={application.id}
+            workflowMode={data.workflowMode}
             awardType={data.awardType}
             onFilesChange={setApplicationFiles}
           />
         );
       return (
-        <AttachmentSection
-          applicationId={application.id}
-          workflowMode={data.workflowMode}
-          awardType={data.awardType}
-          onFilesChange={setApplicationFiles}
-        />
+        <TemplateOnlySection section={currentSection} profile={awardProfile} />
       );
     }
     if (active === "introduction")
@@ -4128,13 +4632,13 @@ function EditorApp({ application, onHome }) {
         <LongTextSection
           number={2}
           title="项目简介"
-          description="简明介绍技术领域、核心内容、关键指标、行业作用及应用推广效果。"
+          description={`${awardProfile.code === "invention" ? "申报技术发明奖" : "申报科技进步奖"}填写：项目所属科学技术领域、核心科技内容、关键技术经济指标、促进行业科技进步的核心作用、实际应用推广范围及效果（限 800 个汉字）。`}
           fields={[
             {
               key: "introduction",
               label: "项目简介",
               required: true,
-              max: 800,
+              max: LONG_TEXT_LIMITS.introduction,
             },
           ]}
           data={data}
@@ -4146,48 +4650,48 @@ function EditorApp({ application, onHome }) {
       return (
         <LongTextSection
           number={3}
-          title={awardProfile.sections.find(([key]) => key === "details")?.[1]}
-          description={awardProfile.comparisonGuidance}
-          fields={awardProfile.detailFields.map(([key, label]) => ({
-            key,
-            label,
-            required: true,
-            max: key === "innovations" ? 800 : undefined,
-          }))}
-          data={data}
-          setField={setField}
-          applicationId={application.id}
-        />
-      );
-    if (active === "comparison")
-      return (
-        <LongTextSection
-          number={4}
-          title={
-            awardProfile.sections.find(([key]) => key === "comparison")?.[1]
-          }
-          description={awardProfile.comparisonGuidance}
+          title="项目详细内容"
+          description="严格按模板 1 至 7 项顺序填写；国内外同类技术比较不超过两页。"
           fields={[
+            ...awardProfile.detailFields.map(([key, label]) => ({
+              key,
+              label,
+              required: true,
+              max: LONG_TEXT_LIMITS[key],
+              hint:
+                {
+                  background: "限 800 字。",
+                  technicalContent:
+                    "纸面不敷可另增页；系统阐述技术原理、研发过程、核心工艺/方法/算法、技术实现路径和关键配套措施。",
+                  innovations:
+                    "逐条列明核心创新点，明确创新类型、具体内容及与现有技术的本质区别，突出节能减排领域独特价值；限 800 字。",
+                }[key] || "",
+            })),
             {
               key: "comparison",
-              label: awardProfile.comparisonLabel,
+              label: "4．与当前国内外同类技术的比较（不超过两页）",
               required: true,
+              hint: "从主要技术参数、节能减排效益、市场竞争力三个维度，对比国内外同类先进技术并明确本项目技术水平定位。",
             },
-          ]}
-          data={data}
-          setField={setField}
-          applicationId={application.id}
-        />
-      );
-    if (active === "application")
-      return (
-        <LongTextSection
-          number={5}
-          title="应用及效益"
-          fields={[
-            { key: "application", label: "应用情况", required: true, max: 800 },
-            { key: "economic", label: "各栏目的计算依据", max: 300 },
-            { key: "social", label: "社会效益", max: 300 },
+            {
+              key: "application",
+              label: "5．应用情况",
+              required: true,
+              max: LONG_TEXT_LIMITS.application,
+              hint: "填写项目应用时间、应用单位数量和范围、实际运行效果、用户反馈、推广前景及已开展的推广措施；限 800 字。",
+            },
+            {
+              key: "economic",
+              label: "6．经济效益：各栏目的计算依据",
+              max: LONG_TEXT_LIMITS.economic,
+              hint: "标准、软科学类项目可不填；金额单位为万元人民币，创收外汇为美元；计算依据限 300 字。",
+            },
+            {
+              key: "social",
+              label: "7．社会效益",
+              max: LONG_TEXT_LIMITS.social,
+              hint: "填写节能减排、环境保护、资源节约、产业升级、就业带动、公共安全、行业标准完善等社会效益；限 300 字。",
+            },
           ]}
           data={data}
           setField={setField}
@@ -4208,22 +4712,12 @@ function EditorApp({ application, onHome }) {
               </Field>
             ),
           }}
-          supplements={{
-            application: (
-              <Field label="主要应用单位情况">
-                <ApplicationUnitsTable
-                  records={data.applicationUnits || []}
-                  onChange={(value) => setField("applicationUnits", value)}
-                />
-              </Field>
-            ),
-          }}
         />
       );
     if (active === "awards")
       return (
         <RecordsSection
-          number={6}
+          number={4}
           title="本项目曾获奖励情况"
           records={data.awardRecords}
           onChange={(value) => setField("awardRecords", value)}
@@ -4232,7 +4726,7 @@ function EditorApp({ application, onHome }) {
     if (active === "ip")
       return (
         <RecordsSection
-          number={7}
+          number={5}
           title="申请、获得知识产权情况表"
           type="ip"
           records={data.ipRecords}
@@ -4240,11 +4734,7 @@ function EditorApp({ application, onHome }) {
           applicationId={application.id}
           supplement={
             <>
-              <PapersTable
-                records={data.paperRecords || []}
-                onChange={(value) => setField("paperRecords", value)}
-              />
-              <Field label="技术评价证明及国家法律法规要求的行业审批文件目录">
+              <Field label="2．技术评价证明及行业审批文件目录">
                 <div className="control-with-count">
                   <RichTextEditor
                     value={data.technicalEvaluation || ""}
@@ -4255,9 +4745,15 @@ function EditorApp({ application, onHome }) {
                   />
                   <CharacterCount
                     value={data.technicalEvaluation || ""}
-                    max={800}
+                    max={LONG_TEXT_LIMITS.technicalEvaluation}
                   />
                 </div>
+              </Field>
+              <Field label="3．应用单位目录">
+                <ApplicationUnitsTable
+                  records={data.applicationUnits || []}
+                  onChange={(value) => setField("applicationUnits", value)}
+                />
               </Field>
             </>
           }
@@ -4267,7 +4763,7 @@ function EditorApp({ application, onHome }) {
       return (
         <EntityEditor
           entityType="people"
-          number={8}
+          number={6}
           value={data.people}
           onChange={(value) => setField("people", value)}
           renderCustomField={({ field, record, index, update }) =>
@@ -4292,7 +4788,7 @@ function EditorApp({ application, onHome }) {
       return (
         <EntityEditor
           entityType="units"
-          number={9}
+          number={7}
           value={data.units}
           onChange={(value) => setField("units", value)}
           renderCustomField={({ field, record, index, update }) =>
@@ -4308,26 +4804,26 @@ function EditorApp({ application, onHome }) {
                   fieldKey={`unit-${record.id || index}-contribution`}
                   label={`${record.name || `第 ${index + 1} 完成单位`}对本项目技术创新和应用的贡献`}
                 />
+                <CharacterCount
+                  value={record.contribution}
+                  max={LONG_TEXT_LIMITS.unitContribution}
+                />
               </div>
             ) : null
           }
         />
       );
-    if (active === "recommendation")
+    if (active === "attachments")
       return (
-        <RecommendationUploadSection
+        <AttachmentSection
           applicationId={application.id}
+          workflowMode={data.workflowMode}
           awardType={data.awardType}
           onFilesChange={setApplicationFiles}
         />
       );
     return (
-      <AttachmentSection
-        applicationId={application.id}
-        workflowMode={data.workflowMode}
-        awardType={data.awardType}
-        onFilesChange={setApplicationFiles}
-      />
+      <TemplateOnlySection section={currentSection} profile={awardProfile} />
     );
   };
   if (showPreview)
@@ -4392,22 +4888,13 @@ function EditorApp({ application, onHome }) {
             项目中心
           </button>
           {awardProfile.mode === "project" && (
-            <>
-              <button
-                className="secondary-button import-button"
-                onClick={() => setShowImport(true)}
-              >
-                <ScanText size={17} />
-                PDF 智能导入
-              </button>
-              <button
-                className="secondary-button import-button"
-                onClick={() => setShowWordImport(true)}
-              >
-                <FileInput size={17} />
-                Word 导入
-              </button>
-            </>
+            <button
+              className="secondary-button import-button"
+              onClick={() => setShowImport(true)}
+            >
+              <ScanText size={17} />
+              PDF 智能导入
+            </button>
           )}
           {sourceFile && (
             <a
@@ -4425,10 +4912,7 @@ function EditorApp({ application, onHome }) {
           >
             <Save size={18} />
           </button>
-          <button
-            className="primary-button"
-            onClick={() => setShowPreview(true)}
-          >
+          <button className="primary-button" onClick={openPreview}>
             <Eye size={17} />
             生成预览
           </button>
@@ -4473,7 +4957,7 @@ function EditorApp({ application, onHome }) {
           </div>
           <nav>
             <p>申报内容</p>
-            {sections.map(([key, label], index) => (
+            {sections.map(({ key, label, number }) => (
               <button
                 type="button"
                 key={key}
@@ -4483,7 +4967,7 @@ function EditorApp({ application, onHome }) {
                   setSidebarOpen(false);
                 }}
               >
-                <span>{index + 1}</span>
+                <span>{number}</span>
                 <b>{label}</b>
                 {sectionCompletion[key] && (
                   <i className="nav-done">
@@ -4524,33 +5008,31 @@ function EditorApp({ application, onHome }) {
               <FolderOpen size={16} />
               <span>申报内容</span>
               <ChevronRight size={14} />
-              <b>{sections.find(([key]) => key === active)?.[1]}</b>
+              <b>{currentSection?.label}</b>
             </div>
             <span className="form-version">表单版本 2026.1</span>
           </div>
+          <SectionTemplateBar
+            applicationId={application.id}
+            section={currentSection}
+            uploadedFile={applicationFiles.find(
+              (file) =>
+                file.file_type ===
+                `section_word:${awardProfile.code}:${currentSection.key}`,
+            )}
+            onUpload={() => setWordImportSection(currentSection)}
+          />
           {currentContent()}
           <div className="bottom-actions">
-            <button
-              className="secondary-button"
-              onClick={() => setShowPreview(true)}
-            >
+            <button className="secondary-button" onClick={openPreview}>
               <Eye size={17} />
               预览当前申报书
             </button>
-            <button
-              className="primary-button"
-              onClick={() => {
-                if (active === "attachments") {
-                  submitApplication();
-                  return;
-                }
-                const index = sections.findIndex(([key]) => key === active);
-                if (index < sections.length - 1)
-                  setActive(sections[index + 1][0]);
-              }}
-            >
-              {active === "attachments" ? "提交形式审查" : "保存并进入下一项"}
-              {active === "attachments" ? (
+            <button className="primary-button" onClick={continueFromSection}>
+              {active === sections.at(-1)?.key
+                ? "提交形式审查"
+                : "保存并进入下一项"}
+              {active === sections.at(-1)?.key ? (
                 <ShieldCheck size={17} />
               ) : (
                 <ChevronRight size={17} />
@@ -4566,11 +5048,12 @@ function EditorApp({ application, onHome }) {
           onApply={applyImport}
         />
       )}
-      {showWordImport && awardProfile.mode === "project" && (
+      {wordImportSection && (
         <WordImportDialog
           applicationId={application.id}
           currentData={data}
-          onClose={() => setShowWordImport(false)}
+          section={wordImportSection}
+          onClose={() => setWordImportSection(null)}
           onApply={applyWordImport}
         />
       )}

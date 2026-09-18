@@ -6,6 +6,7 @@ import test from "node:test";
 import express from "express";
 import JSZip from "jszip";
 import {
+  extractLegacyWordFields,
   extractWordFields,
   WORD_IMPORT_LIMITS,
   WordImportError,
@@ -21,6 +22,16 @@ import {
   sanitizeApplicationRichTextData,
   sanitizeRichTextHtml,
 } from "../src/editor/rich-text-node.mjs";
+
+test("reads split legacy DOC templates without treating blank guidance as user content", async () => {
+  const buffer = await fsPromises.readFile(
+    path.resolve("节能奖填报材料/科技进步奖/三、项目详细内容.doc"),
+  );
+  const result = await extractLegacyWordFields(buffer, "三、项目详细内容.doc");
+  assert.deepEqual(result.recognized, []);
+  assert.equal(result.structure.headingCount, 1);
+  assert.match(result.warnings[0], /保存原 Word 文件/);
+});
 
 const contentTypes = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
@@ -202,7 +213,7 @@ test("extracts title, heading paragraphs and table fields as review candidates",
   assert.match(result.fields.background, /可回收余热未充分利用/);
   assert.equal(result.fields.contact, "张三");
   assert.equal(result.fields.phone, "13800000000");
-  assert.deepEqual(result.matchStats, { matched: 5, supported: 18 });
+  assert.deepEqual(result.matchStats, { matched: 5, supported: 21 });
   assert.ok(
     result.recognized.every(
       (candidate) => candidate.source && candidate.confidence,
@@ -476,13 +487,13 @@ test("cleans request-scoped temporary files after success and rejection", async 
     assert.equal(payload.code, "macro_document");
     await assertTemporaryRootEmpty(testServer.temporaryRoot);
 
-    const wrongExtension = await uploadDocx(
+    const invalidLegacyDocument = await uploadDocx(
       testServer.baseUrl,
       await createDocx(),
       "legacy.doc",
     );
-    assert.equal(wrongExtension.status, 400);
-    assert.equal((await wrongExtension.json()).code, "word_upload_failed");
+    assert.equal(invalidLegacyDocument.status, 422);
+    assert.equal((await invalidLegacyDocument.json()).code, "invalid_document");
     await assertTemporaryRootEmpty(testServer.temporaryRoot);
 
     const oversizedUpload = Buffer.alloc(WORD_IMPORT_LIMITS.maxFileBytes + 1);
