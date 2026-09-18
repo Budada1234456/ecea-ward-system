@@ -5207,3 +5207,188 @@ select.control {
     grid-column: span 1;
   }
 }
+
+/* Readability and stable A4 export overrides. Keep these rules together so
+   browser preview and html2canvas export share the same document geometry. */
+.application-panel {
+  border-radius: 8px;
+}
+.panel-headline {
+  min-height: 76px;
+  padding: 15px 20px;
+}
+.panel-headline h2 {
+  font-size: 21px;
+}
+.panel-headline > div:first-child span,
+.application-table,
+.application-filters select,
+.search-control {
+  font-size: 15px;
+}
+.application-filters select,
+.search-control {
+  height: 42px;
+}
+.search-control {
+  width: 280px;
+}
+.application-table {
+  min-width: 1180px;
+}
+.application-table th {
+  height: 50px;
+  padding: 10px 11px;
+}
+.application-table td {
+  min-height: 82px;
+  padding: 16px 11px;
+}
+.project-title-cell small {
+  font-size: 12px;
+}
+.table-progress b,
+.status-badge {
+  font-size: 13px;
+}
+.status-badge {
+  padding: 5px 9px;
+}
+
+.preview-pages {
+  padding: 24px max(20px, calc((100vw - 960px) / 2));
+}
+.preview-page {
+  padding: 11mm 12mm 12mm;
+  break-after: page;
+  page-break-after: always;
+}
+.preview-page:last-child {
+  break-after: auto;
+  page-break-after: auto;
+}
+.preview-page table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.preview-page thead {
+  display: table-header-group;
+}
+.preview-page tr,
+.preview-page img,
+.preview-page .preview-subtable,
+.preview-page h3,
+.preview-page h4 {
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+.preview-page th,
+.preview-page td {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.preview-basic-page {
+  padding-left: 12mm;
+  padding-right: 12mm;
+}
+.preview-basic-page header h2 {
+  font-size: 15pt;
+}
+.preview-basic-page .preview-en {
+  font-size: 8.5pt;
+  line-height: 1.2;
+  word-break: break-word;
+}
+.preview-basic-page .preview-date-range-value {
+  min-height: 13mm;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 1.5mm;
+  white-space: normal;
+  line-height: 1.35;
+}
+.preview-basic-page .preview-date-range-value span:last-child {
+  white-space: nowrap;
+}
+.preview-body-text {
+  min-height: 235mm;
+  max-height: 235mm;
+  overflow: hidden;
+  padding: 6mm;
+  font-size: 12pt;
+  line-height: 1.72;
+}
+.preview-rich-text img {
+  max-height: 58mm;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+.preview-cell-rich {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.48;
+}
+.preview-entity-page .preview-contribution-row td {
+  height: 76mm;
+  max-height: 76mm;
+  overflow: hidden;
+}
+.preview-unit-page .preview-unit-contribution td {
+  height: 118mm;
+  max-height: 118mm;
+}
+.preview-unit-page .preview-stamp-block {
+  bottom: 7mm;
+}
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 0;
+  }
+  html,
+  body {
+    margin: 0;
+    background: #fff;
+  }
+  .preview-toolbar,
+  .preview-workspace > aside {
+    display: none !important;
+  }
+  .preview-workspace {
+    display: block;
+  }
+  .preview-pages {
+    padding: 0;
+    overflow: visible;
+  }
+  .preview-page {
+    margin: 0;
+    box-shadow: none;
+    overflow: hidden;
+  }
+}
+
+@media (max-width: 760px) {
+  .panel-headline h2 {
+    font-size: 18px;
+  }
+  .panel-headline > div:first-child span,
+  .application-table,
+  .application-filters select,
+  .search-control {
+    font-size: 14px;
+  }
+  .application-table {
+    min-width: 1080px;
+  }
+  .panel-headline {
+    min-height: 70px;
+    padding: 12px 14px;
+  }
+  .preview-pages {
+    padding: 16px 8px;
+  }
+  .preview-page {
+    transform-origin: top center;
+  }
+}
