@@ -1512,7 +1512,8 @@ function AttachmentSection({
     (file) =>
       file.file_type !== "source_pdf" &&
       !file.file_type.startsWith("content_image:") &&
-      !file.file_type.startsWith("section_word:"),
+      !file.file_type.startsWith("section_word:") &&
+      !file.file_type.startsWith("section_signed:"),
   );
   const sourceFile = files.find((file) => file.file_type === "source_pdf");
   const totalPages = attachmentFiles.reduce(
@@ -1738,7 +1739,16 @@ function TemplateOnlySection({ section, profile }) {
             <li key={detail}>{detail}</li>
           ))}
         </ol>
-        <p>请下载本章原始模板填写；完成后通过上方“上传本章 Word”留存并识别。</p>
+        {section.uploadMode === "signed" ? (
+          <p>
+            请下载本章原始模板填写；完成签字、盖章后，通过上方按钮上传 PDF
+            或清晰扫描图片留存。
+          </p>
+        ) : (
+          <p>
+            请下载本章原始模板填写；完成后通过上方“上传本章 Word”留存并识别。
+          </p>
+        )}
       </div>
     </section>
   );
@@ -1750,8 +1760,13 @@ function SectionTemplateBar({
   uploadedFile,
   onUpload,
 }) {
+  const signedUploadRef = useRef(null);
+  const isSignedUpload = section.uploadMode === "signed";
   return (
-    <section className="section-template-bar" aria-label="本章 Word 模板">
+    <section
+      className="section-template-bar"
+      aria-label={isSignedUpload ? "本章签章文件" : "本章 Word 模板"}
+    >
       <div className="section-template-copy">
         <span className="section-template-icon">
           <FileText size={20} />
@@ -1776,9 +1791,29 @@ function SectionTemplateBar({
           <Download size={16} />
           下载本章模板
         </a>
-        <button className="primary-button" type="button" onClick={onUpload}>
+        {isSignedUpload && (
+          <input
+            ref={signedUploadRef}
+            hidden
+            type="file"
+            accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
+            onChange={(event) => {
+              onUpload(event.target.files?.[0]);
+              event.target.value = "";
+            }}
+          />
+        )}
+        <button
+          className="primary-button"
+          type="button"
+          onClick={() =>
+            isSignedUpload ? signedUploadRef.current?.click() : onUpload()
+          }
+        >
           <Upload size={16} />
-          {uploadedFile ? "重新上传本章 Word" : "上传本章 Word"}
+          {uploadedFile
+            ? `重新上传${isSignedUpload ? "签章文件" : "本章 Word"}`
+            : `上传${isSignedUpload ? "签章文件" : "本章 Word"}`}
         </button>
       </div>
     </section>
@@ -2293,15 +2328,25 @@ function PreviewTextPage({ title, body, pageNumber }) {
   const rich = isHtmlContent(body);
   return (
     <article className="preview-page preview-text-page">
-      <h3>{title}</h3>
-      {rich ? (
-        <div
-          className="preview-body-text preview-rich-text"
-          dangerouslySetInnerHTML={{ __html: sanitizeRichText(body) }}
-        />
-      ) : (
-        <div className="preview-body-text">{body || "尚未填写。"}</div>
-      )}
+      <table className="preview-section-table" aria-label={title}>
+        <tbody>
+          <tr>
+            <th>{title}</th>
+          </tr>
+          <tr>
+            <td>
+              {rich ? (
+                <div
+                  className="preview-body-text preview-rich-text"
+                  dangerouslySetInnerHTML={{ __html: sanitizeRichText(body) }}
+                />
+              ) : (
+                <div className="preview-body-text">{body || "尚未填写。"}</div>
+              )}
+            </td>
+          </tr>
+        </tbody>
+      </table>
       <footer>{pageNumber}</footer>
     </article>
   );
@@ -2505,9 +2550,6 @@ function PreviewEconomicPage({ data, pageNumber }) {
     records.reduce((sum, record) => sum + (Number(record[key]) || 0), 0) || "";
   return (
     <article className="preview-page preview-form-page preview-economic-page">
-      <h3>三、项目详细内容</h3>
-      <h4>6. 经济效益（标准、软科学类项目可以不填此栏）</h4>
-      <p className="preview-table-unit">单位：万元人民币</p>
       <table aria-label="经济效益数据">
         <colgroup>
           {Array.from({ length: amountFields.length + 1 }, (_, index) => (
@@ -2518,6 +2560,12 @@ function PreviewEconomicPage({ data, pageNumber }) {
           ))}
         </colgroup>
         <tbody>
+          <tr className="preview-section-heading-row">
+            <th colSpan={amountFields.length + 1}>
+              三、项目详细内容　6. 经济效益（标准、软科学类项目可以不填此栏）
+              <span className="preview-table-unit">单位：万元人民币</span>
+            </th>
+          </tr>
           <tr>
             <th>项目总投资额</th>
             <td colSpan="2">{data.economicSummary?.totalInvestment || ""}</td>
@@ -2742,12 +2790,10 @@ function PreviewUnitPage({ unit, index, pageNumber }) {
           </tr>
           <tr>
             <th>电子邮箱</th>
-            <td>{unit.email}</td>
-            <td colSpan="2" className="preview-unit-note">
+            <td colSpan="2">{unit.email}</td>
+            <td colSpan="3" className="preview-unit-note">
               注：务必确保以上相关信息完整无误。
             </td>
-            <th>传真</th>
-            <td>{unit.fax}</td>
           </tr>
           <tr className="preview-contribution-row preview-unit-contribution">
             <td colSpan="6">
@@ -2775,28 +2821,43 @@ function PreviewRecommendationPage({ body, pageNumber }) {
   return (
     <article className="preview-page preview-form-page preview-recommendation-page">
       <h3>八、申报、推荐单位意见</h3>
-      <div className="preview-recommendation-block">
-        <h4>申报单位意见</h4>
-        <PreviewRichValue value={body} />
-        <div className="preview-signature-area">
-          <span>申报单位（盖章）：</span>
-          <span>年&nbsp;&nbsp;&nbsp;&nbsp;月&nbsp;&nbsp;&nbsp;&nbsp;日</span>
-        </div>
-      </div>
-      <div className="preview-recommendation-block">
-        <h4>推荐单位推荐意见</h4>
-        <div className="preview-blank-lines">
-          <p>建议奖励等级：□ 一等奖　□ 二等奖　□ 三等奖</p>
-          <p>推荐理由及结论性意见：</p>
-          <i />
-          <i />
-          <i />
-        </div>
-        <div className="preview-signature-area">
-          <span>推荐单位（盖章）：</span>
-          <span>年&nbsp;&nbsp;&nbsp;&nbsp;月&nbsp;&nbsp;&nbsp;&nbsp;日</span>
-        </div>
-      </div>
+      <p className="preview-recommendation-note">（专家推荐不填此栏）</p>
+      <table
+        className="preview-recommendation-table"
+        aria-label="申报、推荐单位意见"
+      >
+        <tbody>
+          <tr>
+            <td>
+              <h4>
+                申报单位意见：（明确表述对项目的真实性、创新性、应用价值的审核意见，及推荐申报的意愿）
+              </h4>
+              <PreviewRichValue value={body} />
+              <div className="preview-signature-area">
+                <span>申报单位公章</span>
+                <span>
+                  年&nbsp;&nbsp;&nbsp;&nbsp;月&nbsp;&nbsp;&nbsp;&nbsp;日
+                </span>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td>
+              <h4>
+                推荐单位推荐意见：（明确推荐等级：□一等奖 □二等奖
+                □三等奖，阐述推荐理由）
+              </h4>
+              <div className="preview-blank-lines" />
+              <div className="preview-signature-area">
+                <span>推荐单位公章</span>
+                <span>
+                  年&nbsp;&nbsp;&nbsp;&nbsp;月&nbsp;&nbsp;&nbsp;&nbsp;日
+                </span>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
       <footer>{pageNumber}</footer>
     </article>
   );
@@ -4318,9 +4379,11 @@ function EditorApp({ application, onHome }) {
       (records || []).some((record) =>
         getPdfFields(group).some((field) => hasContent(record?.[field.key])),
       );
-    const hasSectionWord = (key) =>
+    const hasSectionFile = (key) =>
       applicationFiles.some(
-        (file) => file.file_type === `section_word:${awardProfile.code}:${key}`,
+        (file) =>
+          file.file_type === `section_word:${awardProfile.code}:${key}` ||
+          file.file_type === `section_signed:${awardProfile.code}:${key}`,
       );
     if (awardProfile.code === "achievement") {
       return {
@@ -4342,8 +4405,8 @@ function EditorApp({ application, onHome }) {
               applicationFiles.some((file) => file.file_type === category),
             ),
         ),
-        authenticity: hasSectionWord("authenticity"),
-        integrity: hasSectionWord("integrity"),
+        authenticity: hasSectionFile("authenticity"),
+        integrity: hasSectionFile("integrity"),
       };
     }
     const hasCompleteSourcePdf =
@@ -4393,8 +4456,8 @@ function EditorApp({ application, onHome }) {
             hasContent(typeof unit === "string" ? "" : unit?.contribution),
         ),
       unitRecommendation:
-        hasCompleteSourcePdf || hasSectionWord("unitRecommendation"),
-      expertRecommendation: hasSectionWord("expertRecommendation"),
+        hasCompleteSourcePdf || hasSectionFile("unitRecommendation"),
+      expertRecommendation: hasSectionFile("expertRecommendation"),
       attachments:
         hasCompleteSourcePdf ||
         awardProfile.requiredAttachmentGroups.every(({ categories }) =>
@@ -4402,9 +4465,9 @@ function EditorApp({ application, onHome }) {
             applicationFiles.some((file) => file.file_type === category),
           ),
         ),
-      authenticity: hasSectionWord("authenticity"),
-      confidentiality: hasSectionWord("confidentiality"),
-      integrity: hasSectionWord("integrity"),
+      authenticity: hasSectionFile("authenticity"),
+      confidentiality: hasSectionFile("confidentiality"),
+      integrity: hasSectionFile("integrity"),
     };
   }, [applicationFiles, awardProfile.code, data]);
   const completeCount = sections.filter(
@@ -4504,6 +4567,38 @@ function EditorApp({ application, onHome }) {
       (existing) =>
         existing.file_type === category &&
         existing.id !== uploadPayload.file.id,
+    );
+    await Promise.allSettled(
+      previousFiles.map((existing) =>
+        apiFetch(`/api/applications/${application.id}/files/${existing.id}`, {
+          method: "DELETE",
+        }),
+      ),
+    );
+    await loadSourceFile();
+  };
+  const uploadSignedSection = async (section, file) => {
+    if (!file) return;
+    if (!/\.(pdf|jpe?g|png)$/i.test(file.name)) {
+      window.alert("签字盖章文件仅支持 PDF、JPG、PNG");
+      return;
+    }
+    const category = `section_signed:${awardProfile.code}:${section.key}`;
+    const body = new FormData();
+    body.append("file", file);
+    body.append("category", category);
+    const response = await apiFetch(
+      `/api/applications/${application.id}/files`,
+      { method: "POST", body },
+    );
+    const payload = await response.json();
+    if (!response.ok || !payload.ok) {
+      window.alert(payload.message || "签章文件上传失败");
+      return;
+    }
+    const previousFiles = applicationFiles.filter(
+      (existing) =>
+        existing.file_type === category && existing.id !== payload.file.id,
     );
     await Promise.allSettled(
       previousFiles.map((existing) =>
@@ -5018,9 +5113,15 @@ function EditorApp({ application, onHome }) {
             uploadedFile={applicationFiles.find(
               (file) =>
                 file.file_type ===
-                `section_word:${awardProfile.code}:${currentSection.key}`,
+                  `section_word:${awardProfile.code}:${currentSection.key}` ||
+                file.file_type ===
+                  `section_signed:${awardProfile.code}:${currentSection.key}`,
             )}
-            onUpload={() => setWordImportSection(currentSection)}
+            onUpload={(file) =>
+              currentSection.uploadMode === "signed"
+                ? uploadSignedSection(currentSection, file)
+                : setWordImportSection(currentSection)
+            }
           />
           {currentContent()}
           <div className="bottom-actions">

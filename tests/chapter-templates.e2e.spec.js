@@ -136,18 +136,18 @@ test("split chapter templates download, import and persist independently", async
   await expect(page.locator(".section-template-bar")).toContainText(
     "十三、诚信承诺书.doc",
   );
-  await page.getByRole("button", { name: "上传本章 Word" }).click();
+  await expect(
+    page.getByRole("button", { name: "上传签章文件" }),
+  ).toBeVisible();
   await page
-    .locator('.import-dialog input[type="file"]')
+    .locator('.section-template-bar input[type="file"]')
     .setInputFiles(
-      path.resolve("节能奖填报材料/科技进步奖/十三、诚信承诺书.doc"),
+      path.resolve(
+        "节能奖填报材料/附件3.中国节能协会创新奖申报书填写说明-1.pdf",
+      ),
     );
-  await expect(page.getByText("本章没有可自动回填的在线字段")).toBeVisible();
-  await page.getByRole("button", { name: "保存章节 Word" }).click();
-  await expect(page.getByText("章节 Word 已保存")).toBeVisible();
-  await page.getByRole("button", { name: "完成", exact: true }).click();
   await expect(page.locator(".section-word-status")).toContainText(
-    "十三、诚信承诺书.doc",
+    "附件3.中国节能协会创新奖申报书填写说明-1.pdf",
   );
 
   await page.setViewportSize({ width: 390, height: 844 });

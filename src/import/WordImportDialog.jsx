@@ -216,12 +216,8 @@ export function WordImportDialog({
       const sectionCandidates = (payload.recognized || []).filter((candidate) =>
         section?.allowedFieldKeys?.includes(candidate.key),
       );
-      const defaults = sectionCandidates
-        .filter(
-          (candidate) =>
-            !displayValue(valueAt(currentData, candidate.key)).trim(),
-        )
-        .map((candidate) => candidate.key);
+      // Chapter uploads are the source of truth for recognized fields.
+      const defaults = sectionCandidates.map((candidate) => candidate.key);
       setSelectedFields(defaults);
       const matched = sectionCandidates.length;
       const supported = section?.allowedFieldKeys?.length || 0;

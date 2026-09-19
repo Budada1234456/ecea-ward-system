@@ -106,9 +106,12 @@ export function createWordImportRouter({
 
         const buffer = await fsPromises.readFile(temporaryPath);
         const originalName = normalizeUploadedName(request.file.originalname);
+        const extractOptions = {
+          sectionKey: String(request.body.sectionKey || ""),
+        };
         const result = originalName.toLowerCase().endsWith(".docx")
-          ? await extractFields(buffer, originalName)
-          : await extractLegacyFields(buffer, originalName);
+          ? await extractFields(buffer, originalName, extractOptions)
+          : await extractLegacyFields(buffer, originalName, extractOptions);
         return response.json({ ok: true, ...result });
       } catch (error) {
         const status = error instanceof WordImportError ? 422 : 500;

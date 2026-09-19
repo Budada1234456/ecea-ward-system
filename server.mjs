@@ -1484,8 +1484,12 @@ app.post(
     const profile = getAwardProfile(exists.award_type);
     const isContentImage = category.startsWith("content_image:");
     const isSectionWord = category.startsWith("section_word:");
+    const isSignedSection = category.startsWith("section_signed:");
     const validSectionWord = new RegExp(
       `^section_word:${profile.code}:[a-zA-Z]+$`,
+    ).test(category);
+    const validSignedSection = new RegExp(
+      `^section_signed:${profile.code}:(authenticity|confidentiality|integrity)$`,
     ).test(category);
     const allowedCategories = new Set([
       ...profile.recommendationMaterials.map(([value]) => value),
@@ -1494,7 +1498,8 @@ app.post(
     if (
       !isContentImage &&
       !allowedCategories.has(category) &&
-      !validSectionWord
+      !validSectionWord &&
+      !validSignedSection
     ) {
       await fsPromises.unlink(req.file.path).catch(() => {});
       return res.status(422).json({ ok: false, message: "附件类别无效" });
@@ -1517,7 +1522,18 @@ app.post(
       });
     }
     if (
+      isSignedSection &&
+      ![".pdf", ".jpg", ".jpeg", ".png"].includes(extension)
+    ) {
+      await fsPromises.unlink(req.file.path).catch(() => {});
+      return res.status(422).json({
+        ok: false,
+        message: "签字盖章文件仅支持 PDF、JPG、PNG",
+      });
+    }
+    if (
       !isSectionWord &&
+      !isSignedSection &&
       !isContentImage &&
       ![".pdf", ".jpg", ".jpeg", ".png"].includes(extension)
     ) {
@@ -1557,6 +1573,7 @@ app.post(
       profile.mode === "project" &&
       !isContentImage &&
       !isSectionWord &&
+      !isSignedSection &&
       category !== "source_pdf";
     if (shouldLimitPages) {
       const currentPages = Number(
