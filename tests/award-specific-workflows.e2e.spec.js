@@ -477,10 +477,14 @@ test("each award loads its own form, validation and preview profile", async ({
     for await (const chunk of stream) downloadedBytes += chunk.length;
     expect(download.suggestedFilename()).toMatch(/\.pdf$/i);
     expect(downloadedBytes).toBeGreaterThan(10_000);
-    await page.screenshot({
-      path: "test-results/award-achievement-preview.png",
-      fullPage: true,
-    });
+    const previewPages = page.locator(".preview-page");
+    const previewScreenshotCount = Math.min(await previewPages.count(), 5);
+    for (let index = 0; index < previewScreenshotCount; index += 1) {
+      await previewPages.nth(index).screenshot({
+        path: `test-results/award-achievement-preview-page-${index + 1}.png`,
+        style: ".preview-toolbar { visibility: hidden !important; }",
+      });
+    }
     await page.getByRole("button", { name: "返回填写" }).click();
     await page.getByRole("button", { name: "项目中心" }).click();
 

@@ -1764,6 +1764,38 @@ button {
   padding: 10px 12px;
   min-width: 0;
 }
+.ip-directory-grid {
+  overflow: hidden;
+  border: 1px solid #d9dfe7;
+  border-radius: 5px;
+  background: #fff;
+}
+.ip-directory-row {
+  display: grid;
+  grid-template-columns: 190px minmax(0, 1fr);
+  min-height: 58px;
+  border-bottom: 1px solid #e1e5eb;
+}
+.ip-directory-row:last-child {
+  border-bottom: 0;
+}
+.ip-directory-label {
+  padding: 17px 14px;
+  border-right: 1px solid #e1e5eb;
+  color: #3f4c5f;
+  background: #f8f9fb;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.55;
+  text-align: right;
+}
+.ip-directory-content {
+  min-width: 0;
+  padding: 10px 12px;
+}
+.ip-directory-content > .structured-table {
+  margin: 0;
+}
 .field-hint {
   margin: 7px 1px 0;
   font-size: 11px;
@@ -4021,6 +4053,10 @@ select.control {
   border-collapse: collapse;
   table-layout: fixed;
 }
+.preview-introduction-page .preview-section-table {
+  /* Keep every project-introduction continuation frame equally tall. */
+  height: 257mm;
+}
 .preview-section-table th,
 .preview-section-table td {
   border: 1px solid #777;
@@ -4630,6 +4666,12 @@ select.control {
 .preview-ip-page .preview-subtable {
   margin-bottom: 0;
 }
+.preview-ip-page > h3 {
+  margin-bottom: 5mm;
+  font-size: 16pt;
+  font-weight: 700;
+  text-align: center;
+}
 .preview-ip-page .preview-subtable > h4 {
   margin: 0;
   padding: 3mm 2mm;
@@ -4647,11 +4689,11 @@ select.control {
   height: 13mm;
   padding: 1mm;
 }
-.preview-ip-page .preview-ip-description {
-  min-height: 38mm;
-  padding: 3mm;
-  border: 0.18mm solid #222;
-  line-height: 1.6;
+.preview-ip-page .preview-technical-evaluation thead th {
+  height: 12mm;
+}
+.preview-ip-page .preview-technical-evaluation tbody td {
+  height: 12mm;
 }
 .preview-economic-page > h3 {
   display: none;
@@ -5048,11 +5090,23 @@ select.control {
   .field-row {
     grid-template-columns: 1fr;
   }
+  .ip-directory-row {
+    grid-template-columns: 1fr;
+  }
   .field-label {
     border-right: 0;
     border-bottom: 1px solid #e6e9ee;
     text-align: left;
     padding: 9px 11px;
+  }
+  .ip-directory-label {
+    padding: 9px 11px;
+    border-right: 0;
+    border-bottom: 1px solid #e6e9ee;
+    text-align: left;
+  }
+  .ip-directory-content {
+    padding: 10px 11px;
   }
   .check-grid {
     grid-template-columns: 1fr;
@@ -5660,5 +5714,106 @@ select.control {
   }
   .preview-page {
     transform-origin: top center;
+  }
+}
+
+/* Portal readability adjustments */
+.dashboard-title-row p {
+  font-size: 13px;
+}
+.dashboard-title-row h1 {
+  font-size: 26px;
+}
+.portal-notice .notice-title span {
+  font-size: 12px;
+}
+.portal-notice .notice-title b {
+  font-size: 15px;
+}
+.portal-notice ol {
+  font-size: 13px;
+  line-height: 1.85;
+}
+.portal-notice p {
+  font-size: 12px;
+}
+.portal-tip {
+  font-size: 13px;
+}
+
+.announcement-page-title p {
+  font-size: 13px;
+}
+.announcement-page-title h1 {
+  font-size: 26px;
+}
+.announcement-page-title > div > span {
+  font-size: 13px;
+  line-height: 1.65;
+}
+.announcement-source-banner {
+  font-size: 13px;
+}
+.notice-article .notice-type {
+  font-size: 12px;
+}
+.notice-article .notice-article-head h2 {
+  font-size: 18px;
+}
+.notice-article .notice-article-head p {
+  font-size: 12px;
+}
+.notice-article .notice-section h3 {
+  font-size: 16px;
+}
+.notice-article .notice-section > p {
+  font-size: 13px;
+  line-height: 1.85;
+}
+.notice-article .award-rule-grid span {
+  font-size: 11px;
+}
+.notice-article .award-rule-grid b {
+  font-size: 14px;
+}
+.notice-article .award-rule-grid p {
+  font-size: 12px;
+}
+.notice-article .two-column-copy b {
+  font-size: 14px;
+}
+.notice-article .two-column-copy ol {
+  font-size: 12px;
+  line-height: 1.9;
+}
+.notice-article .schedule-list i {
+  font-size: 11px;
+}
+.notice-article .schedule-list b {
+  font-size: 13px;
+}
+.notice-article .schedule-list small {
+  font-size: 11px;
+}
+.notice-article .schedule-list strong {
+  font-size: 13px;
+}
+.notice-article .format-facts b {
+  font-size: 14px;
+}
+.notice-article .format-facts small {
+  font-size: 12px;
+}
+.notice-article + .contact-strip span {
+  font-size: 12px;
+}
+.notice-article + .contact-strip b {
+  font-size: 13px;
+}
+
+@media (max-width: 760px) {
+  .dashboard-title-row h1,
+  .announcement-page-title h1 {
+    font-size: 21px;
   }
 }

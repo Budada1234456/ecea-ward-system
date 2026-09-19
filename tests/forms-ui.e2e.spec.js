@@ -338,25 +338,34 @@ test("structured forms, entity ordering and discipline tree work responsively", 
     await expect(awardPreview).not.toContainText("序号");
     await expect(awardPreview).toContainText("授奖部门（组织）");
     await expect(
-      page.getByRole("table", { name: "五、申请、获得知识产权情况表" }),
+      page.getByRole("table", { name: "1. 知识产权证明目录" }),
     ).toContainText("CN-LEGACY-1");
     await expect(
       page
-        .getByRole("table", { name: "五、申请、获得知识产权情况表" })
+        .getByRole("table", { name: "1. 知识产权证明目录" })
         .locator("thead th"),
     ).toHaveCount(5);
     await expect(
-      page.getByLabel("五、技术评价证明及国家法律法规要求的行业审批文件目录"),
-    ).toBeVisible();
-    await expect(page.getByRole("table", { name: "五、论著" })).toContainText(
-      "节能技术论著",
-    );
+      page
+        .getByRole("table", { name: "2. 技术评价证明及行业审批文件目录" })
+        .locator("thead th"),
+    ).toHaveText(["文件名称", "出具单位", "出具时间", "文件编号"]);
+    await expect(page.getByRole("table", { name: "五、论著" })).toHaveCount(0);
     await expect(
-      page.getByRole("table", { name: "五、应用单位目录" }),
+      page.getByRole("table", { name: "3. 应用单位目录" }),
     ).toContainText("示范应用单位");
     await expect(
-      page.getByRole("table", { name: "五、应用单位目录" }).locator("thead th"),
-    ).toHaveCount(7);
+      page.getByRole("table", { name: "3. 应用单位目录" }).locator("thead th"),
+    ).toHaveCount(4);
+    await expect(
+      page.getByRole("heading", {
+        name: "五、申请、获得知识产权情况表",
+        exact: true,
+      }),
+    ).toHaveCount(1);
+    await expect(
+      page.getByRole("heading", { name: "五、应用单位目录", exact: true }),
+    ).toHaveCount(0);
     const personPreview = page.getByRole("table", {
       name: "第 1 完成人情况表",
     });
@@ -404,10 +413,14 @@ test("structured forms, entity ordering and discipline tree work responsively", 
           .filter(({ horizontal, vertical }) => horizontal > 1 || vertical > 1),
       );
     expect(overflowingPreviewPages).toEqual([]);
-    await page.screenshot({
-      path: "test-results/forms-preview-desktop.png",
-      fullPage: true,
-    });
+    const previewPages = page.locator(".preview-page");
+    const previewScreenshotCount = Math.min(await previewPages.count(), 5);
+    for (let index = 0; index < previewScreenshotCount; index += 1) {
+      await previewPages.nth(index).screenshot({
+        path: `test-results/forms-preview-page-${index + 1}.png`,
+        style: ".preview-toolbar { visibility: hidden !important; }",
+      });
+    }
     const downloadPromise = page.waitForEvent("download");
     await page.getByRole("button", { name: "导出系统生成 PDF" }).click();
     const pdfDownload = await downloadPromise;

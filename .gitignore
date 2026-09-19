@@ -5,7 +5,7 @@ test-results/
 playwright-report/
 
 # Runtime data contains accounts, applications, uploads and local credentials.
-data/
+/data/
 
 # Source application materials may contain personal or confidential data.
 节能奖填报材料/

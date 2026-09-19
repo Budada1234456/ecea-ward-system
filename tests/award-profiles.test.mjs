@@ -72,7 +72,7 @@ test("project awards share a skeleton but keep distinct guidance and limits", ()
   assert.equal(getAwardSections(progress.value).length, 13);
   assert.equal(
     getAwardSections(invention.value)[12].templateFile,
-    "十三、诚信承诺书.doc",
+    "十三、诚信承诺书.docx",
   );
 });
 

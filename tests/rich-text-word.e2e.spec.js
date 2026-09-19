@@ -242,6 +242,72 @@ test("extracts and deduplicates completed-unit table candidates", async () => {
   assert.equal(result.fields.units[0].name, "某某单位");
 });
 
+test("extracts completed intellectual-property chapter tables", async () => {
+  const cell = (value) =>
+    `<w:tc><w:p><w:r><w:t>${value}</w:t></w:r></w:p></w:tc>`;
+  const row = (...values) => `<w:tr>${values.map(cell).join("")}</w:tr>`;
+  const ipDocument = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    <w:p><w:r><w:rPr><w:b/></w:rPr><w:t>五、申请、获得知识产权情况表</w:t></w:r></w:p>
+    <w:tbl>
+      ${row("1.知识产权证明目录")}
+      ${row("授权（申请）项目名称", "知识产权类别", "国（区）别", "申请号", "授权号")}
+      ${row("余热回收控制方法", "发明专利", "中国", "CN202610001", "ZL202610001")}
+      ${row("2.技术评价证明及行业审批文件目录")}
+      ${row("文件名称", "出具单位", "出具时间", "文件编号")}
+      ${row("科技成果评价报告", "中国节能协会", "2026-08", "评价字第001号")}
+      ${row("3.应用单位目录")}
+      ${row("应用单位名称", "应用起始时间", "联系人及电话", "使用本项目产生的经济效益（万元）")}
+      ${row("节能示范有限公司", "2025-01", "李工 13800000000", "860")}
+    </w:tbl>
+    <w:sectPr/>
+  </w:body>
+</w:document>`;
+  const result = await extractWordFields(
+    await createDocx({ documentContent: ipDocument }),
+    "五、申请、获得知识产权情况表.docx",
+    { sectionKey: "ip" },
+  );
+
+  assert.deepEqual(result.fields.ipRecords, [
+    {
+      name: "余热回收控制方法",
+      type: "发明专利",
+      country: "中国",
+      applicationNumber: "CN202610001",
+      authorizationNumber: "ZL202610001",
+    },
+  ]);
+  assert.match(result.fields.technicalEvaluation, /科技成果评价报告/);
+  assert.match(result.fields.technicalEvaluation, /评价字第001号/);
+  assert.deepEqual(result.fields.applicationUnits, [
+    {
+      unitName: "节能示范有限公司",
+      startDate: "2025-01",
+      contactPhone: "李工 13800000000",
+      economicBenefit: "860",
+    },
+  ]);
+  assert.equal(result.fields.projectName, undefined);
+});
+
+test("does not treat a blank intellectual-property chapter title as a project name", async () => {
+  const buffer = await fsPromises.readFile(
+    path.resolve(
+      "节能奖填报材料/科技进步奖/五、申请、获得知识产权情况表.docx",
+    ),
+  );
+  const result = await extractWordFields(
+    buffer,
+    "五、申请、获得知识产权情况表.docx",
+    { sectionKey: "ip" },
+  );
+
+  assert.deepEqual(result.recognized, []);
+  assert.equal(result.fields.projectName, undefined);
+});
+
 test("keeps merged project and person-detail tables from creating false records", async () => {
   const complexDocument = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">

@@ -2030,8 +2030,20 @@ app.get("/api/health", (_req, res) => {
 });
 
 if (process.argv.includes("--serve")) {
+  const materialsDirectory = path.join(root, "节能奖填报材料");
+  app.use(
+    "/materials",
+    express.static(materialsDirectory, {
+      setHeaders(res, filePath) {
+        res.attachment(path.basename(filePath));
+        res.setHeader("Cache-Control", "no-store");
+      },
+    }),
+  );
+  app.use("/materials", (_req, res) => {
+    res.status(404).json({ ok: false, message: "申报模板或参考资料不存在" });
+  });
   app.use(express.static(path.join(root, "dist")));
-  app.use("/materials", express.static(path.join(root, "节能奖填报材料")));
   app.use((_req, res) => res.sendFile(path.join(root, "dist", "index.html")));
 }
 

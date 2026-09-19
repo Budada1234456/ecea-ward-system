@@ -5,19 +5,19 @@ export const AWARD_TYPES = Object.freeze({
 });
 
 const projectSections = [
-  ["basic", "项目基本情况", "一、项目基本情况.doc"],
-  ["introduction", "项目简介", "二、项目简介.doc"],
-  ["details", "项目详细内容", "三、项目详细内容.doc"],
-  ["awards", "本项目曾获奖励情况", "四、本项目曾获奖励情况.doc"],
-  ["ip", "申请、获得知识产权情况表", "五、申请、获得知识产权情况表.doc"],
-  ["people", "主要完成人情况表", "六、主要完成人情况表.doc"],
-  ["units", "主要完成单位情况表", "七、主要完成单位情况表.doc"],
-  ["unitRecommendation", "申报、推荐单位意见", "八、申报、推荐单位意见.doc"],
-  ["expertRecommendation", "专家推荐意见", "九、专家推荐意见.doc"],
-  ["attachments", "附件目录", "十、附件目录.doc"],
-  ["authenticity", "真实性承诺书", "十一、真实性承诺书.doc"],
-  ["confidentiality", "不涉密承诺函", "十二、不涉密承诺函.doc"],
-  ["integrity", "诚信承诺书", "十三、诚信承诺书.doc"],
+  ["basic", "项目基本情况", "一、项目基本情况.docx"],
+  ["introduction", "项目简介", "二、项目简介.docx"],
+  ["details", "项目详细内容", "三、项目详细内容.docx"],
+  ["awards", "本项目曾获奖励情况", "四、本项目曾获奖励情况.docx"],
+  ["ip", "申请、获得知识产权情况表", "五、申请、获得知识产权情况表.docx"],
+  ["people", "主要完成人情况表", "六、主要完成人情况表.docx"],
+  ["units", "主要完成单位情况表", "七、主要完成单位情况表.docx"],
+  ["unitRecommendation", "申报、推荐单位意见", "八、申报、推荐单位意见.docx"],
+  ["expertRecommendation", "专家推荐意见", "九、专家推荐意见.docx"],
+  ["attachments", "附件目录", "十、附件目录.docx"],
+  ["authenticity", "真实性承诺书", "十一、真实性承诺书.docx"],
+  ["confidentiality", "不涉密承诺函", "十二、不涉密承诺函.docx"],
+  ["integrity", "诚信承诺书", "十三、诚信承诺书.docx"],
 ];
 
 const progressSections = projectSections;

@@ -122,13 +122,39 @@ test("rich media, entity pages and the complete PDF export stay intact", async (
       '<tr><td style="border: 1px solid black">图片与表格</td><td style="border: 1px solid black">通过</td></tr>',
       "</tbody></table>",
     ].join("");
+    const paginatedIntroduction = [
+      "<p>项目简介分页边框验收标记</p>",
+      `<img src="${imageUrl}" alt="项目简介验收图片一">`,
+      `<img src="${imageUrl}" alt="项目简介验收图片二">`,
+      `<img src="${imageUrl}" alt="项目简介验收图片三">`,
+    ].join("");
 
     const seedResponse = await page.request.put(
       `${baseUrl}/api/applications/${applicationId}`,
       {
         data: {
           data: completeProjectData(title, {
+            introduction: paginatedIntroduction,
             technicalContent: richContent,
+            ipRecords: [
+              {
+                name: "余热回收控制方法",
+                type: "发明专利",
+                country: "中国",
+                applicationNumber: "CN202610001",
+                authorizationNumber: "ZL202610001",
+              },
+            ],
+            technicalEvaluation:
+              "<table><tbody><tr><td>文件名称</td><td>出具单位</td><td>出具时间</td><td>文件编号</td></tr><tr><td>科技成果评价报告</td><td>中国节能协会</td><td>2026-08</td><td>评价字第001号</td></tr></tbody></table>",
+            applicationUnits: [
+              {
+                unitName: "节能示范有限公司",
+                startDate: "2025-01",
+                contactPhone: "李工 13800000000",
+                economicBenefit: "860",
+              },
+            ],
             people: [
               {
                 ...completePerson("完成人甲"),
@@ -236,14 +262,64 @@ test("rich media, entity pages and the complete PDF export stay intact", async (
     await expect(
       recommendationPage.locator(".preview-recommendation-table > tbody > tr"),
     ).toHaveCount(2);
-
-    await page.screenshot({
-      path: "test-results/recommendation-preview.png",
-      fullPage: true,
+    const ipPage = page.locator(".preview-ip-page").first();
+    await expect(ipPage.getByRole("heading", { level: 3 })).toHaveText(
+      "五、申请、获得知识产权情况表",
+    );
+    await expect(ipPage.getByRole("heading", { level: 4 })).toHaveText([
+      "1. 知识产权证明目录",
+      "2. 技术评价证明及行业审批文件目录",
+      "3. 应用单位目录",
+    ]);
+    await expect(ipPage.getByText("节能技术论著")).toHaveCount(0);
+    const evaluationTable = ipPage.getByRole("table", {
+      name: "2. 技术评价证明及行业审批文件目录",
+    });
+    await expect(evaluationTable.locator("thead th")).toHaveText([
+      "文件名称",
+      "出具单位",
+      "出具时间",
+      "文件编号",
+    ]);
+    await expect(evaluationTable).toContainText("评价字第001号");
+    await expect(evaluationTable.locator("tbody tr")).toHaveCount(4);
+    await expect(
+      ipPage.getByRole("table", { name: "3. 应用单位目录" }),
+    ).toContainText("节能示范有限公司");
+    await ipPage.screenshot({
+      path: "test-results/application-preview-ip-page.png",
+      style: ".preview-toolbar { visibility: hidden !important; }",
     });
 
     const previewPages = page.locator(".preview-page");
     const previewPageCount = await previewPages.count();
+    for (let index = 0; index < Math.min(previewPageCount, 5); index += 1) {
+      await previewPages.nth(index).screenshot({
+        path: `test-results/application-preview-page-${index + 1}.png`,
+        style: ".preview-toolbar { visibility: hidden !important; }",
+      });
+    }
+    const introductionPageFrames = await page
+      .locator(
+        '.preview-introduction-page .preview-section-table[aria-label^="二、项目简介"]',
+      )
+      .evaluateAll((tables) =>
+        tables.map((table) => {
+          const { width, height } = table.getBoundingClientRect();
+          return { width, height };
+        }),
+      );
+    expect(introductionPageFrames.length).toBeGreaterThan(1);
+    const referenceFrame = introductionPageFrames[0];
+    const referenceRatio = referenceFrame.width / referenceFrame.height;
+    expect(
+      introductionPageFrames.every(
+        ({ width, height }) =>
+          Math.abs(width - referenceFrame.width) <= 1 &&
+          Math.abs(height - referenceFrame.height) <= 1 &&
+          Math.abs(width / height - referenceRatio) <= 0.001,
+      ),
+    ).toBe(true);
     const overflowingPages = await previewPages.evaluateAll((pages) =>
       pages
         .map((previewPage, index) => ({

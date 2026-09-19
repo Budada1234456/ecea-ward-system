@@ -441,6 +441,15 @@ function Field({ label, required, hint, children, wide = false }) {
   );
 }
 
+function DirectoryRow({ label, children }) {
+  return (
+    <div className="ip-directory-row">
+      <div className="ip-directory-label">{label}</div>
+      <div className="ip-directory-content">{children}</div>
+    </div>
+  );
+}
+
 function TextInput({ value, onChange, placeholder, maxLength, type = "text" }) {
   return (
     <input
@@ -1111,8 +1120,29 @@ function RecordsSection({
   emptyLabel,
   fields,
   showIndex = false,
+  directoryLabel,
+  tableTitle,
 }) {
   const group = customGroup || (type === "ip" ? "ipRecords" : "awardRecords");
+  const table = (
+    <StructuredTable
+      group={group}
+      fields={fields}
+      title={tableTitle}
+      value={records}
+      onChange={onChange}
+      addLabel={addLabel}
+      emptyLabel={
+        emptyLabel ||
+        (type === "ip"
+          ? "暂无知识产权记录，可手动添加"
+          : "暂无记录，无相关内容时可保持为空")
+      }
+      className="records-collection"
+      confirmRemoval={group === "ipRecords"}
+      showIndex={showIndex}
+    />
+  );
   return (
     <section className="form-section">
       <div className="section-heading">
@@ -1123,23 +1153,17 @@ function RecordsSection({
           <h2>{title}</h2>
         </div>
       </div>
-      <StructuredTable
-        group={group}
-        fields={fields}
-        value={records}
-        onChange={onChange}
-        addLabel={addLabel}
-        emptyLabel={
-          emptyLabel ||
-          (type === "ip"
-            ? "暂无知识产权记录，可手动添加"
-            : "暂无记录，无相关内容时可保持为空")
-        }
-        className="records-collection"
-        confirmRemoval={group === "ipRecords"}
-        showIndex={showIndex}
-      />
-      {supplement}
+      {directoryLabel ? (
+        <div className="ip-directory-grid">
+          <DirectoryRow label={directoryLabel}>{table}</DirectoryRow>
+          {supplement}
+        </div>
+      ) : (
+        <>
+          {table}
+          {supplement}
+        </>
+      )}
     </section>
   );
 }
@@ -1254,6 +1278,77 @@ function ApplicationUnitsTable({ records, onChange }) {
       addLabel="添加应用单位"
       emptyLabel="暂无应用单位记录"
       className="application-unit-collection"
+    />
+  );
+}
+
+const technicalEvaluationFields = [
+  { key: "fileName", label: "文件名称", required: true, minWidth: 220 },
+  { key: "issuer", label: "出具单位", minWidth: 190 },
+  { key: "issuedAt", label: "出具时间", minWidth: 150 },
+  { key: "fileNumber", label: "文件编号", minWidth: 180 },
+];
+
+function technicalEvaluationRows(value) {
+  if (!value) return [];
+  const container = document.createElement("div");
+  container.innerHTML = sanitizeRichText(value);
+  const tableRows = Array.from(container.querySelectorAll("tr")).map((row) =>
+    Array.from(row.querySelectorAll("th, td")).map((cell) =>
+      cell.textContent.trim(),
+    ),
+  );
+  const headerIndex = tableRows.findIndex((row) => row.includes("文件名称"));
+  if (headerIndex >= 0) {
+    return tableRows
+      .slice(headerIndex + 1)
+      .map(([fileName = "", issuer = "", issuedAt = "", fileNumber = ""]) => ({
+        fileName,
+        issuer,
+        issuedAt,
+        fileNumber,
+      }))
+      .filter((record) => Object.values(record).some(Boolean));
+  }
+  const text = richTextToPlain(value).trim();
+  return text ? [{ fileName: text, issuer: "", issuedAt: "", fileNumber: "" }] : [];
+}
+
+function escapeTableValue(value) {
+  return String(value || "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function serializeTechnicalEvaluation(records) {
+  if (!records.length) return "";
+  const rows = [
+    technicalEvaluationFields.map((field) => field.label),
+    ...records.map((record) =>
+      technicalEvaluationFields.map((field) => record[field.key] || ""),
+    ),
+  ];
+  return `<table><tbody>${rows
+    .map(
+      (row) =>
+        `<tr>${row.map((value) => `<td>${escapeTableValue(value)}</td>`).join("")}</tr>`,
+    )
+    .join("")}</tbody></table>`;
+}
+
+function TechnicalEvaluationTable({ value, onChange }) {
+  return (
+    <StructuredTable
+      fields={technicalEvaluationFields}
+      title="技术评价证明及行业审批文件"
+      value={technicalEvaluationRows(value)}
+      onChange={(records) => onChange(serializeTechnicalEvaluation(records))}
+      addLabel="添加文件"
+      emptyLabel="暂无技术评价证明或行业审批文件"
+      className="technical-evaluation-collection"
     />
   );
 }
@@ -2326,8 +2421,11 @@ function PreviewAchievementPageOne({ data }) {
 
 function PreviewTextPage({ title, body, pageNumber }) {
   const rich = isHtmlContent(body);
+  const isIntroduction = title.startsWith("二、项目简介");
   return (
-    <article className="preview-page preview-text-page">
+    <article
+      className={`preview-page preview-text-page${isIntroduction ? " preview-introduction-page" : ""}`}
+    >
       <table className="preview-section-table" aria-label={title}>
         <tbody>
           <tr>
@@ -2448,94 +2546,119 @@ function PreviewAwardPage({ records, pageNumber, continued }) {
 
 function PreviewIpPage({
   ipRecords,
-  paperRecords,
-  technicalEvaluation,
+  technicalEvaluationRecords,
+  applicationUnits,
   pageNumber,
   continued,
 }) {
+  const showIpRecords = !continued || ipRecords.length > 0;
+  const showEvaluation = !continued || technicalEvaluationRecords.length > 0;
+  const showApplicationUnits = !continued || applicationUnits.length > 0;
   return (
     <article className="preview-page preview-form-page preview-template-table preview-ip-page">
-      <h3>五、知识产权情况{continued ? "（续）" : ""}</h3>
-      <section className="preview-subtable">
-        <h4>1. 申请、获得知识产权情况表</h4>
-        <table aria-label="五、申请、获得知识产权情况表">
-          <colgroup>
-            <col style={{ width: "28.17%" }} />
-            <col style={{ width: "22.69%" }} />
-            <col style={{ width: "13.42%" }} />
-            <col style={{ width: "18.06%" }} />
-            <col style={{ width: "17.65%" }} />
-          </colgroup>
-          <thead>
-            <tr>
-              <th>授权（申请）项目名称</th>
-              <th>知识产权类别（发明／实用新型／外观／软著等）</th>
-              <th>国（区）别</th>
-              <th>申请号</th>
-              <th>授权号</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(ipRecords.length ? ipRecords : [{}, {}, {}, {}, {}]).map(
-              (record, index) => (
+      <h3>五、申请、获得知识产权情况表{continued ? "（续）" : ""}</h3>
+      {showIpRecords && (
+        <section className="preview-subtable">
+          <h4>1. 知识产权证明目录</h4>
+          <table aria-label="1. 知识产权证明目录">
+            <colgroup>
+              <col style={{ width: "28.17%" }} />
+              <col style={{ width: "22.69%" }} />
+              <col style={{ width: "13.42%" }} />
+              <col style={{ width: "18.06%" }} />
+              <col style={{ width: "17.65%" }} />
+            </colgroup>
+            <thead>
+              <tr>
+                <th>授权（申请）项目名称</th>
+                <th>知识产权类别（发明／实用新型／外观／软著等）</th>
+                <th>国（区）别</th>
+                <th>申请号</th>
+                <th>授权号</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(ipRecords.length ? ipRecords : [{}, {}, {}, {}, {}]).map(
+                (record, index) => (
+                  <tr key={record.id || index}>
+                    <td>{record.name || ""}</td>
+                    <td>{record.type || ""}</td>
+                    <td>{record.country || ""}</td>
+                    <td>{record.applicationNumber || ""}</td>
+                    <td>{record.authorizationNumber || record.number || ""}</td>
+                  </tr>
+                ),
+              )}
+            </tbody>
+          </table>
+        </section>
+      )}
+      {showEvaluation && (
+        <section className="preview-subtable preview-technical-evaluation">
+          <h4>2. 技术评价证明及行业审批文件目录</h4>
+          <table aria-label="2. 技术评价证明及行业审批文件目录">
+            <colgroup>
+              <col style={{ width: "25%" }} />
+              <col style={{ width: "25%" }} />
+              <col style={{ width: "25%" }} />
+              <col style={{ width: "25%" }} />
+            </colgroup>
+            <thead>
+              <tr>
+                {technicalEvaluationFields.map((field) => (
+                  <th key={field.key}>{field.label}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {[
+                ...technicalEvaluationRecords,
+                ...Array(Math.max(0, 4 - technicalEvaluationRecords.length)).fill({}),
+              ].map((record, index) => (
                 <tr key={record.id || index}>
-                  <td>{record.name || ""}</td>
-                  <td>{record.type || ""}</td>
-                  <td>{record.country || ""}</td>
-                  <td>{record.applicationNumber || ""}</td>
-                  <td>{record.authorizationNumber || record.number || ""}</td>
+                  {technicalEvaluationFields.map((field) => (
+                    <td key={field.key}>{record[field.key] || ""}</td>
+                  ))}
                 </tr>
-              ),
-            )}
-          </tbody>
-        </table>
-      </section>
-      <section className="preview-subtable">
-        <h4>2. 论著</h4>
-        <table aria-label="五、论著">
-          <colgroup>
-            <col style={{ width: "32%" }} />
-            <col style={{ width: "20%" }} />
-            <col style={{ width: "12%" }} />
-            <col style={{ width: "18%" }} />
-            <col style={{ width: "9%" }} />
-            <col style={{ width: "9%" }} />
-          </colgroup>
-          <thead>
-            <tr>
-              <th>论著名称</th>
-              <th>出版单位</th>
-              <th>出版年份</th>
-              <th>作者</th>
-              <th>本人排序</th>
-              <th>是否国内出版</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(paperRecords.length ? paperRecords : [{}, {}, {}]).map(
-              (record, index) => (
+              ))}
+            </tbody>
+          </table>
+        </section>
+      )}
+      {showApplicationUnits && (
+        <section className="preview-subtable preview-application-units">
+          <h4>3. 应用单位目录</h4>
+          <table aria-label="3. 应用单位目录">
+            <colgroup>
+              <col style={{ width: "28%" }} />
+              <col style={{ width: "22%" }} />
+              <col style={{ width: "25%" }} />
+              <col style={{ width: "25%" }} />
+            </colgroup>
+            <thead>
+              <tr>
+                <th>应用单位名称</th>
+                <th>应用起始时间（年／月）</th>
+                <th>联系人及电话</th>
+                <th>使用本项目产生的经济效益（万元）</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(applicationUnits.length
+                ? applicationUnits
+                : [{}, {}, {}, {}]
+              ).map((record, index) => (
                 <tr key={record.id || index}>
-                  <td>{record.title || ""}</td>
-                  <td>{record.publisher || ""}</td>
-                  <td>{record.publicationYear || ""}</td>
-                  <td>{record.authors || ""}</td>
-                  <td>{record.authorRank || ""}</td>
-                  <td>{record.domestic || ""}</td>
+                  <td>{record.unitName || record.name || ""}</td>
+                  <td>{record.startDate || ""}</td>
+                  <td>{record.contactPhone || ""}</td>
+                  <td>{record.economicBenefit || ""}</td>
                 </tr>
-              ),
-            )}
-          </tbody>
-        </table>
-      </section>
-      <section className="preview-subtable">
-        <h4>3. 技术评价证明及国家法律法规要求的行业审批文件目录</h4>
-        <div
-          className="preview-ip-description"
-          aria-label="五、技术评价证明及国家法律法规要求的行业审批文件目录"
-        >
-          <PreviewRichValue value={technicalEvaluation} />
-        </div>
-      </section>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      )}
       <footer>{pageNumber}</footer>
     </article>
   );
@@ -3016,27 +3139,26 @@ function buildPreviewSections(sourceData) {
       records,
     }),
   );
+  const evaluationRecords = technicalEvaluationRows(data.technicalEvaluation);
   const ipPageCount = Math.max(
     1,
     Math.ceil((data.ipRecords?.length || 0) / 5),
-    Math.ceil((data.paperRecords?.length || 0) / 6),
+    Math.ceil(evaluationRecords.length / 4),
+    Math.ceil((data.applicationUnits?.length || 0) / 4),
   );
   for (let index = 0; index < ipPageCount; index += 1) {
     pages.push({
       kind: "ip",
-      title: "五、知识产权情况",
+      title: "五、申请、获得知识产权情况表",
       continued: index > 0,
       ipRecords: (data.ipRecords || []).slice(index * 5, (index + 1) * 5),
-      paperRecords: (data.paperRecords || []).slice(index * 6, (index + 1) * 6),
-      technicalEvaluation: index === 0 ? data.technicalEvaluation : "",
+      technicalEvaluationRecords: evaluationRecords.slice(index * 4, (index + 1) * 4),
+      applicationUnits: (data.applicationUnits || []).slice(
+        index * 4,
+        (index + 1) * 4,
+      ),
     });
   }
-  addTablePages(
-    "五、应用单位目录",
-    "applicationUnits",
-    data.applicationUnits,
-    8,
-  );
   data.people.forEach((person, index) =>
     pages.push({
       kind: "person",
@@ -3572,9 +3694,15 @@ function CreateApplicationDialog({ onClose, onCreated }) {
   );
 }
 
-function PortalPageTitle({ eyebrow, title, description, onNew }) {
+function PortalPageTitle({
+  eyebrow,
+  title,
+  description,
+  onNew,
+  className = "",
+}) {
   return (
-    <div className="info-page-title">
+    <div className={`info-page-title ${className}`.trim()}>
       <div>
         <p>{eyebrow}</p>
         <h1>{title}</h1>
@@ -3602,12 +3730,13 @@ function AnnouncementCenter({ onNew }) {
   return (
     <>
       <PortalPageTitle
+        className="announcement-page-title"
         eyebrow="通知公告"
         title="2026 年度申报工作通知"
         description="内容依据协会 2026 年申报通知、奖励办法及官网公告整理。"
         onNew={onNew}
       />
-      <div className="source-banner">
+      <div className="source-banner announcement-source-banner">
         <AlertCircle size={18} />
         <span>
           <b>本年度材料提交已截止</b>
@@ -4827,29 +4956,23 @@ function EditorApp({ application, onHome }) {
           records={data.ipRecords}
           onChange={(value) => setField("ipRecords", value)}
           applicationId={application.id}
+          directoryLabel="1．知识产权证明目录"
+          tableTitle="知识产权证明目录"
+          addLabel="添加知识产权"
           supplement={
             <>
-              <Field label="2．技术评价证明及行业审批文件目录">
-                <div className="control-with-count">
-                  <RichTextEditor
-                    value={data.technicalEvaluation || ""}
-                    onChange={(value) => setField("technicalEvaluation", value)}
-                    applicationId={application.id}
-                    fieldKey="technicalEvaluation"
-                    label="技术评价证明及国家法律法规要求的行业审批文件目录"
-                  />
-                  <CharacterCount
-                    value={data.technicalEvaluation || ""}
-                    max={LONG_TEXT_LIMITS.technicalEvaluation}
-                  />
-                </div>
-              </Field>
-              <Field label="3．应用单位目录">
+              <DirectoryRow label="2．技术评价证明及行业审批文件目录">
+                <TechnicalEvaluationTable
+                  value={data.technicalEvaluation || ""}
+                  onChange={(value) => setField("technicalEvaluation", value)}
+                />
+              </DirectoryRow>
+              <DirectoryRow label="3．应用单位目录">
                 <ApplicationUnitsTable
                   records={data.applicationUnits || []}
                   onChange={(value) => setField("applicationUnits", value)}
                 />
-              </Field>
+              </DirectoryRow>
             </>
           }
         />

@@ -36,7 +36,7 @@ const MAX_WORD_FILE_BYTES = 20 * 1024 * 1024;
 function displayValue(value) {
   if (Array.isArray(value))
     return value
-      .map((item) => item?.name || item)
+      .map((item) => item?.name || item?.unitName || item?.title || item)
       .filter(Boolean)
       .join("、");
   if (value && typeof value === "object") return JSON.stringify(value);
@@ -383,8 +383,14 @@ export function WordImportDialog({
             <div className="warning-row chapter-file-only">
               <FileText size={20} />
               <span>
-                <b>本章没有可自动回填的在线字段</b>
-                Word 已读取，可直接保存为本章节文件；现有草稿不会被修改。
+                <b>
+                  {(section?.allowedFieldKeys?.length || 0) > 0
+                    ? "未检测到本章已填写的内容"
+                    : "本章没有可自动回填的在线字段"}
+                </b>
+                {(section?.allowedFieldKeys?.length || 0) > 0
+                  ? "请在下载的本章模板中填写表格后重新上传；也可仅保存当前 Word，现有草稿不会被修改。"
+                  : "Word 已读取，可直接保存为本章节文件；现有草稿不会被修改。"}
               </span>
             </div>
           )}
