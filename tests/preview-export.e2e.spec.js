@@ -200,8 +200,12 @@ test("rich media, entity pages and the complete PDF export stay intact", async (
     await expect
       .poll(() => image.evaluate((element) => element.naturalHeight))
       .toBeGreaterThan(0);
-    await expect(richPage.locator("table")).toContainText("图片与表格");
-    await expect(richPage.locator("table")).toContainText("通过");
+    await expect(richPage.locator(".preview-rich-text table")).toContainText(
+      "图片与表格",
+    );
+    await expect(richPage.locator(".preview-rich-text table")).toContainText(
+      "通过",
+    );
 
     for (const [index, name] of ["完成人甲", "完成人乙"].entries()) {
       const personTable = page.getByRole("table", {
@@ -217,8 +221,26 @@ test("rich media, entity pages and the complete PDF export stay intact", async (
         name: `第 ${index + 1} 完成单位情况表`,
       });
       await expect(unitTable).toContainText(name);
+      await expect(unitTable).not.toContainText("传真");
+      await expect(unitTable.locator(".preview-unit-note")).toHaveCSS(
+        "color",
+        "rgb(255, 0, 0)",
+      );
       await expect(unitTable.locator("xpath=ancestor::article")).toHaveCount(1);
     }
+
+    const recommendationPage = page.locator(".preview-recommendation-page");
+    await expect(
+      recommendationPage.getByRole("table", { name: "申报、推荐单位意见" }),
+    ).toHaveCount(1);
+    await expect(
+      recommendationPage.locator(".preview-recommendation-table > tbody > tr"),
+    ).toHaveCount(2);
+
+    await page.screenshot({
+      path: "test-results/recommendation-preview.png",
+      fullPage: true,
+    });
 
     const previewPages = page.locator(".preview-page");
     const previewPageCount = await previewPages.count();

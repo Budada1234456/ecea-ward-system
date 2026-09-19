@@ -108,6 +108,12 @@ const chapterRequirements = Object.freeze({
     "逐项核对科研诚信、知识产权、申报程序及近三年记录，承诺单位盖章、项目负责人签字并填写完整信息。",
 });
 
+const signedChapterKeys = new Set([
+  "authenticity",
+  "confidentiality",
+  "integrity",
+]);
+
 const projectRecommendationMaterials = [
   [
     "recommendation_signed",
@@ -325,6 +331,7 @@ export function getAwardSections(value) {
     templateFile,
     templateHref: `/materials/${encodeURIComponent(profile.templateFolder)}/${encodeURIComponent(templateFile)}`,
     allowedFieldKeys: chapterFields[key] || [],
+    uploadMode: signedChapterKeys.has(key) ? "signed" : "word",
     requirement:
       chapterRequirements[key] ||
       "请严格按照本章模板中的栏目、顺序、字数限制和填写说明完成内容。",
