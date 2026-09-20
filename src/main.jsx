@@ -3622,7 +3622,11 @@ function PreviewDialog({
               className="secondary-button"
               disabled={exporting}
               onClick={() =>
-                exportSelectedPdf("首页", ".preview-page:first-child", "首页")
+                exportSelectedPdf(
+                  "首页",
+                  ":scope > .preview-page:first-child",
+                  "首页",
+                )
               }
             >
               首页
@@ -3631,7 +3635,11 @@ function PreviewDialog({
               className="secondary-button"
               disabled={exporting}
               onClick={() =>
-                exportSelectedPdf("完成人", ".preview-person-page", "完成人")
+                exportSelectedPdf(
+                  "完成人",
+                  ":scope > .preview-person-page",
+                  "完成人",
+                )
               }
             >
               完成人
@@ -3640,7 +3648,11 @@ function PreviewDialog({
               className="secondary-button"
               disabled={exporting}
               onClick={() =>
-                exportSelectedPdf("完成单位", ".preview-unit-page", "完成单位")
+                exportSelectedPdf(
+                  "完成单位",
+                  ":scope > .preview-unit-page",
+                  "完成单位",
+                )
               }
             >
               完成单位
@@ -3651,7 +3663,7 @@ function PreviewDialog({
               onClick={() =>
                 exportSelectedPdf(
                   "申报推荐单位意见",
-                  ".preview-recommendation-page",
+                  '[data-section-key="unitRecommendation"]',
                   "申报推荐单位意见",
                 )
               }

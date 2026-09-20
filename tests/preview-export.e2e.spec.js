@@ -616,6 +616,57 @@ test("rich media, entity pages and the complete PDF export stay intact", async (
       await fs.unlink(pdfPath).catch(() => {});
       await fs.unlink(bboxPath).catch(() => {});
     }
+
+    const independentExportHtml = [];
+    await page.route(
+      "**/api/pdf-export",
+      async (route) => {
+        independentExportHtml.push(route.request().postDataJSON().html);
+        await route.fulfill({
+          status: 200,
+          contentType: "application/pdf",
+          body: "%PDF-1.4\n%%EOF",
+        });
+      },
+      { times: 4 },
+    );
+    const independentExports = [
+      {
+        button: "首页",
+        pageMarker: /(?:class="| )preview-basic-page(?: |")/g,
+        pageCount: 1,
+      },
+      {
+        button: "完成人",
+        pageMarker: /(?:class="| )preview-person-page(?: |")/g,
+        pageCount: 2,
+      },
+      {
+        button: "完成单位",
+        pageMarker: /(?:class="| )preview-unit-page(?: |")/g,
+        pageCount: 2,
+      },
+      {
+        button: "申报推荐单位意见",
+        pageMarker: /data-section-key="unitRecommendation"/g,
+        pageCount: 2,
+      },
+    ];
+    for (const [index, exportCase] of independentExports.entries()) {
+      const button = page
+        .getByLabel("独立盖章导出")
+        .getByRole("button", { name: exportCase.button, exact: true });
+      await button.click();
+      await expect.poll(() => independentExportHtml.length).toBe(index + 1);
+      await expect(button).toBeEnabled();
+      const exportedHtml = independentExportHtml[index];
+      expect(
+        exportedHtml.match(/(?:class="| )preview-page(?: |")/g) || [],
+      ).toHaveLength(exportCase.pageCount);
+      expect(exportedHtml.match(exportCase.pageMarker) || []).toHaveLength(
+        exportCase.pageCount,
+      );
+    }
     expect(errors).toEqual([]);
   } finally {
     if (applicationId) {
