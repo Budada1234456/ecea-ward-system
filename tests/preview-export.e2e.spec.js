@@ -378,6 +378,20 @@ test("rich media, entity pages and the complete PDF export stay intact", async (
     }
 
     const basicPage = page.locator(".preview-basic-page");
+    const dateRowLayout = await basicPage
+      .locator("tbody tr:last-child")
+      .evaluate((row) => ({
+        height: row.getBoundingClientRect().height,
+        valuesStayOnOneLine: [
+          ...row.querySelectorAll(".preview-date-range-value"),
+        ].every(
+          (value) =>
+            value.getClientRects().length === 1 &&
+            value.scrollWidth <= value.clientWidth,
+        ),
+      }));
+    expect(dateRowLayout.height).toBeLessThanOrEqual(40);
+    expect(dateRowLayout.valuesStayOnOneLine).toBe(true);
     const basicTableFitsPage = await basicPage.evaluate((element) => {
       const tableBox = element.querySelector(":scope > table").getBoundingClientRect();
       const footerBox = element.querySelector(":scope > footer").getBoundingClientRect();

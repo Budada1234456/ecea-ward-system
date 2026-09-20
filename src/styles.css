@@ -4658,7 +4658,7 @@ select.control {
   height: 18.5mm;
 }
 .preview-basic-page tbody tr:nth-child(14) {
-  height: 16mm;
+  height: 10mm;
 }
 .preview-basic-page .preview-date-range-value {
   min-height: 13mm;
@@ -5681,11 +5681,15 @@ select.control {
   word-break: break-word;
 }
 .preview-basic-page .preview-date-range-value {
-  min-height: 13mm;
+  min-height: 0;
   grid-template-columns: max-content minmax(0, 1fr);
   gap: 1.5mm;
   white-space: normal;
   line-height: 1.35;
+}
+.preview-basic-page tbody tr:last-child > th,
+.preview-basic-page tbody tr:last-child > td {
+  height: 10mm;
 }
 .preview-basic-page .preview-date-range-value span:last-child {
   white-space: nowrap;
