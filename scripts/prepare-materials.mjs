@@ -188,9 +188,19 @@ async function createChapterDocuments() {
         const [folder, fileName] = chapters[index];
         const { start, end } = ranges[index];
         const chapterZip = await JSZip.loadAsync(sourceBuffer);
-        const chapterXml = `${documentXml.slice(0, bodyOpenEnd)}${blocks
-          .slice(start, end)
-          .join("")}${sectionProperties}${documentXml.slice(bodyClose)}`;
+        const chapterBlocks = blocks.slice(start, end);
+        const printableBlocks =
+          fileName === "九、专家推荐意见.docx"
+            ? chapterBlocks.filter(
+                (block) =>
+                  !(
+                    block.startsWith("<w:p") &&
+                    /<w:br\s+w:type="page"\s*\/>/.test(block) &&
+                    !normalizeText(block)
+                  ),
+              )
+            : chapterBlocks;
+        const chapterXml = `${documentXml.slice(0, bodyOpenEnd)}${printableBlocks.join("")}${sectionProperties}${documentXml.slice(bodyClose)}`;
         assertValidXml(chapterXml, fileName);
         chapterZip.file("word/document.xml", chapterXml);
         const temporaryDocx = path.join(

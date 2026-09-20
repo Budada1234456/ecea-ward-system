@@ -95,6 +95,9 @@ test("each award loads its own form, validation and preview profile", async ({
     await page.goto(baseUrl);
     await page.getByRole("button", { name: "新建申报材料" }).click();
     const createDialog = page.locator(".create-dialog");
+    await expect(
+      createDialog.getByText("导入完整材料", { exact: true }),
+    ).toHaveCount(0);
     await createDialog
       .locator(".award-choice", { hasText: "节能减排科技成就奖" })
       .click();
@@ -440,6 +443,17 @@ test("each award loads its own form, validation and preview profile", async ({
     await expect(
       page.getByRole("button", { name: "PDF 智能导入" }),
     ).toHaveCount(0);
+    const achievementChapterNav = page.locator(".sidebar nav button");
+    for (const chapterIndex of [4, 5, 6]) {
+      await achievementChapterNav.nth(chapterIndex).click();
+      await expect(page.getByText("本章内容在系统中填写")).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: /上传.*本章 Word/ }),
+      ).toHaveCount(0);
+      await expect(
+        page.getByRole("button", { name: "导出本章 PDF" }),
+      ).toBeVisible();
+    }
     await page.screenshot({
       path: "test-results/award-achievement-form.png",
       fullPage: true,
@@ -463,12 +477,11 @@ test("each award loads its own form, validation and preview profile", async ({
       0,
     );
     await expect(
-      page.getByRole("heading", { name: "七、科技成果转化及推广情况" }),
+      page.getByRole("table", { name: "七、科技成果转化及推广情况" }),
     ).toBeVisible();
-    await expect(page.getByRole("heading", { name: "八、附件" })).toBeVisible();
     await expect(
-      page.getByRole("heading", { name: "九、真实性承诺书" }),
-    ).toBeVisible();
+      page.getByRole("heading", { name: /八、附件|九、真实性承诺书/ }),
+    ).toHaveCount(0);
     const downloadPromise = page.waitForEvent("download");
     await page.getByRole("button", { name: "导出系统生成 PDF" }).click();
     const download = await downloadPromise;

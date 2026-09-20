@@ -355,6 +355,7 @@ const baseTableFields = {
     textField("address", "通讯地址", { group: "units", required: true }),
     textField("postalCode", "邮政编码", { group: "units" }),
     textField("email", "电子邮箱", { group: "units", required: true }),
+    textField("fax", "传真", { group: "units" }),
     multilineField("contribution", "对本项目技术创新和应用的贡献", {
       group: "units",
     }),
@@ -470,6 +471,7 @@ const FIELD_GUIDANCE = {
     address: "填写单位通讯地址",
     postalCode: "填写通讯地址对应邮政编码",
     email: "填写单位或联系人电子邮箱",
+    fax: "填写单位传真号码及区号",
     contribution: "具体说明本单位对项目技术创新和应用的贡献",
   },
 };

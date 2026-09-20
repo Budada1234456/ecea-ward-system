@@ -9,10 +9,6 @@ const samplePdf = path.resolve(
   "节能奖填报材料",
   "附件3.中国节能协会创新奖申报书填写说明-1.pdf",
 );
-const completedApplicationPdf = path.resolve(
-  "节能奖填报材料",
-  "中国节能协会创新奖申报书-规模化分布式光伏安全灵活接入与节能运行控制技术及应用.pdf",
-);
 
 async function loginAsAdmin(page) {
   await page.goto(baseUrl);
@@ -150,26 +146,9 @@ test("project center, attachment workflow and PDF export", async ({
     await page.keyboard.press("Escape");
     await expect(disciplineResults).toBeHidden();
 
-    await page.getByRole("button", { name: "PDF 智能导入" }).click();
-    const importDialog = page.locator(".import-dialog");
-    const extractionResponsePromise = page.waitForResponse(
-      (response) =>
-        new URL(response.url()).pathname.endsWith("/complete") &&
-        response.request().method() === "POST",
-      { timeout: 90_000 },
-    );
-    await importDialog
-      .locator('input[type="file"]')
-      .setInputFiles(completedApplicationPdf);
-    const extractionResponse = await extractionResponsePromise;
-    expect(extractionResponse.ok(), await extractionResponse.text()).toBe(true);
     await expect(
-      importDialog.getByText("李建威", { exact: false }),
-    ).toBeVisible({ timeout: 300_000 });
-    await expect(
-      importDialog.getByText("已分析 352 / 352 页", { exact: false }),
-    ).toBeVisible();
-    await importDialog.getByRole("button", { name: "取消" }).click();
+      page.getByRole("button", { name: "PDF 智能导入" }),
+    ).toHaveCount(0);
 
     await page.getByRole("button", { name: /附件目录/ }).click();
     await expect(page.getByRole("heading", { name: "附件目录" })).toBeVisible();
