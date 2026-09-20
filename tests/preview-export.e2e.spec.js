@@ -1,5 +1,9 @@
 import { expect, test } from "@playwright/test";
 import fs from "node:fs/promises";
+import { execFile } from "node:child_process";
+import os from "node:os";
+import path from "node:path";
+import { promisify } from "node:util";
 import { deflateSync } from "node:zlib";
 import { jsPDF } from "jspdf";
 import JSZip from "jszip";
@@ -11,6 +15,7 @@ import {
 } from "./application-fixtures.mjs";
 
 const baseUrl = process.env.TEST_BASE_URL || "http://127.0.0.1:4174";
+const execFileAsync = promisify(execFile);
 const requiredProjectMaterials = [
   "technical_proof",
   "application_proof",
@@ -544,6 +549,18 @@ test("rich media, entity pages and the complete PDF export stay intact", async (
     expect(download.suggestedFilename()).toMatch(/\.pdf$/i);
     expect(pdf.length).toBeGreaterThan(100_000);
     expect(exportedPageCount).toBe(previewPageCount);
+    const pdfPath = path.join(
+      os.tmpdir(),
+      `ceca-preview-export-${applicationId}.pdf`,
+    );
+    await fs.writeFile(pdfPath, pdf);
+    try {
+      const { stdout } = await execFileAsync("pdftotext", [pdfPath, "-"]);
+      expect(stdout).toContain("预览导出完整性验收");
+      expect(stdout).toContain("富文本图表验收标记");
+    } finally {
+      await fs.unlink(pdfPath).catch(() => {});
+    }
     expect(errors).toEqual([]);
   } finally {
     if (applicationId) {

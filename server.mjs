@@ -17,6 +17,7 @@ import {
   timingSafeEqual,
 } from "node:crypto";
 import { extractProjectSourceFields } from "./lib/pdf-fields.mjs";
+import { renderPreviewPdf } from "./lib/pdf-export.mjs";
 import { createWordImportRouter } from "./routes/word-import.mjs";
 import { sanitizeApplicationRichTextData } from "./src/editor/rich-text-node.mjs";
 import { validateApplication } from "./src/forms/application-validation.js";
@@ -281,7 +282,7 @@ function authRateLimit(req, res, next) {
 app.use("/api/auth", (req, res, next) =>
   req.method === "POST" ? authRateLimit(req, res, next) : next(),
 );
-app.use(express.json({ limit: "5mb" }));
+app.use(express.json({ limit: "15mb" }));
 
 const now = () => new Date().toISOString();
 const hashToken = (value) => createHash("sha256").update(value).digest("hex");
@@ -558,6 +559,61 @@ app.use(
       Boolean(ownedApplication(applicationId, userId)),
   }),
 );
+
+app.post("/api/pdf-export", async (req, res) => {
+  const html = String(req.body?.html || "");
+  const styles = String(req.body?.styles || "");
+  const fileName = String(req.body?.fileName || "申报书.pdf")
+    .replace(/[\r\n<>:"/\\|?*\x00-\x1f]/g, "_")
+    .slice(0, 180);
+  if (!html || html.length > 10 * 1024 * 1024) {
+    return res
+      .status(422)
+      .json({ ok: false, message: "PDF 导出内容为空或过大" });
+  }
+  const forwardedProto = String(req.headers["x-forwarded-proto"] || "")
+    .split(",")[0]
+    .trim();
+  const protocol = forwardedProto || req.protocol;
+  const requestOrigin = req.get("origin");
+  const serverOrigin = `${protocol}://${req.get("host")}`;
+  let baseUrl;
+  try {
+    const serverUrl = new URL(serverOrigin);
+    const candidate = new URL(requestOrigin || serverOrigin);
+    baseUrl = serverUrl.origin;
+    if (
+      ["http:", "https:"].includes(candidate.protocol) &&
+      candidate.hostname === serverUrl.hostname
+    ) {
+      baseUrl = candidate.origin;
+    }
+  } catch {
+    return res.status(400).json({ ok: false, message: "PDF 导出地址无效" });
+  }
+  try {
+    const pdf = await renderPreviewPdf({
+      html,
+      styles,
+      baseUrl,
+      sessionToken: parseCookies(req.headers.cookie).award_session,
+    });
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename*=UTF-8''${encodeURIComponent(fileName.endsWith(".pdf") ? fileName : `${fileName}.pdf`)}`,
+    );
+    const buffer = Buffer.from(pdf);
+    res.setHeader("Content-Length", String(buffer.length));
+    res.send(buffer);
+  } catch (error) {
+    console.error("PDF export failed", error);
+    res.status(500).json({
+      ok: false,
+      message: `PDF 生成失败：${error.message || "服务器内部错误"}`,
+    });
+  }
+});
 
 function parseData(value) {
   try {

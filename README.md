@@ -32,6 +32,7 @@
 
 ```powershell
 npm install
+npx playwright install chromium
 npm run dev
 ```
 
@@ -45,6 +46,8 @@ npm start
 ```
 
 访问 `http://127.0.0.1:4174`。
+
+Chromium 只需在首次安装或 Playwright 升级后安装一次，用于服务端将预览内容原生打印为 PDF；导出过程不会把 Word 或表单页面转换成 JPG。
 
 项目需要 Node.js 22.5 或更高版本。当前服务器上的启动脚本也会自动使用可用的 VS Code Server Node 运行时。
 

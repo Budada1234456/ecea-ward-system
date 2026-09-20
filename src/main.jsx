@@ -42,8 +42,6 @@ import {
   UserPlus,
   X,
 } from "lucide-react";
-import html2canvas from "html2canvas";
-import { jsPDF } from "jspdf";
 import { renderAsync as renderDocx } from "docx-preview";
 import {
   DisciplineSelector,
@@ -3009,7 +3007,10 @@ function PreviewUnitPage({ unit, index, pageNumber }) {
 
 function PreviewRecommendationPage({ body, pageNumber }) {
   return (
-    <article className="preview-page preview-form-page preview-recommendation-page">
+    <article
+      className="preview-page preview-form-page preview-recommendation-page"
+      data-section-key="unitRecommendation"
+    >
       <h3>八、申报、推荐单位意见</h3>
       <p className="preview-recommendation-note">（专家推荐不填此栏）</p>
       <table
@@ -3518,41 +3519,56 @@ function PreviewDialog({
         window.alert(`当前暂无可导出的${label}内容`);
         return;
       }
-      const pdf = new jsPDF({
-        orientation: "portrait",
-        unit: "mm",
-        format: "a4",
-      });
-      for (let index = 0; index < pages.length; index += 1) {
-        if (index) pdf.addPage();
-        await Promise.all(
-          [...pages[index].querySelectorAll("img")].map(async (image) => {
-            if (!image.complete) {
-              await new Promise((resolve, reject) => {
-                image.addEventListener("load", resolve, { once: true });
-                image.addEventListener("error", reject, { once: true });
-              });
-            }
-            await image.decode?.().catch(() => {});
-          }),
-        );
-        const canvas = await html2canvas(pages[index], {
-          scale: 2,
-          backgroundColor: "#ffffff",
-          useCORS: true,
-        });
-        pdf.addImage(
-          canvas.toDataURL("image/jpeg", 0.95),
-          "JPEG",
-          0,
-          0,
-          210,
-          297,
-        );
-      }
-      pdf.save(
-        `${data.projectName || "中国节能协会创新奖"}-${fileSuffix}-盖章版.pdf`,
+      const clones = pages.map((page) => page.cloneNode(true));
+      const sourceImages = pages.flatMap((page) => [
+        ...page.querySelectorAll("img"),
+      ]);
+      const clonedImages = clones.flatMap((page) => [
+        ...page.querySelectorAll("img"),
+      ]);
+      await Promise.all(
+        sourceImages.map(async (image, index) => {
+          if (!image.src.startsWith("blob:")) return;
+          const blob = await fetch(image.src).then((response) =>
+            response.blob(),
+          );
+          clonedImages[index].src = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.addEventListener("load", () => resolve(reader.result), {
+              once: true,
+            });
+            reader.addEventListener("error", reject, { once: true });
+            reader.readAsDataURL(blob);
+          });
+        }),
       );
+      const styles = [
+        ...document.head.querySelectorAll('style, link[rel="stylesheet"]'),
+      ]
+        .map((node) => node.outerHTML)
+        .join("");
+      const fileName = `${data.projectName || "中国节能协会创新奖"}-${fileSuffix}-盖章版.pdf`;
+      const response = await apiFetch("/api/pdf-export", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          html: clones.map((page) => page.outerHTML).join(""),
+          styles,
+          fileName,
+        }),
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload.message || "PDF 生成失败");
+      }
+      const url = URL.createObjectURL(await response.blob());
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = fileName;
+      anchor.click();
+      setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    } catch (error) {
+      window.alert(error.message || "PDF 生成失败，请稍后重试");
     } finally {
       setExporting(false);
     }

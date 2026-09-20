@@ -190,6 +190,14 @@ test("split chapter templates download, import and persist independently", async
   expect(sectionDownload.suggestedFilename()).toContain(
     "申请、获得知识产权情况表",
   );
+  const sectionStream = await sectionDownload.createReadStream();
+  const sectionChunks = [];
+  for await (const chunk of sectionStream) sectionChunks.push(chunk);
+  const sectionPdf = Buffer.concat(sectionChunks);
+  expect(sectionPdf.subarray(0, 5).toString()).toBe("%PDF-");
+  expect(sectionPdf.toString("latin1").match(/\/Type \/Page\b/g)).toHaveLength(
+    1,
+  );
   await page.getByRole("button", { name: "返回填写" }).click();
 
   for (const chapterIndex of [5, 6]) {
