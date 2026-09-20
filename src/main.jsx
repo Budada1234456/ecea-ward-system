@@ -3079,8 +3079,14 @@ function splitPreviewContent(content, maxLength = 1250) {
     length = 0;
   };
   for (const node of [...documentNode.body.children]) {
+    const imageCount =
+      node.querySelectorAll("img").length + (node.matches("img") ? 1 : 0);
+    const tableRowCount =
+      node.querySelectorAll("tr").length + (node.matches("tr") ? 1 : 0);
     const nodeLength =
-      (node.textContent || "").length + (node.tagName === "IMG" ? 500 : 0);
+      Math.max((node.textContent || "").length, 40) +
+      imageCount * 500 +
+      tableRowCount * 140;
     if (nodes.length && length + nodeLength > maxLength) flush();
     nodes.push(node);
     length += nodeLength;
@@ -3126,35 +3132,35 @@ function buildPreviewSections(sourceData) {
       "二、所获科技奖励和荣誉称号情况",
       "awardRecords",
       data.awardRecords,
-      10,
+      8,
       "honors",
     );
     addTablePages(
       "三、发表论文和专著情况",
       "paperRecords",
       data.paperRecords,
-      8,
+      6,
       "publications",
     );
     addTablePages(
       "四、所获知识产权证书",
       "ipRecords",
       data.ipRecords,
-      6,
+      3,
       "achievementIp",
     );
     addTablePages(
       "五、承担科研项目情况",
       "researchRecords",
       data.researchRecords,
-      7,
+      4,
       "research",
     );
     addTablePages(
       "六、参与重大工程技术项目情况",
       "engineeringRecords",
       data.engineeringRecords,
-      7,
+      5,
       "engineering",
     );
     splitPreviewContent(data.transformation).forEach((body, index) =>
@@ -3359,6 +3365,7 @@ function PreviewDialog({
   onSectionExported,
 }) {
   const pagesRef = useRef(null);
+  const previewProfile = getAwardProfile(data.awardType);
   const startedSectionExport = useRef(null);
   const [exporting, setExporting] = useState(false);
   const [submittedPages, setSubmittedPages] = useState([]);
@@ -3555,7 +3562,13 @@ function PreviewDialog({
     return Promise.all(
       rawParts.map(async (part) => {
         if (part.type === "pdf") return part;
-        const clones = part.pages.map((page) => page.cloneNode(true));
+        const clones = part.pages.map((page) => {
+          const clone = page.cloneNode(true);
+          if (!clone.classList.contains("preview-submitted-page")) {
+            clone.classList.add(`preview-${previewProfile.code}-document`);
+          }
+          return clone;
+        });
         const sourceImages = part.pages.flatMap((page) => [
           ...page.querySelectorAll("img"),
         ]);
@@ -3786,7 +3799,10 @@ function PreviewDialog({
             </button>
           ))}
         </aside>
-        <main className="preview-pages" ref={pagesRef}>
+        <main
+          className={`preview-pages preview-pages--${previewProfile.code}`}
+          ref={pagesRef}
+        >
           {getAwardProfile(data.awardType).code === "achievement" ? (
             <PreviewAchievementPageOne data={data} />
           ) : (

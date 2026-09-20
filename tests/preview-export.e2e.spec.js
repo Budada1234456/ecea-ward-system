@@ -26,6 +26,437 @@ const requiredProjectMaterials = [
   "unit_license",
 ];
 
+test("achievement tables match page one and rich content is not clipped", async ({
+  page,
+}) => {
+  test.setTimeout(90_000);
+  const suffix = `${Date.now()}${Math.floor(Math.random() * 1000)}`;
+  const username = `fonttest${suffix}`;
+  const title = `个人奖项排版验收-${suffix}`;
+  let applicationId;
+
+  const registerResponse = await page.request.post(
+    `${baseUrl}/api/auth/register`,
+    {
+      data: {
+        username,
+        email: `${username}@example.test`,
+        displayName: "个人奖项排版验收用户",
+        password: `Achievement-${suffix}`,
+      },
+    },
+  );
+  expect(registerResponse.ok(), await registerResponse.text()).toBe(true);
+
+  const createResponse = await page.request.post(
+    `${baseUrl}/api/applications`,
+    {
+      data: {
+        title,
+        year: 2026,
+        awardType: "节能减排科技成就奖",
+        workflowMode: "form",
+      },
+    },
+  );
+  const createBody = await createResponse.json();
+  expect(createResponse.ok(), JSON.stringify(createBody)).toBe(true);
+  applicationId = createBody.application.id;
+
+  try {
+    const imageResponse = await page.request.post(
+      `${baseUrl}/api/applications/${applicationId}/files`,
+      {
+        multipart: {
+          category: "content_image:transformation",
+          file: {
+            name: "achievement-layout.png",
+            mimeType: "image/png",
+            buffer: tinyPng,
+          },
+        },
+      },
+    );
+    const imageBody = await imageResponse.json();
+    expect(imageResponse.ok(), JSON.stringify(imageBody)).toBe(true);
+    const imageUrl = `/api/applications/${applicationId}/files/${imageBody.file.id}/download?inline=1`;
+    const denseRows = Array.from(
+      { length: 6 },
+      (_, index) =>
+        `<tr><td>技术指标 ${index + 1}</td><td>成果转化和推广应用情况说明 ${index + 1}</td><td>达到行业先进水平</td></tr>`,
+    ).join("");
+    const transformation = [
+      "<p>科技成果转化分页起始标记</p>",
+      `<p><img src="${imageUrl}" alt="成果转化验收图片" style="width: 80%"></p>`,
+      `<p>${"成果已在多家单位完成推广应用。".repeat(10)}</p>`,
+      `<table><tbody>${denseRows}</tbody></table>`,
+      `<p>${"项目形成了稳定的产业化应用能力。".repeat(12)}</p>`,
+      "<p>科技成果转化分页结束标记</p>",
+    ].join("");
+    const records = Array.from({ length: 6 }, (_, index) => ({
+      name: `个人奖项记录 ${index + 1}`,
+      org: "中国节能测试单位",
+      date: "2026-09-04",
+      totalPeople: "5",
+      personalRank: "1",
+    }));
+    const seedResponse = await page.request.put(
+      `${baseUrl}/api/applications/${applicationId}`,
+      {
+        data: {
+          data: completeProjectData(title, {
+            workSummary: "候选人长期从事节能减排科技工作。",
+            candidate: {
+              birthDate: "1986-05-04",
+              workUnit: "北京理工大学",
+            },
+            awardRecords: records,
+            paperRecords: records.map((record) => ({
+              title: record.name,
+              contribution: "本人完成主要研究工作",
+            })),
+            ipRecords: records.map((record) => ({
+              name: record.name,
+              type: "发明专利",
+              country: "中国",
+              authorizationNumber: `ZL2026${record.totalPeople}`,
+            })),
+            researchRecords: records,
+            engineeringRecords: records,
+            transformation,
+          }),
+        },
+      },
+    );
+    expect(seedResponse.ok(), await seedResponse.text()).toBe(true);
+
+    for (const category of [
+      "achievement_honors",
+      "achievement_publications",
+      "achievement_ip",
+      "achievement_research",
+      "achievement_benefits",
+    ]) {
+      const uploadResponse = await page.request.post(
+        `${baseUrl}/api/applications/${applicationId}/files`,
+        {
+          multipart: {
+            category,
+            file: {
+              name: `${category}.png`,
+              mimeType: "image/png",
+              buffer: tinyPng,
+            },
+          },
+        },
+      );
+      expect(uploadResponse.ok(), await uploadResponse.text()).toBe(true);
+    }
+
+    await page.goto(baseUrl);
+    await page.getByRole("button", { name: title, exact: true }).click();
+    await page.getByRole("button", { name: "生成预览" }).click();
+    await expect(page.locator(".preview-pages")).toHaveClass(
+      /preview-pages--achievement/,
+    );
+
+    const tableFonts = await page.evaluate(() => {
+      const basic = document.querySelector(
+        ".preview-achievement-basic > table td",
+      );
+      const sections = [
+        "honors",
+        "publications",
+        "achievementIp",
+        "research",
+        "engineering",
+      ];
+      return {
+        basic: getComputedStyle(basic).fontSize,
+        sections: sections.map(
+          (key) =>
+            getComputedStyle(
+              document.querySelector(
+                `.preview-table-page[data-section-key="${key}"] td`,
+              ),
+            ).fontSize,
+        ),
+      };
+    });
+    expect(tableFonts.basic).toBe("14.6667px");
+    expect(tableFonts.sections).toEqual(
+      Array.from({ length: 5 }, () => tableFonts.basic),
+    );
+
+    const transformationPages = page.locator(
+      '.preview-text-page[data-section-key="transformation"]',
+    );
+    expect(await transformationPages.count()).toBeGreaterThan(1);
+    await expect(transformationPages.last()).toContainText(
+      "科技成果转化分页结束标记",
+    );
+    const clippingAudit = await transformationPages.evaluateAll((pages) =>
+      pages.map((previewPage) => {
+        const body = previewPage.querySelector(".preview-body-text");
+        const footer = previewPage.querySelector(":scope > footer");
+        return {
+          bodyFits: body.scrollHeight <= body.clientHeight + 1,
+          clearsFooter:
+            body.getBoundingClientRect().bottom + 8 <=
+            footer.getBoundingClientRect().top,
+        };
+      }),
+    );
+    expect(clippingAudit.every(({ bodyFits }) => bodyFits)).toBe(true);
+    expect(clippingAudit.every(({ clearsFooter }) => clearsFooter)).toBe(true);
+    await page
+      .locator('.preview-table-page[data-section-key="honors"]')
+      .first()
+      .screenshot({
+        path: "test-results/achievement-honors-font.png",
+        style: ".preview-toolbar { visibility: hidden !important; }",
+      });
+    await transformationPages
+      .filter({ has: page.locator(".preview-rich-text table") })
+      .first()
+      .screenshot({
+        path: "test-results/achievement-transformation-page.png",
+        style: ".preview-toolbar { visibility: hidden !important; }",
+      });
+  } finally {
+    if (applicationId) {
+      await page.request.delete(`${baseUrl}/api/applications/${applicationId}`);
+    }
+  }
+});
+
+test("progress preview and PDF export use the Word template font sizes", async ({
+  page,
+}) => {
+  test.setTimeout(90_000);
+  const suffix = `${Date.now()}${Math.floor(Math.random() * 1000)}`;
+  const username = `fonttest${suffix}`;
+  const title = `科技进步奖字号验收-${suffix}`;
+  let applicationId;
+
+  const registerResponse = await page.request.post(
+    `${baseUrl}/api/auth/register`,
+    {
+      data: {
+        username,
+        email: `${username}@example.test`,
+        displayName: "字号验收用户",
+        password: `Font-${suffix}`,
+      },
+    },
+  );
+  expect(registerResponse.ok(), await registerResponse.text()).toBe(true);
+
+  const createResponse = await page.request.post(
+    `${baseUrl}/api/applications`,
+    {
+      data: {
+        title,
+        year: 2026,
+        awardType: "节能减排科技进步奖",
+        workflowMode: "form",
+      },
+    },
+  );
+  const createBody = await createResponse.json();
+  expect(createResponse.ok(), JSON.stringify(createBody)).toBe(true);
+  applicationId = createBody.application.id;
+
+  try {
+    const seedResponse = await page.request.put(
+      `${baseUrl}/api/applications/${applicationId}`,
+      {
+        data: {
+          data: completeProjectData(title, {
+            introduction:
+              '<p><span style="font-size: 8px">项目简介字号应与 Word 模板保持一致。</span></p>',
+            technicalContent:
+              '<p><span style="font-size: 9px">详细内容正文应使用小四号字。</span></p><table style="width: 1200px"><colgroup><col style="width: 240px"><col style="width: 180px"><col style="width: 260px"><col style="width: 180px"><col style="width: 180px"><col style="width: 180px"></colgroup><tbody><tr><th colspan="3"><span style="font-size: 24px">紧凑表头</span></th><th>国内外先进水平</th><th>本项目技术</th><th>对比结果</th></tr><tr><th rowspan="3">安全承载</th><td rowspan="3">资源辨识</td><td>星顶光伏测算准确度</td><td>77.55%</td><td>91%</td><td>国际领先</td></tr><tr><td>承载力评估规模</td><td>局部区域</td><td>省域百万级节点</td><td>国际首次实现</td></tr><tr><td>承载力评估颗粒度</td><td>区县级</td><td>村庄级和配变级</td><td>国际领先</td></tr><tr><th rowspan="3">协同调控</th><td rowspan="2">感知预测</td><td>功率实时感知准确率</td><td>92.5%</td><td>97.55%</td><td>国际领先</td></tr><tr><td>辐照度预测准确率</td><td>93.25%</td><td>95.98%</td><td>国际领先</td></tr><tr><td>调控消纳</td><td>省级分布式资源控制云平台</td><td>接入设备数量超过一百万台</td><td>接入设备数量超过一千万台</td><td>国际领先</td></tr></tbody></table><p>表格之后的正文必须完整显示。</p>',
+            people: [
+              {
+                ...completePerson("完成人字号验收"),
+                contribution:
+                  '<p><span style="font-size: 8px">个人技术贡献字号应为小四。</span></p>',
+              },
+            ],
+          }),
+        },
+      },
+    );
+    expect(seedResponse.ok(), await seedResponse.text()).toBe(true);
+
+    for (const category of [
+      "recommendation_signed",
+      ...requiredProjectMaterials,
+    ]) {
+      const upload = await page.request.post(
+        `${baseUrl}/api/applications/${applicationId}/files`,
+        {
+          multipart: {
+            category,
+            file: {
+              name: `${category}.png`,
+              mimeType: "image/png",
+              buffer: tinyPng,
+            },
+          },
+        },
+      );
+      expect(upload.ok(), await upload.text()).toBe(true);
+    }
+
+    await page.goto(baseUrl);
+    await page.getByRole("button", { name: title, exact: true }).click();
+    await page.getByRole("button", { name: "预览当前申报书" }).click();
+    await expect(page.locator(".preview-pages")).toHaveClass(
+      /preview-pages--progress/,
+    );
+
+    const fontSizes = await page.evaluate(() => {
+      const size = (selector) =>
+        getComputedStyle(document.querySelector(selector)).fontSize;
+      return {
+        basicTable: size(".preview-basic-page > table"),
+        sectionTitle: size(".preview-form-page > h3"),
+        body: size(".preview-body-text"),
+        ipTable: size(".preview-ip-page .preview-subtable table"),
+        entityTable: size(".preview-entity-page table"),
+        introductionNestedText: size(
+          '.preview-page[data-section-key="introduction"] td span',
+        ),
+        detailsNestedText: size(
+          '.preview-page[data-section-key="details"] td span',
+        ),
+        tableUnit: size(".preview-economic-page .preview-table-unit"),
+        awardNote: size(".preview-award-page .preview-note-row td"),
+        pageNumber: size(".preview-page > footer"),
+      };
+    });
+    expect(fontSizes).toEqual({
+      basicTable: "16px",
+      sectionTitle: "21.3333px",
+      body: "16px",
+      ipTable: "16px",
+      entityTable: "16px",
+      introductionNestedText: "16px",
+      detailsNestedText: "16px",
+      tableUnit: "16px",
+      awardNote: "16px",
+      pageNumber: "14px",
+    });
+    const detailRichTableLayout = await page
+      .locator(
+        '.preview-detail-page[data-section-key="details"] .preview-rich-text table',
+      )
+      .first()
+      .evaluate((table) => {
+        const container = table.closest(".preview-rich-text");
+        const cell = table.querySelector("td");
+        const column = table.querySelector("col");
+        const nestedText = table.querySelector("span");
+        const cellStyle = getComputedStyle(cell);
+        const tableWidth = table.getBoundingClientRect().width;
+        return {
+          fitsContainer:
+            tableWidth <=
+            container.getBoundingClientRect().width + 0.5,
+          tableLayout: getComputedStyle(table).tableLayout,
+          columnsFitTable:
+            Number.parseFloat(getComputedStyle(column).width) <= tableWidth &&
+            Number.parseFloat(cellStyle.width) <= tableWidth,
+          nestedFontSize: getComputedStyle(nestedText).fontSize,
+          cellPaddingTop: Number.parseFloat(cellStyle.paddingTop),
+          bodyFits: container.scrollHeight <= container.clientHeight + 1,
+          tableFitsBody:
+            table.getBoundingClientRect().bottom <=
+            container.getBoundingClientRect().bottom + 1,
+        };
+      });
+    expect(detailRichTableLayout).toEqual({
+      fitsContainer: true,
+      tableLayout: "auto",
+      columnsFitTable: true,
+      nestedFontSize: "10.6667px",
+      cellPaddingTop: expect.any(Number),
+      bodyFits: true,
+      tableFitsBody: true,
+    });
+    expect(detailRichTableLayout.cellPaddingTop).toBeLessThan(2);
+    await expect(page.getByText("表格之后的正文必须完整显示。")).toBeVisible();
+    const detailPageOverflowAudit = await page
+      .locator('.preview-detail-page[data-section-key="details"]')
+      .evaluateAll((pages) =>
+        pages.map((previewPage) => {
+          const body = previewPage.querySelector(".preview-body-text");
+          const footer = previewPage.querySelector(":scope > footer");
+          return {
+            bodyFits: body.scrollHeight <= body.clientHeight + 1,
+            clearsFooter:
+              body.getBoundingClientRect().bottom + 8 <=
+              footer.getBoundingClientRect().top,
+          };
+        }),
+      );
+    expect(detailPageOverflowAudit.every(({ bodyFits }) => bodyFits)).toBe(
+      true,
+    );
+    expect(
+      detailPageOverflowAudit.every(({ clearsFooter }) => clearsFooter),
+    ).toBe(true);
+    await page
+      .locator('.preview-detail-page[data-section-key="details"]')
+      .filter({ hasText: "紧凑表头" })
+      .screenshot({
+        path: "test-results/progress-detail-rich-table.png",
+        style: ".preview-toolbar { visibility: hidden !important; }",
+      });
+    const personTableFontAudit = await page
+      .locator(".preview-person-page table")
+      .evaluate((table) => {
+        const textElements = [...table.querySelectorAll("th, td, th *, td *")]
+          .filter((element) => element.textContent?.trim())
+          .map((element) => ({
+            tag: element.tagName,
+            className: element.className,
+            text: element.textContent.trim().slice(0, 24),
+            pixels: Number.parseFloat(getComputedStyle(element).fontSize),
+          }));
+        return {
+          minimum: Math.min(...textElements.map(({ pixels }) => pixels)),
+          undersized: textElements.filter(({ pixels }) => pixels < 16),
+        };
+      });
+    expect(personTableFontAudit.minimum).toBe(16);
+    expect(personTableFontAudit.undersized).toEqual([]);
+
+    let exportPayload;
+    await page.route("**/api/pdf-export", async (route) => {
+      exportPayload = route.request().postDataJSON();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/pdf",
+        body: "%PDF-1.4\n%%EOF",
+      });
+    });
+    await page.getByRole("button", { name: "导出 PDF", exact: true }).click();
+    await expect.poll(() => exportPayload).toBeTruthy();
+    const exportedHtml = exportPayload.parts
+      .filter((part) => part.type === "html")
+      .map((part) => part.html)
+      .join("");
+    expect(exportedHtml).toContain("preview-progress-document");
+  } finally {
+    if (applicationId) {
+      await page.request.delete(`${baseUrl}/api/applications/${applicationId}`);
+    }
+  }
+});
+
 function crc32(buffer) {
   let crc = 0xffffffff;
   for (const byte of buffer) {
