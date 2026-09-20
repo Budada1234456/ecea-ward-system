@@ -4555,11 +4555,6 @@ select.control {
 .preview-unit-page .preview-unit-contribution td {
   height: 135mm;
 }
-.preview-unit-page .preview-unit-note {
-  color: #555;
-  font-size: 7.2px;
-  line-height: 1.35;
-}
 /* Exact print-preview geometry from 附件2.中国节能协会创新奖申报书.doc. */
 .preview-page {
   padding: 16.5mm 15.9mm 18.5mm;
@@ -4838,11 +4833,6 @@ select.control {
   gap: 7mm;
   text-align: left;
 }
-.preview-unit-page .preview-unit-note {
-  color: red;
-  font-size: 9pt;
-}
-
 @media (max-width: 1050px) {
   .topbar {
     grid-template-columns: minmax(250px, 1fr) auto;

@@ -2966,10 +2966,7 @@ function PreviewUnitPage({ unit, index, pageNumber }) {
           </tr>
           <tr>
             <th>电子邮箱</th>
-            <td colSpan="2">{unit.email}</td>
-            <td colSpan="3" className="preview-unit-note">
-              注：务必确保以上相关信息完整无误。
-            </td>
+            <td colSpan="5">{unit.email}</td>
           </tr>
           <tr className="preview-contribution-row preview-unit-contribution">
             <td colSpan="6">

@@ -290,9 +290,8 @@ test("rich media, entity pages and the complete PDF export stay intact", async (
       });
       await expect(unitTable).toContainText(name);
       await expect(unitTable).not.toContainText("传真");
-      await expect(unitTable.locator(".preview-unit-note")).toHaveCSS(
-        "color",
-        "rgb(255, 0, 0)",
+      await expect(unitTable).not.toContainText(
+        "注：务必确保以上相关信息完整无误。",
       );
       await expect(unitTable.locator("xpath=ancestor::article")).toHaveCount(1);
     }
