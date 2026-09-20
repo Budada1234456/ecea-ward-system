@@ -1563,6 +1563,9 @@ button {
   border-radius: 6px;
   background: #f8fbff;
 }
+.section-template-bar--form {
+  grid-template-columns: minmax(280px, 1fr) auto;
+}
 .section-template-copy {
   min-width: 0;
   display: flex;
@@ -1602,6 +1605,16 @@ button {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+.section-form-entry-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  color: #237251;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
 }
 .section-word-status {
   min-width: 0;

@@ -347,8 +347,15 @@ test("rich media, entity pages and the complete PDF export stay intact", async (
     await expect(evaluationTable).toContainText("评价字第001号");
     await expect(evaluationTable.locator("tbody tr")).toHaveCount(4);
     await expect(
-      ipPage.getByRole("table", { name: "3. 应用单位目录" }),
-    ).toContainText("节能示范有限公司");
+      ipPage
+        .getByRole("table", { name: "1. 知识产权证明目录" })
+        .locator("tbody tr"),
+    ).toHaveCount(5);
+    const applicationUnitTable = ipPage.getByRole("table", {
+      name: "3. 应用单位目录",
+    });
+    await expect(applicationUnitTable).toContainText("节能示范有限公司");
+    await expect(applicationUnitTable.locator("tbody tr")).toHaveCount(4);
     await ipPage.screenshot({
       path: "test-results/application-preview-ip-page.png",
       style: ".preview-toolbar { visibility: hidden !important; }",

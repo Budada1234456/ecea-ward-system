@@ -331,7 +331,12 @@ export function getAwardSections(value) {
     templateFile,
     templateHref: `/materials/${encodeURIComponent(profile.templateFolder)}/${encodeURIComponent(templateFile)}`,
     allowedFieldKeys: chapterFields[key] || [],
-    uploadMode: signedChapterKeys.has(key) ? "signed" : "word",
+    uploadMode:
+      index >= 4 && index <= 6
+        ? "form"
+        : signedChapterKeys.has(key)
+          ? "signed"
+          : "word",
     requirement:
       chapterRequirements[key] ||
       "请严格按照本章模板中的栏目、顺序、字数限制和填写说明完成内容。",
