@@ -5962,3 +5962,62 @@ select.control {
     box-shadow: none;
   }
 }
+
+/* Chapter 3 follows the template: chapter title outside, item title in the box. */
+.preview-detail-page > h3,
+.preview-economic-page > h3 {
+  display: block;
+  margin: 0 0 3.5mm;
+  color: #111;
+  font-family: SimHei, "Heiti SC", "Microsoft YaHei", sans-serif;
+  font-size: 16pt;
+  font-weight: 700;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.preview-detail-page .preview-section-table > tbody > tr:first-child > th,
+.preview-economic-page .preview-section-heading-row > th {
+  height: auto;
+  padding: 2.5mm 3mm;
+  border: 0.18mm solid #222;
+  background: #fff;
+  font-family: SimSun, "Songti SC", "STSong", serif;
+  font-size: 12pt;
+  font-weight: 400;
+  line-height: 1.5;
+  text-align: left;
+}
+
+.preview-detail-page .preview-section-table > tbody > tr:nth-child(2) > td {
+  border-top: 0;
+}
+
+.preview-economic-page .preview-section-heading-row .preview-table-unit {
+  float: right;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  font-size: 10.5pt;
+}
+
+/* Keep the complete basic-information table inside its single A4 page. */
+.preview-basic-page header {
+  margin-top: 0;
+}
+
+.preview-basic-page > h3 {
+  margin-top: 1mm;
+  margin-bottom: 4mm;
+}
+
+.preview-basic-page > table {
+  table-layout: fixed;
+  line-height: 1.35;
+}
+
+.preview-basic-page > table th,
+.preview-basic-page > table td {
+  padding-top: 0.75mm;
+  padding-bottom: 0.75mm;
+}

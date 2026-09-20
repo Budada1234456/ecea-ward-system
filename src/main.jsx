@@ -2446,15 +2446,26 @@ function PreviewAchievementPageOne({ data }) {
 function PreviewTextPage({ title, body, pageNumber, sectionKey }) {
   const rich = isHtmlContent(body);
   const isIntroduction = title.startsWith("二、项目简介");
+  const isProjectDetails = sectionKey === "details";
+  const continued = isProjectDetails && title.endsWith("（续）");
+  const detailsTitle = continued ? title.slice(0, -4) : title;
+  const detailsPrefix = "三、项目详细内容";
+  const detailsSubtitle =
+    isProjectDetails &&
+    detailsTitle.startsWith(`${detailsPrefix}（`) &&
+    detailsTitle.endsWith("）")
+      ? `${detailsTitle.slice(detailsPrefix.length + 1, -1)}${continued ? "（续）" : ""}`
+      : title;
   return (
     <article
-      className={`preview-page preview-text-page${isIntroduction ? " preview-introduction-page" : ""}`}
+      className={`preview-page preview-text-page${isIntroduction ? " preview-introduction-page" : ""}${isProjectDetails ? " preview-detail-page" : ""}`}
       data-section-key={sectionKey}
     >
+      {isProjectDetails && <h3>{detailsPrefix}</h3>}
       <table className="preview-section-table" aria-label={title}>
         <tbody>
           <tr>
-            <th>{title}</th>
+            <th>{isProjectDetails ? detailsSubtitle : title}</th>
           </tr>
           <tr>
             <td>
@@ -2711,7 +2722,7 @@ function PreviewIpPage({
 function PreviewEconomicPage({ data, pageNumber }) {
   const records = data.economicRecords || [];
   const amountFields = getPdfFields("economicRecords").filter(
-    (field) => field.key !== "year",
+    (field) => !["year", "newSales"].includes(field.key),
   );
   const total = (key) =>
     records.reduce((sum, record) => sum + (Number(record[key]) || 0), 0) || "";
@@ -2720,6 +2731,7 @@ function PreviewEconomicPage({ data, pageNumber }) {
       className="preview-page preview-form-page preview-economic-page"
       data-section-key="details"
     >
+      <h3>三、项目详细内容</h3>
       <table aria-label="经济效益数据">
         <colgroup>
           {Array.from({ length: amountFields.length + 1 }, (_, index) => (
@@ -2732,7 +2744,7 @@ function PreviewEconomicPage({ data, pageNumber }) {
         <tbody>
           <tr className="preview-section-heading-row">
             <th colSpan={amountFields.length + 1}>
-              三、项目详细内容　6. 经济效益（标准、软科学类项目可以不填此栏）
+              6．经济效益（标准、软科学类项目可以不填此栏）
               <span className="preview-table-unit">单位：万元人民币</span>
             </th>
           </tr>
@@ -2751,9 +2763,12 @@ function PreviewEconomicPage({ data, pageNumber }) {
               </th>
             ))}
           </tr>
-          {records.map((record, index) => (
+          {[
+            ...records,
+            ...Array(Math.max(0, 3 - records.length)).fill({}),
+          ].map((record, index) => (
             <tr key={record.id || index}>
-              <td>{record.year}</td>
+              <td>{record.year || ""}</td>
               {amountFields.map((field) => (
                 <td key={field.key}>{record[field.key]}</td>
               ))}

@@ -296,6 +296,22 @@ test("rich media, entity pages and the complete PDF export stay intact", async (
       await expect(unitTable.locator("xpath=ancestor::article")).toHaveCount(1);
     }
 
+    const basicPage = page.locator(".preview-basic-page");
+    const basicTableFitsPage = await basicPage.evaluate((element) => {
+      const pageBox = element.getBoundingClientRect();
+      const tableBox = element.querySelector(":scope > table").getBoundingClientRect();
+      return tableBox.bottom < pageBox.bottom;
+    });
+    expect(basicTableFitsPage).toBe(true);
+
+    const detailPage = page.locator(".preview-detail-page").first();
+    await expect(detailPage.locator(":scope > h3")).toHaveText(
+      "三、项目详细内容",
+    );
+    await expect(
+      detailPage.locator(".preview-section-table tr").first().locator("th"),
+    ).toHaveText(/^1．立项背景/);
+
     const submittedPages = page.locator(".preview-submitted-page");
     await expect(submittedPages).toHaveCount(3);
     await expect(submittedPages.nth(0)).toHaveAttribute(
@@ -359,6 +375,11 @@ test("rich media, entity pages and the complete PDF export stay intact", async (
       path: "test-results/application-preview-ip-page.png",
       style: ".preview-toolbar { visibility: hidden !important; }",
     });
+    const economicPreview = page.getByRole("table", { name: "经济效益数据" });
+    await expect(
+      economicPreview.locator("tbody").first().locator("tr"),
+    ).toHaveCount(7);
+    await expect(economicPreview).not.toContainText("新增销售额");
 
     const previewPages = page.locator(".preview-page");
     const previewPageCount = await previewPages.count();
