@@ -3293,11 +3293,20 @@ function PreviewSubmittedWordDocument({ document, onRendered }) {
           inWrapper: true,
         });
         if (cancelled || !containerRef.current) return;
-        const pages = [
+        const renderedPages = [
           ...containerRef.current.querySelectorAll(
             ".docx-wrapper > section.docx",
           ),
         ];
+        const pages = renderedPages.filter((page) => {
+          const hasText = Boolean(page.textContent?.replace(/\s+/g, ""));
+          const hasContent = Boolean(
+            page.querySelector("table, img, svg, canvas, video, object"),
+          );
+          if (hasText || hasContent) return true;
+          page.remove();
+          return false;
+        });
         if (!pages.length) throw new Error("Word 文件没有可显示的页面");
         pages.forEach((page, index) => {
           page.classList.add("preview-page", "preview-submitted-page");

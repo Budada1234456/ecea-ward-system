@@ -228,6 +228,28 @@ test("rich media, entity pages and the complete PDF export stay intact", async (
       true,
     );
 
+    const expertRecommendationWord = await fs.readFile(
+      "节能奖填报材料/科技进步奖/九、专家推荐意见.docx",
+    );
+    const expertRecommendationUpload = await page.request.post(
+      `${baseUrl}/api/applications/${applicationId}/files`,
+      {
+        multipart: {
+          category: "section_word:progress:expertRecommendation",
+          file: {
+            name: "九、专家推荐意见.docx",
+            mimeType:
+              "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            buffer: expertRecommendationWord,
+          },
+        },
+      },
+    );
+    expect(
+      expertRecommendationUpload.ok(),
+      await expertRecommendationUpload.text(),
+    ).toBe(true);
+
     const signedDocument = new jsPDF();
     signedDocument.text("Signed declaration page 1", 20, 20);
     signedDocument.addPage();
@@ -299,11 +321,26 @@ test("rich media, entity pages and the complete PDF export stay intact", async (
 
     const basicPage = page.locator(".preview-basic-page");
     const basicTableFitsPage = await basicPage.evaluate((element) => {
-      const pageBox = element.getBoundingClientRect();
       const tableBox = element.querySelector(":scope > table").getBoundingClientRect();
-      return tableBox.bottom < pageBox.bottom;
+      const footerBox = element.querySelector(":scope > footer").getBoundingClientRect();
+      return tableBox.bottom + 12 < footerBox.top;
     });
     expect(basicTableFitsPage).toBe(true);
+
+    const personPagesClearFooter = await page
+      .locator(".preview-person-page")
+      .evaluateAll((pages) =>
+        pages.every((element) => {
+          const tableBox = element
+            .querySelector(":scope > table")
+            .getBoundingClientRect();
+          const footerBox = element
+            .querySelector(":scope > footer")
+            .getBoundingClientRect();
+          return tableBox.bottom + 12 < footerBox.top;
+        }),
+    );
+    expect(personPagesClearFooter).toBe(true);
 
     const detailPage = page.locator(".preview-detail-page").first();
     await expect(detailPage.locator(":scope > h3")).toHaveText(
@@ -314,16 +351,20 @@ test("rich media, entity pages and the complete PDF export stay intact", async (
     ).toHaveText(/^1．立项背景/);
 
     const submittedPages = page.locator(".preview-submitted-page");
-    await expect(submittedPages).toHaveCount(3);
+    await expect(submittedPages).toHaveCount(4);
     await expect(submittedPages.nth(0)).toHaveAttribute(
       "data-section-key",
       "unitRecommendation",
     );
     await expect(submittedPages.nth(1)).toHaveAttribute(
       "data-section-key",
-      "authenticity",
+      "expertRecommendation",
     );
     await expect(submittedPages.nth(2)).toHaveAttribute(
+      "data-section-key",
+      "authenticity",
+    );
+    await expect(submittedPages.nth(3)).toHaveAttribute(
       "data-section-key",
       "authenticity",
     );

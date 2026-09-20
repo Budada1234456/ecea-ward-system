@@ -6014,3 +6014,99 @@ select.control {
   padding-top: 0.75mm;
   padding-bottom: 0.75mm;
 }
+
+/* Reserve a clear footer band on dense generated pages. */
+.preview-basic-page {
+  padding-top: 14mm;
+  padding-bottom: 21mm;
+}
+
+.preview-basic-page header h1 {
+  font-size: 20pt;
+}
+
+.preview-basic-page header h2 {
+  font-size: 18pt;
+}
+
+.preview-basic-page header p {
+  font-size: 12pt;
+}
+
+.preview-basic-page > h3 {
+  margin-bottom: 2.5mm;
+}
+
+.preview-basic-page .preview-award-kind {
+  margin-bottom: 1mm;
+  font-size: 10.5pt;
+}
+
+.preview-basic-page > table {
+  font-size: 11pt;
+  line-height: 1.25;
+}
+
+.preview-basic-page > table th,
+.preview-basic-page > table td {
+  padding-top: 0.5mm;
+  padding-bottom: 0.5mm;
+}
+
+.preview-person-page {
+  padding-top: 14mm;
+  padding-bottom: 21mm;
+}
+
+.preview-person-page > h3 {
+  margin-bottom: 2.5mm;
+}
+
+.preview-person-page table {
+  font-size: 10.5pt;
+  line-height: 1.35;
+}
+
+.preview-person-page
+  > table
+  > tbody
+  > tr:not(.preview-contribution-row):not(.preview-declaration-row)
+  td,
+.preview-person-page
+  > table
+  > tbody
+  > tr:not(.preview-contribution-row):not(.preview-declaration-row)
+  th {
+  height: 7mm;
+  padding: 0.55mm 1.5mm;
+}
+
+.preview-person-page .preview-contribution-row td {
+  height: 62mm;
+  max-height: 62mm;
+  padding: 2mm;
+}
+
+.preview-person-page .preview-declaration-row td,
+.preview-person-page .preview-declaration-row th {
+  height: 34mm;
+  padding: 2mm;
+  font-size: 10pt;
+  line-height: 1.5;
+}
+
+.preview-person-page .preview-signature-line {
+  margin-top: 3mm;
+}
+
+.preview-person-page .preview-date-line {
+  margin-top: 2mm;
+}
+
+.preview-basic-page > footer,
+.preview-person-page > footer {
+  z-index: 2;
+  bottom: 6mm;
+  background: #fff;
+  line-height: 6mm;
+}
