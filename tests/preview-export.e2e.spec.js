@@ -1,9 +1,5 @@
 import { expect, test } from "@playwright/test";
 import fs from "node:fs/promises";
-import { execFile } from "node:child_process";
-import os from "node:os";
-import path from "node:path";
-import { promisify } from "node:util";
 import { deflateSync } from "node:zlib";
 import { jsPDF } from "jspdf";
 import JSZip from "jszip";
@@ -15,7 +11,6 @@ import {
 } from "./application-fixtures.mjs";
 
 const baseUrl = process.env.TEST_BASE_URL || "http://127.0.0.1:4174";
-const execFileAsync = promisify(execFile);
 const requiredProjectMaterials = [
   "technical_proof",
   "application_proof",
@@ -76,7 +71,7 @@ async function withTrailingBlankWordPage(buffer) {
 test("rich media, entity pages and the complete PDF export stay intact", async ({
   page,
 }) => {
-  test.setTimeout(120_000);
+  test.setTimeout(180_000);
   const suffix = `${Date.now()}${Math.floor(Math.random() * 1000)}`;
   const username = `formtest${suffix}`;
   const title = `预览导出完整性验收-${suffix}`;
@@ -271,8 +266,10 @@ test("rich media, entity pages and the complete PDF export stay intact", async (
 
     const signedDocument = new jsPDF();
     signedDocument.text("Signed declaration page 1", 20, 20);
-    signedDocument.addPage();
-    signedDocument.text("Signed declaration page 2", 20, 20);
+    for (let pageNumber = 2; pageNumber <= 51; pageNumber += 1) {
+      signedDocument.addPage();
+      signedDocument.text(`Signed declaration page ${pageNumber}`, 20, 20);
+    }
     const authenticityUpload = await page.request.post(
       `${baseUrl}/api/applications/${applicationId}/files`,
       {
@@ -423,15 +420,15 @@ test("rich media, entity pages and the complete PDF export stay intact", async (
     ).toHaveText(/^1．立项背景/);
 
     const submittedPages = page.locator(".preview-submitted-page");
-    await expect(submittedPages).toHaveCount(15);
+    await expect(submittedPages).toHaveCount(64);
     await expect(
       submittedPages.filter({ has: page.locator("img") }),
-    ).toHaveCount(13);
+    ).toHaveCount(62);
     for (const [sectionKey, expectedPages] of [
       ["unitRecommendation", 2],
       ["expertRecommendation", 1],
       ["attachments", 7],
-      ["authenticity", 2],
+      ["authenticity", 51],
       ["confidentiality", 2],
       ["integrity", 1],
     ]) {
@@ -450,12 +447,18 @@ test("rich media, entity pages and the complete PDF export stay intact", async (
     await recommendationWordPage.screenshot({
       path: "test-results/application-preview-submitted-word.png",
     });
-    for (const image of await submittedPages.locator("img").all()) {
-      await expect(image).toBeVisible();
-      await expect
-        .poll(() => image.evaluate((element) => element.naturalWidth))
-        .toBeGreaterThan(0);
-    }
+    await expect
+      .poll(() =>
+        submittedPages.locator("img").evaluateAll((images) =>
+          images.every(
+            (image) =>
+              image.complete &&
+              image.naturalWidth > 0 &&
+              image.getBoundingClientRect().width > 0,
+          ),
+        ),
+      )
+      .toBe(true);
     const ipPage = page.locator(".preview-ip-page").first();
     await expect(ipPage.getByRole("heading", { level: 3 })).toHaveText(
       "五、申请、获得知识产权情况表",
@@ -550,72 +553,38 @@ test("rich media, entity pages and the complete PDF export stay intact", async (
     );
     expect(overflowingPages).toEqual([]);
 
-    const previewHeadingBounds = await page
-      .locator(".preview-page:first-child header h1")
-      .evaluate((heading) => {
-        const range = document.createRange();
-        range.selectNodeContents(heading);
-        const { x, width } = range.getBoundingClientRect();
-        const pageBounds = heading
-          .closest(".preview-page")
-          .getBoundingClientRect();
-        return {
-          x: x - pageBounds.x,
-          width,
-        };
-      });
+    await page.emulateMedia({ media: "print" });
+    await expect(page.locator(".preview-toolbar")).toBeHidden();
+    await expect(page.locator(".preview-workspace > aside")).toBeHidden();
+    const nativePrintPdf = await page.pdf({
+      preferCSSPageSize: true,
+      printBackground: true,
+    });
+    const nativePrintPageCount =
+      nativePrintPdf.toString("latin1").match(/\/Type \/Page\b/g)?.length || 0;
+    expect(nativePrintPageCount).toBe(previewPageCount);
+    await page.emulateMedia({ media: "screen" });
 
-    const downloadPromise = page.waitForEvent("download");
-    await page.getByRole("button", { name: "导出系统生成 PDF" }).click();
-    const download = await downloadPromise;
-    const stream = await download.createReadStream();
-    const chunks = [];
-    for await (const chunk of stream) chunks.push(chunk);
-    const pdf = Buffer.concat(chunks);
-    const exportedPageCount =
-      pdf.toString("latin1").match(/\/Type \/Page\b/g)?.length || 0;
-
-    expect(download.suggestedFilename()).toMatch(/\.pdf$/i);
-    expect(pdf.length).toBeGreaterThan(100_000);
-    expect(exportedPageCount).toBe(previewPageCount);
-    const pdfPath = path.join(
-      os.tmpdir(),
-      `ceca-preview-export-${applicationId}.pdf`,
-    );
-    const bboxPath = `${pdfPath}.html`;
-    await fs.writeFile(pdfPath, pdf);
-    try {
-      const { stdout } = await execFileAsync("pdftotext", [pdfPath, "-"]);
-      expect(stdout).toContain("预览导出完整性验收");
-      expect(stdout).toContain("富文本图表验收标记");
-      await execFileAsync("pdftotext", [
-        "-f",
-        "1",
-        "-l",
-        "1",
-        "-bbox",
-        pdfPath,
-        bboxPath,
-      ]);
-      const bbox = await fs.readFile(bboxPath, "utf8");
-      const headingMatch = bbox.match(
-        /<word xMin="([\d.]+)" yMin="([\d.]+)" xMax="([\d.]+)" yMax="([\d.]+)">中国节能协会创新奖<\/word>/,
-      );
-      expect(headingMatch).not.toBeNull();
-      const [, xMin, , xMax] = headingMatch.map(Number);
-      const cssPixelsToPdfPoints = 72 / 96;
-      expect(xMin).toBeCloseTo(
-        previewHeadingBounds.x * cssPixelsToPdfPoints,
-        0,
-      );
-      expect(xMax - xMin).toBeCloseTo(
-        previewHeadingBounds.width * cssPixelsToPdfPoints,
-        0,
-      );
-    } finally {
-      await fs.unlink(pdfPath).catch(() => {});
-      await fs.unlink(bboxPath).catch(() => {});
-    }
+    let mainExportRequests = 0;
+    page.on("request", (request) => {
+      if (
+        request.method() === "POST" &&
+        new URL(request.url()).pathname === "/api/pdf-export"
+      ) {
+        mainExportRequests += 1;
+      }
+    });
+    await page.evaluate(() => {
+      window.__printCalls = 0;
+      window.print = () => {
+        window.__printCalls += 1;
+      };
+    });
+    const exportStartedAt = Date.now();
+    await page.getByRole("button", { name: "打印 / 保存 PDF" }).click();
+    await expect.poll(() => page.evaluate(() => window.__printCalls)).toBe(1);
+    expect(Date.now() - exportStartedAt).toBeLessThan(5_000);
+    expect(mainExportRequests).toBe(0);
 
     const independentExportHtml = [];
     await page.route(

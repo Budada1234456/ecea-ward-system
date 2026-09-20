@@ -31,6 +31,7 @@ import {
   Megaphone,
   Menu,
   Plus,
+  Printer,
   Phone,
   Search,
   Save,
@@ -3573,8 +3574,34 @@ function PreviewDialog({
       setExporting(false);
     }
   };
-  const exportPdf = () =>
-    exportSelectedPdf("申报书", ".preview-page", "申报书");
+  const printPdf = async () => {
+    if (submittedPagesStatus !== "ready") {
+      window.alert(
+        submittedPagesStatus === "error"
+          ? `提交文件尚未合并：${submittedPagesError}`
+          : "正在载入提交文件，请稍后再打印",
+      );
+      return;
+    }
+    const images = [...pagesRef.current.querySelectorAll("img")];
+    await Promise.all(
+      images.map((image) =>
+        image.complete
+          ? image.decode?.().catch(() => {})
+          : new Promise((resolve) => {
+              image.addEventListener("load", resolve, { once: true });
+              image.addEventListener("error", resolve, { once: true });
+            }),
+      ),
+    );
+    const originalTitle = document.title;
+    try {
+      document.title = `${data.projectName || "中国节能协会创新奖"}-申报书`;
+      window.print();
+    } finally {
+      document.title = originalTitle;
+    }
+  };
   useEffect(() => {
     if (
       !sectionExportRequest ||
@@ -3606,15 +3633,11 @@ function PreviewDialog({
           </button>
           <button
             className="primary-button"
-            onClick={exportPdf}
-            disabled={exporting || submittedPagesStatus !== "ready"}
+            onClick={printPdf}
+            disabled={submittedPagesStatus !== "ready"}
           >
-            {exporting ? (
-              <LoaderCircle className="spin" size={17} />
-            ) : (
-              <Download size={17} />
-            )}
-            {exporting ? "正在生成" : "导出系统生成 PDF"}
+            <Printer size={17} />
+            打印 / 保存 PDF
           </button>
           <div className="seal-export-menu" aria-label="独立盖章导出">
             <span>独立盖章导出</span>
