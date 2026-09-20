@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
+import fs from "node:fs/promises";
 import { deflateSync } from "node:zlib";
+import { jsPDF } from "jspdf";
 import {
   completePerson,
   completeProjectData,
@@ -205,6 +207,46 @@ test("rich media, entity pages and the complete PDF export stay intact", async (
       expect(upload.ok(), await upload.text()).toBe(true);
     }
 
+    const recommendationWord = await fs.readFile(
+      "节能奖填报材料/科技进步奖/八、申报、推荐单位意见.docx",
+    );
+    const recommendationUpload = await page.request.post(
+      `${baseUrl}/api/applications/${applicationId}/files`,
+      {
+        multipart: {
+          category: "section_word:progress:unitRecommendation",
+          file: {
+            name: "八、申报、推荐单位意见.docx",
+            mimeType:
+              "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            buffer: recommendationWord,
+          },
+        },
+      },
+    );
+    expect(recommendationUpload.ok(), await recommendationUpload.text()).toBe(
+      true,
+    );
+
+    const signedDocument = new jsPDF();
+    signedDocument.text("Signed declaration page 1", 20, 20);
+    signedDocument.addPage();
+    signedDocument.text("Signed declaration page 2", 20, 20);
+    const authenticityUpload = await page.request.post(
+      `${baseUrl}/api/applications/${applicationId}/files`,
+      {
+        multipart: {
+          category: "section_signed:progress:authenticity",
+          file: {
+            name: "十一、真实性承诺书.pdf",
+            mimeType: "application/pdf",
+            buffer: Buffer.from(signedDocument.output("arraybuffer")),
+          },
+        },
+      },
+    );
+    expect(authenticityUpload.ok(), await authenticityUpload.text()).toBe(true);
+
     await page.route(
       `**/api/applications/${applicationId}/files`,
       async (route) => {
@@ -255,13 +297,34 @@ test("rich media, entity pages and the complete PDF export stay intact", async (
       await expect(unitTable.locator("xpath=ancestor::article")).toHaveCount(1);
     }
 
-    const recommendationPage = page.locator(".preview-recommendation-page");
-    await expect(
-      recommendationPage.getByRole("table", { name: "申报、推荐单位意见" }),
-    ).toHaveCount(1);
-    await expect(
-      recommendationPage.locator(".preview-recommendation-table > tbody > tr"),
-    ).toHaveCount(2);
+    const submittedPages = page.locator(".preview-submitted-page");
+    await expect(submittedPages).toHaveCount(3);
+    await expect(submittedPages.nth(0)).toHaveAttribute(
+      "data-section-key",
+      "unitRecommendation",
+    );
+    await expect(submittedPages.nth(1)).toHaveAttribute(
+      "data-section-key",
+      "authenticity",
+    );
+    await expect(submittedPages.nth(2)).toHaveAttribute(
+      "data-section-key",
+      "authenticity",
+    );
+    await expect(page.getByText("以本章上传 Word 为准。")).toHaveCount(0);
+    await expect(submittedPages.nth(0)).toHaveAttribute(
+      "aria-label",
+      /八、申报、推荐单位意见\.docx/,
+    );
+    await submittedPages.nth(0).screenshot({
+      path: "test-results/application-preview-submitted-word.png",
+    });
+    for (const image of await submittedPages.locator("img").all()) {
+      await expect(image).toBeVisible();
+      await expect
+        .poll(() => image.evaluate((element) => element.naturalWidth))
+        .toBeGreaterThan(0);
+    }
     const ipPage = page.locator(".preview-ip-page").first();
     await expect(ipPage.getByRole("heading", { level: 3 })).toHaveText(
       "五、申请、获得知识产权情况表",

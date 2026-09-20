@@ -44,6 +44,7 @@ import {
 } from "lucide-react";
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
+import { renderAsync as renderDocx } from "docx-preview";
 import {
   DisciplineSelector,
   EntityEditor,
@@ -1311,7 +1312,9 @@ function technicalEvaluationRows(value) {
       .filter((record) => Object.values(record).some(Boolean));
   }
   const text = richTextToPlain(value).trim();
-  return text ? [{ fileName: text, issuer: "", issuedAt: "", fileNumber: "" }] : [];
+  return text
+    ? [{ fileName: text, issuer: "", issuedAt: "", fileNumber: "" }]
+    : [];
 }
 
 function escapeTableValue(value) {
@@ -2613,7 +2616,9 @@ function PreviewIpPage({
             <tbody>
               {[
                 ...technicalEvaluationRecords,
-                ...Array(Math.max(0, 4 - technicalEvaluationRecords.length)).fill({}),
+                ...Array(
+                  Math.max(0, 4 - technicalEvaluationRecords.length),
+                ).fill({}),
               ].map((record, index) => (
                 <tr key={record.id || index}>
                   {technicalEvaluationFields.map((field) => (
@@ -3078,21 +3083,6 @@ function buildPreviewSections(sourceData) {
         body,
       }),
     );
-    pages.push({
-      kind: "text",
-      title: "八、附件",
-      body: "科技奖励和荣誉、代表性论文专著、知识产权、科研项目、成果效益及其他证明材料以系统上传附件为准。",
-    });
-    pages.push({
-      kind: "text",
-      title: "九、真实性承诺书",
-      body: "以本章上传 Word 为准。",
-    });
-    pages.push({
-      kind: "text",
-      title: "十、诚信承诺书",
-      body: "以本章上传 Word 为准。",
-    });
     return pages;
   }
   const textSections = [
@@ -3152,7 +3142,10 @@ function buildPreviewSections(sourceData) {
       title: "五、申请、获得知识产权情况表",
       continued: index > 0,
       ipRecords: (data.ipRecords || []).slice(index * 5, (index + 1) * 5),
-      technicalEvaluationRecords: evaluationRecords.slice(index * 4, (index + 1) * 4),
+      technicalEvaluationRecords: evaluationRecords.slice(
+        index * 4,
+        (index + 1) * 4,
+      ),
       applicationUnits: (data.applicationUnits || []).slice(
         index * 4,
         (index + 1) * 4,
@@ -3175,37 +3168,78 @@ function buildPreviewSections(sourceData) {
       index,
     }),
   );
-  pages.push({
-    kind: "recommendation",
-    title: "八、申报、推荐单位意见",
-    body: data.recommendation,
-  });
-  pages.push({
-    kind: "text",
-    title: "九、专家推荐意见",
-    body: "以本章上传 Word 为准。",
-  });
-  pages.push({
-    kind: "text",
-    title: "十、附件目录",
-    body: "证明材料以系统上传附件为准。",
-  });
-  pages.push({
-    kind: "text",
-    title: "十一、真实性承诺书",
-    body: "以本章上传 Word 为准。",
-  });
-  pages.push({
-    kind: "text",
-    title: "十二、不涉密承诺函",
-    body: "以本章上传 Word 为准。",
-  });
-  pages.push({
-    kind: "text",
-    title: "十三、诚信承诺书",
-    body: "以本章上传 Word 为准。",
-  });
   return pages;
+}
+
+function PreviewSubmittedPage({ page }) {
+  return (
+    <article
+      className="preview-page preview-submitted-page"
+      data-section-key={page.sectionKey}
+      aria-label={`${page.title}，${page.fileName}，第 ${page.filePage} 页`}
+    >
+      <img
+        src={page.url}
+        alt={`${page.fileName} 第 ${page.filePage} 页`}
+        crossOrigin="use-credentials"
+      />
+    </article>
+  );
+}
+
+function PreviewSubmittedWordDocument({ document, onRendered }) {
+  const containerRef = useRef(null);
+  useEffect(() => {
+    let cancelled = false;
+    const renderDocument = async () => {
+      try {
+        const response = await apiFetch(document.url);
+        if (!response.ok) throw new Error("无法读取 Word 文件");
+        const buffer = await response.arrayBuffer();
+        if (cancelled || !containerRef.current) return;
+        containerRef.current.replaceChildren();
+        await renderDocx(buffer, containerRef.current, null, {
+          breakPages: true,
+          ignoreLastRenderedPageBreak: false,
+          inWrapper: true,
+        });
+        if (cancelled || !containerRef.current) return;
+        const pages = [
+          ...containerRef.current.querySelectorAll(
+            ".docx-wrapper > section.docx",
+          ),
+        ];
+        if (!pages.length) throw new Error("Word 文件没有可显示的页面");
+        pages.forEach((page, index) => {
+          page.classList.add("preview-page", "preview-submitted-page");
+          page.dataset.sectionKey = document.sectionKey;
+          page.setAttribute(
+            "aria-label",
+            `${document.title}，${document.fileName}，第 ${index + 1} 页`,
+          );
+        });
+        onRendered(document.id, { status: "ready", pageCount: pages.length });
+      } catch (error) {
+        if (!cancelled) {
+          onRendered(document.id, {
+            status: "error",
+            message: `${document.title}：${error.message || "Word 文件渲染失败"}`,
+          });
+        }
+      }
+    };
+    renderDocument();
+    return () => {
+      cancelled = true;
+    };
+  }, [document, onRendered]);
+  return (
+    <div
+      className="preview-submitted-word"
+      ref={containerRef}
+      data-document-id={document.id}
+    />
+  );
 }
 
 function PreviewDialog({
@@ -3213,13 +3247,127 @@ function PreviewDialog({
   onClose,
   applicationId,
   sourceFile,
+  applicationFiles,
   disciplineRecords,
 }) {
   const pagesRef = useRef(null);
   const [exporting, setExporting] = useState(false);
-  const previewPages = useMemo(() => buildPreviewSections(data), [data]);
-  const pageCount = previewPages.length + 1;
+  const [submittedPages, setSubmittedPages] = useState([]);
+  const [submittedPagesStatus, setSubmittedPagesStatus] = useState("loading");
+  const [submittedPagesError, setSubmittedPagesError] = useState("");
+  const [wordRenderResults, setWordRenderResults] = useState({});
+  useEffect(() => {
+    let cancelled = false;
+    const loadSubmittedPages = async () => {
+      setSubmittedPagesStatus("loading");
+      setSubmittedPagesError("");
+      setWordRenderResults({});
+      const sections = getAwardSections(data.awardType).slice(7);
+      try {
+        const sectionPages = await Promise.all(
+          sections.map(async (section) => {
+            const file = applicationFiles.find(
+              (candidate) =>
+                candidate.file_type ===
+                  `section_word:${getAwardProfile(data.awardType).code}:${section.key}` ||
+                candidate.file_type ===
+                  `section_signed:${getAwardProfile(data.awardType).code}:${section.key}`,
+            );
+            if (!file) return [];
+            const response = await apiFetch(
+              `/api/applications/${applicationId}/files/${file.id}/preview`,
+            );
+            const payload = await response.json();
+            if (!response.ok || !payload.ok) {
+              throw new Error(
+                `${section.label}：${payload.message || "文件预览生成失败"}`,
+              );
+            }
+            return payload.pages.map((previewPage) => ({
+              kind: "submitted",
+              id: `${file.id}-${previewPage.page}`,
+              title: `${section.number}、${section.label}`,
+              sectionKey: section.key,
+              fileName: payload.fileName || file.file_name,
+              filePage: previewPage.page,
+              format: previewPage.format || "image",
+              url: previewPage.url,
+            }));
+          }),
+        );
+        if (!cancelled) {
+          setSubmittedPages(sectionPages.flat());
+          setSubmittedPagesStatus(
+            sectionPages.flat().some((page) => page.format === "word")
+              ? "rendering"
+              : "ready",
+          );
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setSubmittedPages([]);
+          setSubmittedPagesError(error.message);
+          setSubmittedPagesStatus("error");
+        }
+      }
+    };
+    loadSubmittedPages();
+    return () => {
+      cancelled = true;
+    };
+  }, [applicationFiles, applicationId, data.awardType]);
+  const handleWordRendered = React.useCallback((documentId, result) => {
+    setWordRenderResults((current) => ({
+      ...current,
+      [documentId]: result,
+    }));
+  }, []);
+  useEffect(() => {
+    if (submittedPagesStatus !== "rendering") return;
+    const wordDocuments = submittedPages.filter(
+      (page) => page.format === "word",
+    );
+    const failed = wordDocuments.find(
+      (document) => wordRenderResults[document.id]?.status === "error",
+    );
+    if (failed) {
+      setSubmittedPagesError(wordRenderResults[failed.id].message);
+      setSubmittedPagesStatus("error");
+      return;
+    }
+    if (
+      wordDocuments.length &&
+      wordDocuments.every(
+        (document) => wordRenderResults[document.id]?.status === "ready",
+      )
+    ) {
+      setSubmittedPagesStatus("ready");
+    }
+  }, [submittedPages, submittedPagesStatus, wordRenderResults]);
+  const previewPages = useMemo(
+    () => [...buildPreviewSections(data), ...submittedPages],
+    [data, submittedPages],
+  );
+  const renderedWordPageCount = submittedPages
+    .filter((page) => page.format === "word")
+    .reduce(
+      (total, page) => total + (wordRenderResults[page.id]?.pageCount || 1),
+      0,
+    );
+  const pageCount =
+    previewPages.length +
+    1 +
+    renderedWordPageCount -
+    submittedPages.filter((page) => page.format === "word").length;
   const exportSelectedPdf = async (label, selector, fileSuffix) => {
+    if (submittedPagesStatus !== "ready") {
+      window.alert(
+        submittedPagesStatus === "error"
+          ? `提交文件尚未合并：${submittedPagesError}`
+          : "正在载入提交文件，请稍后再导出",
+      );
+      return;
+    }
     setExporting(true);
     try {
       const pages = [...pagesRef.current.querySelectorAll(selector)];
@@ -3234,6 +3382,17 @@ function PreviewDialog({
       });
       for (let index = 0; index < pages.length; index += 1) {
         if (index) pdf.addPage();
+        await Promise.all(
+          [...pages[index].querySelectorAll("img")].map(async (image) => {
+            if (!image.complete) {
+              await new Promise((resolve, reject) => {
+                image.addEventListener("load", resolve, { once: true });
+                image.addEventListener("error", reject, { once: true });
+              });
+            }
+            await image.decode?.().catch(() => {});
+          }),
+        );
         const canvas = await html2canvas(pages[index], {
           scale: 2,
           backgroundColor: "#ffffff",
@@ -3274,7 +3433,7 @@ function PreviewDialog({
           <button
             className="primary-button"
             onClick={exportPdf}
-            disabled={exporting}
+            disabled={exporting || submittedPagesStatus !== "ready"}
           >
             {exporting ? (
               <LoaderCircle className="spin" size={17} />
@@ -3337,6 +3496,20 @@ function PreviewDialog({
           )}
         </div>
       </div>
+      {["loading", "rendering"].includes(submittedPagesStatus) && (
+        <div className="preview-file-status">
+          <LoaderCircle className="spin" size={16} />
+          {submittedPagesStatus === "rendering"
+            ? "正在还原上传的 Word 页面…"
+            : "正在载入第 8 章后的提交文件…"}
+        </div>
+      )}
+      {submittedPagesStatus === "error" && (
+        <div className="preview-file-status preview-file-status--error">
+          <AlertCircle size={16} />
+          提交文件未能合并：{submittedPagesError}
+        </div>
+      )}
       <div className="preview-workspace">
         <aside>
           <button className="page-thumb active">
@@ -3436,6 +3609,18 @@ function PreviewDialog({
                   pageNumber={pageNumber}
                 />
               );
+            }
+            if (page.kind === "submitted") {
+              if (page.format === "word") {
+                return (
+                  <PreviewSubmittedWordDocument
+                    key={page.id}
+                    document={page}
+                    onRendered={handleWordRendered}
+                  />
+                );
+              }
+              return <PreviewSubmittedPage key={page.id} page={page} />;
             }
             return (
               <PreviewTextPage
@@ -5050,6 +5235,7 @@ function EditorApp({ application, onHome }) {
         data={data}
         applicationId={application.id}
         sourceFile={sourceFile}
+        applicationFiles={applicationFiles}
         disciplineRecords={disciplineRecords}
         onClose={() => setShowPreview(false)}
       />

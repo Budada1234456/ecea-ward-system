@@ -203,6 +203,7 @@ const extractionConcurrency = positiveInteger(
   1,
 );
 let activeExtractions = 0;
+const sectionPreviewJobs = new Map();
 
 async function cleanupStaleTemporaryFiles() {
   const expiration = Date.now() - pdfUploadRetentionMs;
@@ -1180,6 +1181,110 @@ async function pdfPageCount(filePath) {
   }
 }
 
+function isSectionSubmission(row) {
+  return (
+    row?.file_type?.startsWith("section_word:") ||
+    row?.file_type?.startsWith("section_signed:")
+  );
+}
+
+function sectionPreviewDirectory(row) {
+  return path.join(path.dirname(row.stored_path), `preview-${row.id}`);
+}
+
+async function buildSectionPreview(row) {
+  const extension = path.extname(row.file_name).toLowerCase();
+  if (extension === ".docx") {
+    return [
+      {
+        path: row.stored_path,
+        mimeType:
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        format: "word",
+      },
+    ];
+  }
+  if ([".jpg", ".jpeg", ".png"].includes(extension)) {
+    return [
+      {
+        path: row.stored_path,
+        mimeType: row.mime_type || "image/png",
+        format: "image",
+      },
+    ];
+  }
+
+  const previewDirectory = sectionPreviewDirectory(row);
+  const manifestPath = path.join(previewDirectory, "manifest.json");
+  const cached = await fsPromises
+    .readFile(manifestPath, "utf8")
+    .then(JSON.parse)
+    .catch(() => null);
+  if (cached?.pages?.length) {
+    const pages = cached.pages.map((fileName) => ({
+      path: path.join(previewDirectory, fileName),
+      mimeType: "image/png",
+      format: "image",
+    }));
+    if (pages.every((page) => fs.existsSync(page.path))) return pages;
+  }
+
+  await fsPromises.rm(previewDirectory, { recursive: true, force: true });
+  await fsPromises.mkdir(previewDirectory, { recursive: true });
+  const pdfPath = row.stored_path;
+  try {
+    const pagePrefix = path.join(previewDirectory, "page");
+    try {
+      await execFileAsync(
+        "pdftoppm",
+        ["-png", "-r", "144", pdfPath, pagePrefix],
+        {
+          windowsHide: true,
+          maxBuffer: 8 * 1024 * 1024,
+          timeout: pdfCommandTimeoutMs,
+        },
+      );
+    } catch (error) {
+      throw new Error(`文件预览生成失败：${error.message}`);
+    }
+    const pageNames = (await fsPromises.readdir(previewDirectory))
+      .filter((fileName) => /^page-\d+\.png$/i.test(fileName))
+      .sort(
+        (left, right) =>
+          Number(left.match(/\d+/)?.[0]) - Number(right.match(/\d+/)?.[0]),
+      );
+    if (!pageNames.length) throw new Error("文件预览没有可显示的页面");
+    await fsPromises.writeFile(
+      manifestPath,
+      JSON.stringify({ pages: pageNames }),
+      "utf8",
+    );
+    db.prepare("UPDATE application_files SET page_count = ? WHERE id = ?").run(
+      pageNames.length,
+      row.id,
+    );
+    return pageNames.map((fileName) => ({
+      path: path.join(previewDirectory, fileName),
+      mimeType: "image/png",
+      format: "image",
+    }));
+  } catch (error) {
+    await fsPromises.rm(previewDirectory, { recursive: true, force: true });
+    throw error;
+  }
+}
+
+function ensureSectionPreview(row) {
+  const key = Number(row.id);
+  if (!sectionPreviewJobs.has(key)) {
+    sectionPreviewJobs.set(
+      key,
+      buildSectionPreview(row).finally(() => sectionPreviewJobs.delete(key)),
+    );
+  }
+  return sectionPreviewJobs.get(key);
+}
+
 const count = db
   .prepare(
     "SELECT COUNT(*) AS total FROM applications WHERE archived_at IS NULL",
@@ -1514,11 +1619,12 @@ app.post(
         .json({ ok: false, message: "正文中只能插入 JPG 或 PNG 图片" });
     }
     const extension = path.extname(fileName).toLowerCase();
-    if (isSectionWord && ![".doc", ".docx"].includes(extension)) {
+    if (isSectionWord && extension !== ".docx") {
       await fsPromises.unlink(req.file.path).catch(() => {});
       return res.status(422).json({
         ok: false,
-        message: "章节文件仅支持 .doc 或 .docx Word 文档",
+        message:
+          "章节文件仅支持 DOCX；旧版 .doc 请在 Word 中另存为 DOCX 后上传",
       });
     }
     if (
@@ -1568,7 +1674,7 @@ app.post(
       `${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safeName}`,
     );
     await persistUploadedFile(req.file.path, storedPath);
-    const pageCount = extension === ".pdf" ? await pdfPageCount(storedPath) : 1;
+    let pageCount = extension === ".pdf" ? await pdfPageCount(storedPath) : 1;
     const shouldLimitPages =
       profile.mode === "project" &&
       !isContentImage &&
@@ -1608,11 +1714,38 @@ app.post(
         req.file.mimetype,
         timestamp,
       );
+    const fileId = Number(result.lastInsertRowid);
+    if (isSectionWord || isSignedSection) {
+      try {
+        const previewPages = await ensureSectionPreview({
+          id: fileId,
+          file_name: fileName,
+          file_type: category,
+          stored_path: storedPath,
+          mime_type: req.file.mimetype,
+        });
+        pageCount = previewPages.length;
+      } catch (error) {
+        db.prepare("DELETE FROM application_files WHERE id = ?").run(fileId);
+        await fsPromises.rm(
+          sectionPreviewDirectory({ id: fileId, stored_path: storedPath }),
+          {
+            recursive: true,
+            force: true,
+          },
+        );
+        await fsPromises.unlink(storedPath).catch(() => {});
+        return res.status(422).json({
+          ok: false,
+          message: error.message || "无法生成章节文件预览",
+        });
+      }
+    }
     writeAudit(applicationId, "file_upload", `上传附件 ${fileName}`);
     res.status(201).json({
       ok: true,
       file: {
-        id: Number(result.lastInsertRowid),
+        id: fileId,
         file_name: fileName,
         file_type: category,
         file_size: req.file.size,
@@ -1639,6 +1772,10 @@ app.delete(
     if (!row) return res.status(404).json({ ok: false, message: "附件不存在" });
     db.prepare("DELETE FROM application_files WHERE id = ?").run(fileId);
     if (row.stored_path) {
+      await fsPromises.rm(sectionPreviewDirectory(row), {
+        recursive: true,
+        force: true,
+      });
       await fsPromises.unlink(row.stored_path).catch(() => {});
       await fsPromises.rmdir(path.dirname(row.stored_path)).catch(() => {});
     }
@@ -1667,6 +1804,80 @@ app.get(
       `${disposition}; filename*=UTF-8''${encodeURIComponent(row.file_name)}`,
     );
     res.sendFile(path.resolve(row.stored_path));
+  },
+);
+
+app.get(
+  "/api/applications/:applicationId/files/:fileId/preview",
+  async (req, res) => {
+    const applicationId = Number(req.params.applicationId);
+    if (!ownedApplication(applicationId, req.user.id))
+      return res.status(404).json({ ok: false, message: "申报项目不存在" });
+    const row = db
+      .prepare(
+        "SELECT * FROM application_files WHERE id = ? AND application_id = ?",
+      )
+      .get(Number(req.params.fileId), applicationId);
+    if (!row?.stored_path || !fs.existsSync(row.stored_path))
+      return res.status(404).json({ ok: false, message: "文件不存在" });
+    if (!isSectionSubmission(row))
+      return res
+        .status(422)
+        .json({ ok: false, message: "该文件不是章节提交文件" });
+    try {
+      const pages = await ensureSectionPreview(row);
+      res.json({
+        ok: true,
+        fileName: row.file_name,
+        pageCount: pages.length,
+        pages: pages.map((page, index) => ({
+          page: index + 1,
+          format: page.format,
+          url: `/api/applications/${applicationId}/files/${row.id}/preview/${index + 1}`,
+        })),
+      });
+    } catch (error) {
+      res.status(422).json({
+        ok: false,
+        message: error.message || "无法生成章节文件预览",
+      });
+    }
+  },
+);
+
+app.get(
+  "/api/applications/:applicationId/files/:fileId/preview/:page",
+  async (req, res) => {
+    const applicationId = Number(req.params.applicationId);
+    if (!ownedApplication(applicationId, req.user.id))
+      return res.status(404).json({ ok: false, message: "申报项目不存在" });
+    const row = db
+      .prepare(
+        "SELECT * FROM application_files WHERE id = ? AND application_id = ?",
+      )
+      .get(Number(req.params.fileId), applicationId);
+    if (!row?.stored_path || !fs.existsSync(row.stored_path))
+      return res.status(404).json({ ok: false, message: "文件不存在" });
+    if (!isSectionSubmission(row))
+      return res
+        .status(422)
+        .json({ ok: false, message: "该文件不是章节提交文件" });
+    try {
+      const pages = await ensureSectionPreview(row);
+      const pageIndex = Number(req.params.page) - 1;
+      const page = pages[pageIndex];
+      if (!page)
+        return res.status(404).json({ ok: false, message: "预览页不存在" });
+      res.setHeader("Content-Type", page.mimeType);
+      res.setHeader("Cache-Control", "private, max-age=3600");
+      res.setHeader("Content-Disposition", "inline");
+      res.sendFile(path.resolve(page.path));
+    } catch (error) {
+      res.status(422).json({
+        ok: false,
+        message: error.message || "无法读取章节文件预览",
+      });
+    }
   },
 );
 

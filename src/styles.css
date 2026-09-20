@@ -3827,6 +3827,23 @@ select.control {
   font-size: 10px;
   margin-top: 2px;
 }
+.preview-file-status {
+  min-height: 38px;
+  padding: 9px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-bottom: 1px solid #cbd6e3;
+  color: #36516f;
+  background: #edf5ff;
+  font-size: 13px;
+}
+.preview-file-status--error {
+  color: #a62525;
+  border-color: #e9c1c1;
+  background: #fff1f1;
+}
 .preview-workspace {
   display: grid;
   grid-template-columns: 170px minmax(0, 1fr);
@@ -3901,6 +3918,32 @@ select.control {
   overflow: hidden;
   color: #111;
   font-family: SimSun, "Songti SC", serif;
+}
+.preview-submitted-page {
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fff;
+}
+.preview-submitted-page > img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain;
+}
+.preview-submitted-word .docx-wrapper {
+  padding: 0;
+  background: transparent;
+}
+.preview-submitted-word .docx-wrapper > section.docx.preview-page {
+  width: 210mm !important;
+  min-height: 297mm !important;
+  height: 297mm !important;
+  margin: 0 auto 28px;
+  padding: 0 !important;
+  box-shadow: 0 3px 16px rgba(26, 36, 50, 0.16);
+  overflow: hidden;
 }
 .preview-page header {
   text-align: center;
