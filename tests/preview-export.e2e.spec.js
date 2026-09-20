@@ -289,7 +289,8 @@ test("rich media, entity pages and the complete PDF export stay intact", async (
         name: `第 ${index + 1} 完成单位情况表`,
       });
       await expect(unitTable).toContainText(name);
-      await expect(unitTable).not.toContainText("传真");
+      await expect(unitTable).toContainText("传真");
+      await expect(unitTable).toContainText("010-88886666");
       await expect(unitTable).not.toContainText(
         "注：务必确保以上相关信息完整无误。",
       );

@@ -25,6 +25,7 @@ export function completeUnit(name = "完成单位") {
     nature: "企业",
     address: "北京市朝阳区测试路 1 号",
     email: "unit@example.test",
+    fax: "010-88886666",
     contribution: "负责成果转化与示范应用",
   };
 }

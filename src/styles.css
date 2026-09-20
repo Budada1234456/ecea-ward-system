@@ -3298,13 +3298,6 @@ select.control {
   color: #586879;
   line-height: 1.4;
 }
-.entity-editor__accuracy-note {
-  grid-column: 1 / -1;
-  margin: 2px 0 0;
-  color: #c62828;
-  font-size: 13px;
-  font-weight: 600;
-}
 .entity-editor__custom-field {
   grid-column: 1 / -1;
 }

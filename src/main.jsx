@@ -2981,7 +2981,9 @@ function PreviewUnitPage({ unit, index, pageNumber }) {
           </tr>
           <tr>
             <th>电子邮箱</th>
-            <td colSpan="5">{unit.email}</td>
+            <td colSpan="3">{unit.email}</td>
+            <th>传真</th>
+            <td>{unit.fax}</td>
           </tr>
           <tr className="preview-contribution-row preview-unit-contribution">
             <td colSpan="6">
