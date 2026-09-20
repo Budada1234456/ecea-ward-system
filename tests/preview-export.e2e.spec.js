@@ -536,6 +536,21 @@ test("rich media, entity pages and the complete PDF export stay intact", async (
     );
     expect(overflowingPages).toEqual([]);
 
+    const previewHeadingBounds = await page
+      .locator(".preview-page:first-child header h1")
+      .evaluate((heading) => {
+        const range = document.createRange();
+        range.selectNodeContents(heading);
+        const { x, width } = range.getBoundingClientRect();
+        const pageBounds = heading
+          .closest(".preview-page")
+          .getBoundingClientRect();
+        return {
+          x: x - pageBounds.x,
+          width,
+        };
+      });
+
     const downloadPromise = page.waitForEvent("download");
     await page.getByRole("button", { name: "导出系统生成 PDF" }).click();
     const download = await downloadPromise;
@@ -553,13 +568,39 @@ test("rich media, entity pages and the complete PDF export stay intact", async (
       os.tmpdir(),
       `ceca-preview-export-${applicationId}.pdf`,
     );
+    const bboxPath = `${pdfPath}.html`;
     await fs.writeFile(pdfPath, pdf);
     try {
       const { stdout } = await execFileAsync("pdftotext", [pdfPath, "-"]);
       expect(stdout).toContain("预览导出完整性验收");
       expect(stdout).toContain("富文本图表验收标记");
+      await execFileAsync("pdftotext", [
+        "-f",
+        "1",
+        "-l",
+        "1",
+        "-bbox",
+        pdfPath,
+        bboxPath,
+      ]);
+      const bbox = await fs.readFile(bboxPath, "utf8");
+      const headingMatch = bbox.match(
+        /<word xMin="([\d.]+)" yMin="([\d.]+)" xMax="([\d.]+)" yMax="([\d.]+)">中国节能协会创新奖<\/word>/,
+      );
+      expect(headingMatch).not.toBeNull();
+      const [, xMin, , xMax] = headingMatch.map(Number);
+      const cssPixelsToPdfPoints = 72 / 96;
+      expect(xMin).toBeCloseTo(
+        previewHeadingBounds.x * cssPixelsToPdfPoints,
+        0,
+      );
+      expect(xMax - xMin).toBeCloseTo(
+        previewHeadingBounds.width * cssPixelsToPdfPoints,
+        0,
+      );
     } finally {
       await fs.unlink(pdfPath).catch(() => {});
+      await fs.unlink(bboxPath).catch(() => {});
     }
     expect(errors).toEqual([]);
   } finally {
