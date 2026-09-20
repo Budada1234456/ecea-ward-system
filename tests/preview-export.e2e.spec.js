@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import fs from "node:fs/promises";
 import { deflateSync } from "node:zlib";
 import { jsPDF } from "jspdf";
+import JSZip from "jszip";
 import {
   completePerson,
   completeProjectData,
@@ -54,6 +55,17 @@ function tallPng() {
     pngChunk("IDAT", deflateSync(pixels)),
     pngChunk("IEND", Buffer.alloc(0)),
   ]);
+}
+
+async function withTrailingBlankWordPage(buffer) {
+  const zip = await JSZip.loadAsync(buffer);
+  const documentPart = zip.file("word/document.xml");
+  const xml = await documentPart.async("string");
+  const pageBreak =
+    '<w:p><w:r><w:br w:type="page"/></w:r></w:p><w:p></w:p>';
+  const next = xml.replace(/<w:sectPr(?:\s|>)/, (match) => `${pageBreak}${match}`);
+  zip.file("word/document.xml", next);
+  return zip.generateAsync({ type: "nodebuffer" });
 }
 
 test("rich media, entity pages and the complete PDF export stay intact", async ({
@@ -228,8 +240,10 @@ test("rich media, entity pages and the complete PDF export stay intact", async (
       true,
     );
 
-    const expertRecommendationWord = await fs.readFile(
-      "节能奖填报材料/科技进步奖/九、专家推荐意见.docx",
+    const expertRecommendationWord = await withTrailingBlankWordPage(
+      await fs.readFile(
+        "节能奖填报材料/科技进步奖/九、专家推荐意见.docx",
+      ),
     );
     const expertRecommendationUpload = await page.request.post(
       `${baseUrl}/api/applications/${applicationId}/files`,

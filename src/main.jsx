@@ -3300,9 +3300,10 @@ function PreviewSubmittedWordDocument({ document, onRendered }) {
           ),
         ];
         const pages = renderedPages.filter((page) => {
-          const hasText = Boolean(page.textContent?.replace(/\s+/g, ""));
+          const body = page.querySelector(":scope > article") || page;
+          const hasText = Boolean(body.textContent?.replace(/\s+/g, ""));
           const hasContent = Boolean(
-            page.querySelector("table, img, svg, canvas, video, object"),
+            body.querySelector("table, img, svg, canvas, video, object"),
           );
           if (hasText || hasContent) return true;
           page.remove();
