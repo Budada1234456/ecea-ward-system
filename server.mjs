@@ -22,6 +22,10 @@ import { createWordImportRouter } from "./routes/word-import.mjs";
 import { sanitizeApplicationRichTextData } from "./src/editor/rich-text-node.mjs";
 import { validateApplication } from "./src/forms/application-validation.js";
 import {
+  PDF_EXPORT_SINGLE_PAGE_LIMIT,
+  PDF_EXPORT_TOTAL_HTML_LIMIT,
+} from "./src/pdf-export-parts.js";
+import {
   AWARD_TYPES,
   awardProfiles,
   getAwardProfile,
@@ -282,7 +286,13 @@ function authRateLimit(req, res, next) {
 app.use("/api/auth", (req, res, next) =>
   req.method === "POST" ? authRateLimit(req, res, next) : next(),
 );
-app.use(express.json({ limit: "15mb" }));
+app.use(
+  express.json({
+    limit: "15mb",
+    type: (req) =>
+      req.path !== "/api/pdf-export" && Boolean(req.is("application/json")),
+  }),
+);
 
 const now = () => new Date().toISOString();
 const hashToken = (value) => createHash("sha256").update(value).digest("hex");
@@ -560,6 +570,8 @@ app.use(
   }),
 );
 
+app.use("/api/pdf-export", express.json({ limit: "100mb" }));
+
 app.post("/api/pdf-export", async (req, res) => {
   const html = String(req.body?.html || "");
   const applicationId = Number(req.body?.applicationId);
@@ -578,11 +590,23 @@ app.post("/api/pdf-export", async (req, res) => {
   if (
     (!requestedParts?.length && !html) ||
     requestedParts?.length > 200 ||
-    totalHtmlLength > 10 * 1024 * 1024
+    totalHtmlLength > PDF_EXPORT_TOTAL_HTML_LIMIT
   ) {
     return res
       .status(422)
       .json({ ok: false, message: "PDF 导出内容为空或过大" });
+  }
+  if (
+    requestedParts?.some(
+      (part) =>
+        part?.type === "html" &&
+        String(part.html || "").length > PDF_EXPORT_SINGLE_PAGE_LIMIT,
+    )
+  ) {
+    return res.status(422).json({
+      ok: false,
+      message: "PDF 导出单个页面分段过大，请压缩图片后重试",
+    });
   }
   let parts = requestedParts;
   if (parts) {

@@ -75,6 +75,7 @@ import {
   validateSection,
 } from "./forms/application-validation.js";
 import { awardDisciplines } from "./data/award-disciplines.js";
+import { chunkPdfExportHtmlPages } from "./pdf-export-parts.js";
 import "./styles.css";
 
 const awardOptions = awardProfiles.map((profile) => ({
@@ -3587,9 +3588,9 @@ function PreviewDialog({
       }
     });
     flushHtml();
-    return Promise.all(
+    const expandedParts = await Promise.all(
       rawParts.map(async (part) => {
-        if (part.type === "pdf") return part;
+        if (part.type === "pdf") return [part];
         const clones = part.pages.map((page) => {
           const clone = page.cloneNode(true);
           if (!clone.classList.contains("preview-submitted-page")) {
@@ -3619,12 +3620,10 @@ function PreviewDialog({
             });
           }),
         );
-        return {
-          type: "html",
-          html: clones.map((page) => page.outerHTML).join(""),
-        };
+        return chunkPdfExportHtmlPages(clones.map((page) => page.outerHTML));
       }),
     );
+    return expandedParts.flat();
   };
   const exportSelectedPdf = async (label, selector, fileSuffix) => {
     if (submittedPagesStatus !== "ready") {
