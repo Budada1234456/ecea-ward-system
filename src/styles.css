@@ -6113,6 +6113,26 @@ select.control {
   border-top: 0;
 }
 
+/* Word imports can leave a different alignment on the final paragraph. */
+:is(.preview-pages--progress, .preview-pages--invention)
+  .preview-detail-page
+  .preview-section-table:is(
+    [aria-label*="与当前国内外同类技术的比较"],
+    [aria-label*="5．应用情况"]
+  )
+  .preview-rich-text
+  > p,
+.pdf-export-document
+  :is(.preview-progress-document, .preview-invention-document)
+  .preview-section-table:is(
+    [aria-label*="与当前国内外同类技术的比较"],
+    [aria-label*="5．应用情况"]
+  )
+  .preview-rich-text
+  > p {
+  text-align: justify !important;
+}
+
 .preview-economic-page .preview-section-heading-row .preview-table-unit {
   float: right;
   margin: 0;
