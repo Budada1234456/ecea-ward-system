@@ -5873,3 +5873,102 @@ select.control {
     font-size: 21px;
   }
 }
+
+/* Official application template typography and A4 page geometry. */
+.preview-page:not(.preview-submitted-page) {
+  padding: 16.5mm 12.5mm 18.5mm 15.9mm;
+  font-family: SimSun, "Songti SC", "STSong", serif;
+  font-size: 12pt;
+  line-height: 1.5;
+}
+
+.preview-basic-page > h3,
+.preview-form-page > h3,
+.preview-section-table > tbody > tr:first-child > th {
+  margin: 0 0 3.5mm;
+  padding: 0;
+  border: 0;
+  background: #fff;
+  color: #111;
+  font-family: SimHei, "Heiti SC", "Microsoft YaHei", sans-serif;
+  font-size: 16pt;
+  font-weight: 700;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.preview-basic-page > h3 {
+  margin-top: 2mm;
+  margin-bottom: 5mm;
+}
+
+.preview-subtable > h4,
+.preview-recommendation-table h4,
+.preview-rich-text h2,
+.preview-rich-text h3,
+.preview-section-heading-row > th {
+  color: #111;
+  font-family: SimSun, "Songti SC", "STSong", serif;
+  font-size: 12pt;
+  font-weight: 700;
+  line-height: 1.5;
+  letter-spacing: 0;
+}
+
+.preview-subtable > h4 {
+  margin: 0;
+  padding: 3mm 2mm;
+  border: 0;
+}
+
+.preview-section-table,
+.preview-page:not(.preview-submitted-page) table {
+  font-family: SimSun, "Songti SC", "STSong", serif;
+}
+
+.preview-section-table .preview-body-text {
+  font-size: 12pt;
+  line-height: 1.8;
+}
+
+.preview-basic-page > table,
+.preview-award-page table,
+.preview-ip-page .preview-subtable table,
+.preview-entity-page table,
+.preview-economic-page table tbody td,
+.preview-economic-page table tbody th {
+  font-size: 12pt;
+}
+
+.preview-ip-page > h3 {
+  margin-bottom: 3.5mm;
+}
+
+.preview-recommendation-note {
+  margin: -2mm 0 2mm;
+  font-size: 12pt;
+}
+
+/* docx-preview otherwise loses the template margins through the generic page reset. */
+.preview-submitted-word .docx-wrapper > section.docx.preview-submitted-page {
+  display: block;
+  width: 210mm !important;
+  min-height: 297mm !important;
+  height: 297mm !important;
+  margin: 0 auto 28px;
+  padding: 16.5mm 12.5mm 18.5mm 15.9mm !important;
+  overflow: hidden;
+  background: #fff;
+  box-shadow: 0 3px 16px rgba(26, 36, 50, 0.16);
+}
+
+@media print {
+  .preview-page:not(.preview-submitted-page) {
+    padding: 16.5mm 12.5mm 18.5mm 15.9mm;
+  }
+
+  .preview-submitted-word .docx-wrapper > section.docx.preview-submitted-page {
+    margin: 0;
+    box-shadow: none;
+  }
+}
