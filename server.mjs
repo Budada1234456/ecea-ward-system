@@ -1328,8 +1328,8 @@ function isSectionSubmission(row) {
 }
 
 function isPreviewableSubmission(row) {
-  if (isSectionSubmission(row)) return true;
   const extension = path.extname(row?.file_name || "").toLowerCase();
+  if (isSectionSubmission(row)) return extension !== ".doc";
   return (
     !["source_pdf"].includes(row?.file_type) &&
     !row?.file_type?.startsWith("content_image:") &&
@@ -1768,12 +1768,11 @@ app.post(
         .json({ ok: false, message: "正文中只能插入 JPG 或 PNG 图片" });
     }
     const extension = path.extname(fileName).toLowerCase();
-    if (isSectionWord && extension !== ".docx") {
+    if (isSectionWord && ![".doc", ".docx"].includes(extension)) {
       await fsPromises.unlink(req.file.path).catch(() => {});
       return res.status(422).json({
         ok: false,
-        message:
-          "章节文件仅支持 DOCX；旧版 .doc 请在 Word 中另存为 DOCX 后上传",
+        message: "章节文件仅支持 DOC、DOCX",
       });
     }
     if (
@@ -1864,7 +1863,7 @@ app.post(
         timestamp,
       );
     const fileId = Number(result.lastInsertRowid);
-    if (isSectionWord || isSignedSection) {
+    if ((isSectionWord && extension !== ".doc") || isSignedSection) {
       try {
         const previewPages = await ensureSectionPreview({
           id: fileId,
@@ -2389,20 +2388,21 @@ app.get("/api/health", (_req, res) => {
   res.json({ ok: true, database: "sqlite", applications });
 });
 
+const materialsDirectory = path.join(root, "节能奖填报材料");
+app.use(
+  "/materials",
+  express.static(materialsDirectory, {
+    setHeaders(res, filePath) {
+      res.attachment(path.basename(filePath));
+      res.setHeader("Cache-Control", "no-store");
+    },
+  }),
+);
+app.use("/materials", (_req, res) => {
+  res.status(404).json({ ok: false, message: "申报模板或参考资料不存在" });
+});
+
 if (process.argv.includes("--serve")) {
-  const materialsDirectory = path.join(root, "节能奖填报材料");
-  app.use(
-    "/materials",
-    express.static(materialsDirectory, {
-      setHeaders(res, filePath) {
-        res.attachment(path.basename(filePath));
-        res.setHeader("Cache-Control", "no-store");
-      },
-    }),
-  );
-  app.use("/materials", (_req, res) => {
-    res.status(404).json({ ok: false, message: "申报模板或参考资料不存在" });
-  });
   app.use(express.static(path.join(root, "dist")));
   app.use((_req, res) => res.sendFile(path.join(root, "dist", "index.html")));
 }

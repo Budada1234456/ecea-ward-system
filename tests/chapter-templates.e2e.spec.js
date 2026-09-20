@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import JSZip from "jszip";
 import { DOMParser } from "@xmldom/xmldom";
+import { jsPDF } from "jspdf";
 import path from "node:path";
 
 const baseUrl = process.env.TEST_BASE_URL || "http://127.0.0.1:4174";
@@ -240,6 +241,100 @@ test("split chapter templates download, import and persist independently", async
   await expect(page.locator(".section-template-actions")).toBeVisible();
   await page.screenshot({
     path: "test-results/chapter-template-mobile.png",
+    fullPage: true,
+  });
+});
+
+test("achievement chapters download and PDF attachments upload", async ({
+  page,
+}) => {
+  const suffix = `${Date.now()}${Math.floor(Math.random() * 1000)}`;
+  const username = `achchap${suffix}`;
+  const registration = await page.request.post(`${baseUrl}/api/auth/register`, {
+    data: {
+      username,
+      email: `${username}@example.test`,
+      displayName: "个人奖章节验收用户",
+      password: `Achievement-${suffix}`,
+    },
+  });
+  expect(registration.ok(), await registration.text()).toBe(true);
+
+  const creation = await page.request.post(`${baseUrl}/api/applications`, {
+    data: {
+      awardType: "节能减排科技成就奖",
+      title: `个人奖章节验收-${suffix}`,
+      applicantUnit: "中国节能测试单位",
+      year: 2026,
+      workflowMode: "form",
+    },
+  });
+  expect(creation.ok(), await creation.text()).toBe(true);
+  const application = (await creation.json()).application;
+
+  await page.goto(`${baseUrl}/#/applications/${application.id}`);
+  const chapterNav = page.locator(".sidebar nav button");
+  await expect(chapterNav).toHaveCount(10);
+
+  let basicTemplate;
+  for (let index = 0; index < 10; index += 1) {
+    await chapterNav.nth(index).click();
+    const href = await page
+      .locator(".section-template-bar")
+      .getByRole("link", { name: "下载本章模板" })
+      .getAttribute("href");
+    const response = await page.request.get(`${baseUrl}${href}`);
+    expect(response.ok(), `第 ${index + 1} 章模板下载失败`).toBe(true);
+    const body = await response.body();
+    expect(body.length).toBeGreaterThan(1_000);
+    if (index === 0) basicTemplate = body;
+  }
+  const chapterUpload = await page.request.post(
+    `${baseUrl}/api/applications/${application.id}/files`,
+    {
+      multipart: {
+        category: "section_word:achievement:basic",
+        file: {
+          name: "一、基本情况.doc",
+          mimeType: "application/msword",
+          buffer: basicTemplate,
+        },
+      },
+    },
+  );
+  expect(chapterUpload.ok(), await chapterUpload.text()).toBe(true);
+
+  await chapterNav.nth(2).click();
+  await page.getByRole("button", { name: "添加论文或专著" }).click();
+  await expect(page.getByRole("columnheader")).toHaveText([
+    "序号",
+    "*基本信息（名称 + 年份 + 本人排名 + 主要合作者 + 发表刊物 / 出版社）",
+    "本人作用和主要贡献（限 100 字 / 项）",
+    "操作",
+  ]);
+
+  await chapterNav.nth(7).click();
+  await expect(page.getByRole("heading", { name: "证明材料" })).toBeVisible();
+  const pdf = new jsPDF();
+  pdf.text("Achievement PDF", 20, 20);
+  await page
+    .locator(".attachment-row-wrap")
+    .first()
+    .locator('input[type="file"]')
+    .setInputFiles({
+      name: "achievement-proof.pdf",
+      mimeType: "application/pdf",
+      buffer: Buffer.from(pdf.output("arraybuffer")),
+    });
+  await expect(
+    page
+      .locator(".attachment-row-wrap")
+      .first()
+      .getByText("已上传 1 件 / 1 页"),
+  ).toBeVisible();
+
+  await page.screenshot({
+    path: "test-results/achievement-templates-and-attachments.png",
     fullPage: true,
   });
 });

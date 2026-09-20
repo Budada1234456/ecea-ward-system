@@ -1726,11 +1726,12 @@ function AttachmentSection({
                   <input
                     hidden
                     type="file"
-                    accept=".pdf,.jpg,.jpeg,.png"
+                    accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
                     disabled={Boolean(uploading)}
-                    onChange={(event) =>
-                      uploadMaterial(key, event.target.files?.[0])
-                    }
+                    onChange={(event) => {
+                      uploadMaterial(key, event.target.files?.[0]);
+                      event.target.value = "";
+                    }}
                   />
                 </label>
               </div>
