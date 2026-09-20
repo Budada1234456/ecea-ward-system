@@ -269,6 +269,45 @@ test("rich media, entity pages and the complete PDF export stay intact", async (
     );
     expect(authenticityUpload.ok(), await authenticityUpload.text()).toBe(true);
 
+    const confidentialityDocument = new jsPDF();
+    confidentialityDocument.text("Confidentiality page 1", 20, 20);
+    confidentialityDocument.addPage();
+    confidentialityDocument.text("Confidentiality page 2", 20, 20);
+    const confidentialityUpload = await page.request.post(
+      `${baseUrl}/api/applications/${applicationId}/files`,
+      {
+        multipart: {
+          category: "section_signed:progress:confidentiality",
+          file: {
+            name: "十二、不涉密承诺函.pdf",
+            mimeType: "application/pdf",
+            buffer: Buffer.from(confidentialityDocument.output("arraybuffer")),
+          },
+        },
+      },
+    );
+    expect(
+      confidentialityUpload.ok(),
+      await confidentialityUpload.text(),
+    ).toBe(true);
+
+    const integrityDocument = new jsPDF();
+    integrityDocument.text("Integrity page 1", 20, 20);
+    const integrityUpload = await page.request.post(
+      `${baseUrl}/api/applications/${applicationId}/files`,
+      {
+        multipart: {
+          category: "section_signed:progress:integrity",
+          file: {
+            name: "十三、诚信承诺书.pdf",
+            mimeType: "application/pdf",
+            buffer: Buffer.from(integrityDocument.output("arraybuffer")),
+          },
+        },
+      },
+    );
+    expect(integrityUpload.ok(), await integrityUpload.text()).toBe(true);
+
     await page.route(
       `**/api/applications/${applicationId}/files`,
       async (route) => {
@@ -351,29 +390,31 @@ test("rich media, entity pages and the complete PDF export stay intact", async (
     ).toHaveText(/^1．立项背景/);
 
     const submittedPages = page.locator(".preview-submitted-page");
-    await expect(submittedPages).toHaveCount(4);
-    await expect(submittedPages.nth(0)).toHaveAttribute(
-      "data-section-key",
-      "unitRecommendation",
-    );
-    await expect(submittedPages.nth(1)).toHaveAttribute(
-      "data-section-key",
-      "expertRecommendation",
-    );
-    await expect(submittedPages.nth(2)).toHaveAttribute(
-      "data-section-key",
-      "authenticity",
-    );
-    await expect(submittedPages.nth(3)).toHaveAttribute(
-      "data-section-key",
-      "authenticity",
-    );
+    await expect(submittedPages).toHaveCount(15);
+    await expect(
+      submittedPages.filter({ has: page.locator("img") }),
+    ).toHaveCount(13);
+    for (const [sectionKey, expectedPages] of [
+      ["unitRecommendation", 2],
+      ["expertRecommendation", 1],
+      ["attachments", 7],
+      ["authenticity", 2],
+      ["confidentiality", 2],
+      ["integrity", 1],
+    ]) {
+      await expect(
+        page.locator(`.preview-submitted-page[data-section-key="${sectionKey}"]`),
+      ).toHaveCount(expectedPages);
+    }
     await expect(page.getByText("以本章上传 Word 为准。")).toHaveCount(0);
-    await expect(submittedPages.nth(0)).toHaveAttribute(
+    const recommendationWordPage = page.locator(
+      '.preview-submitted-page[aria-label*="八、申报、推荐单位意见.docx"]',
+    );
+    await expect(recommendationWordPage).toHaveAttribute(
       "aria-label",
       /八、申报、推荐单位意见\.docx/,
     );
-    await submittedPages.nth(0).screenshot({
+    await recommendationWordPage.screenshot({
       path: "test-results/application-preview-submitted-word.png",
     });
     for (const image of await submittedPages.locator("img").all()) {
@@ -425,6 +466,19 @@ test("rich media, entity pages and the complete PDF export stay intact", async (
 
     const previewPages = page.locator(".preview-page");
     const previewPageCount = await previewPages.count();
+    await expect
+      .poll(() =>
+        previewPages.evaluateAll((pages) =>
+          pages.map(
+            (previewPage) =>
+              previewPage.querySelector(":scope > .preview-page-number")
+                ?.textContent || "",
+          ),
+        ),
+      )
+      .toEqual(
+        Array.from({ length: previewPageCount }, (_, index) => String(index + 1)),
+      );
     for (let index = 0; index < Math.min(previewPageCount, 5); index += 1) {
       await previewPages.nth(index).screenshot({
         path: `test-results/application-preview-page-${index + 1}.png`,

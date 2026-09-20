@@ -3272,6 +3272,7 @@ function PreviewSubmittedPage({ page }) {
         alt={`${page.fileName} 第 ${page.filePage} 页`}
         crossOrigin="use-credentials"
       />
+      <footer className="preview-page-number" />
     </article>
   );
 }
@@ -3363,37 +3364,61 @@ function PreviewDialog({
       setSubmittedPagesStatus("loading");
       setSubmittedPagesError("");
       setWordRenderResults({});
+      const profile = getAwardProfile(data.awardType);
       const sections = getAwardSections(data.awardType).slice(7);
+      const attachmentCategories = new Set(
+        profile.attachmentMaterials.map(([category]) => category),
+      );
+      const recommendationCategories = new Set(
+        profile.recommendationMaterials.map(([category]) => category),
+      );
       try {
         const sectionPages = await Promise.all(
           sections.map(async (section) => {
-            const file = applicationFiles.find(
-              (candidate) =>
-                candidate.file_type ===
-                  `section_word:${getAwardProfile(data.awardType).code}:${section.key}` ||
-                candidate.file_type ===
-                  `section_signed:${getAwardProfile(data.awardType).code}:${section.key}`,
+            const directTypes = new Set([
+              `section_word:${profile.code}:${section.key}`,
+              `section_signed:${profile.code}:${section.key}`,
+            ]);
+            const files = applicationFiles
+              .filter((candidate) => {
+                if (directTypes.has(candidate.file_type)) return true;
+                if (
+                  section.key === "attachments" &&
+                  (attachmentCategories.has(candidate.file_type) ||
+                    (profile.mode === "individual" &&
+                      recommendationCategories.has(candidate.file_type)))
+                )
+                  return true;
+                return (
+                  section.key === "unitRecommendation" &&
+                  recommendationCategories.has(candidate.file_type)
+                );
+              })
+              .sort((left, right) => Number(left.id) - Number(right.id));
+            const filePages = await Promise.all(
+              files.map(async (file) => {
+                const response = await apiFetch(
+                  `/api/applications/${applicationId}/files/${file.id}/preview`,
+                );
+                const payload = await response.json();
+                if (!response.ok || !payload.ok) {
+                  throw new Error(
+                    `${section.label}：${payload.message || "文件预览生成失败"}`,
+                  );
+                }
+                return payload.pages.map((previewPage) => ({
+                  kind: "submitted",
+                  id: `${file.id}-${previewPage.page}`,
+                  title: `${section.number}、${section.label}`,
+                  sectionKey: section.key,
+                  fileName: payload.fileName || file.file_name,
+                  filePage: previewPage.page,
+                  format: previewPage.format || "image",
+                  url: previewPage.url,
+                }));
+              }),
             );
-            if (!file) return [];
-            const response = await apiFetch(
-              `/api/applications/${applicationId}/files/${file.id}/preview`,
-            );
-            const payload = await response.json();
-            if (!response.ok || !payload.ok) {
-              throw new Error(
-                `${section.label}：${payload.message || "文件预览生成失败"}`,
-              );
-            }
-            return payload.pages.map((previewPage) => ({
-              kind: "submitted",
-              id: `${file.id}-${previewPage.page}`,
-              title: `${section.number}、${section.label}`,
-              sectionKey: section.key,
-              fileName: payload.fileName || file.file_name,
-              filePage: previewPage.page,
-              format: previewPage.format || "image",
-              url: previewPage.url,
-            }));
+            return filePages.flat();
           }),
         );
         if (!cancelled) {
@@ -3460,6 +3485,22 @@ function PreviewDialog({
     1 +
     renderedWordPageCount -
     submittedPages.filter((page) => page.format === "word").length;
+  useEffect(() => {
+    if (submittedPagesStatus !== "ready" || !pagesRef.current) return;
+    const pages = [...pagesRef.current.querySelectorAll(".preview-page")];
+    pages.forEach((page, index) => {
+      const submitted = page.classList.contains("preview-submitted-page");
+      let footer = page.querySelector(
+        submitted ? ":scope > .preview-page-number" : ":scope > footer",
+      );
+      if (!footer) {
+        footer = document.createElement("footer");
+        page.append(footer);
+      }
+      footer.textContent = String(index + 1);
+      footer.classList.add("preview-page-number");
+    });
+  }, [previewPages, submittedPagesStatus, wordRenderResults]);
   const exportSelectedPdf = async (label, selector, fileSuffix) => {
     if (submittedPagesStatus !== "ready") {
       window.alert(

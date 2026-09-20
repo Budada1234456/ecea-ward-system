@@ -1188,6 +1188,16 @@ function isSectionSubmission(row) {
   );
 }
 
+function isPreviewableSubmission(row) {
+  if (isSectionSubmission(row)) return true;
+  const extension = path.extname(row?.file_name || "").toLowerCase();
+  return (
+    !["source_pdf"].includes(row?.file_type) &&
+    !row?.file_type?.startsWith("content_image:") &&
+    [".pdf", ".jpg", ".jpeg", ".png"].includes(extension)
+  );
+}
+
 function sectionPreviewDirectory(row) {
   return path.join(path.dirname(row.stored_path), `preview-${row.id}`);
 }
@@ -1820,10 +1830,10 @@ app.get(
       .get(Number(req.params.fileId), applicationId);
     if (!row?.stored_path || !fs.existsSync(row.stored_path))
       return res.status(404).json({ ok: false, message: "文件不存在" });
-    if (!isSectionSubmission(row))
+    if (!isPreviewableSubmission(row))
       return res
         .status(422)
-        .json({ ok: false, message: "该文件不是章节提交文件" });
+        .json({ ok: false, message: "该文件不支持合并预览" });
     try {
       const pages = await ensureSectionPreview(row);
       res.json({
@@ -1858,10 +1868,10 @@ app.get(
       .get(Number(req.params.fileId), applicationId);
     if (!row?.stored_path || !fs.existsSync(row.stored_path))
       return res.status(404).json({ ok: false, message: "文件不存在" });
-    if (!isSectionSubmission(row))
+    if (!isPreviewableSubmission(row))
       return res
         .status(422)
-        .json({ ok: false, message: "该文件不是章节提交文件" });
+        .json({ ok: false, message: "该文件不支持合并预览" });
     try {
       const pages = await ensureSectionPreview(row);
       const pageIndex = Number(req.params.page) - 1;

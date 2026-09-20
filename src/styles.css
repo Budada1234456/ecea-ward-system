@@ -3938,6 +3938,24 @@ select.control {
   display: block;
   object-fit: contain;
 }
+.preview-submitted-page > footer,
+.preview-submitted-word .preview-submitted-page > footer {
+  z-index: 4;
+  bottom: 5mm;
+  width: max-content;
+  min-width: 8mm;
+  margin: 0 auto;
+  padding: 0 1mm;
+  background: rgba(255, 255, 255, 0.94);
+  color: #111;
+  line-height: 5mm;
+}
+.preview-submitted-word
+  .docx-wrapper
+  > section.docx.preview-submitted-page
+  > footer:not(.preview-page-number) {
+  display: none !important;
+}
 .preview-submitted-word .docx-wrapper {
   padding: 0;
   background: transparent;
