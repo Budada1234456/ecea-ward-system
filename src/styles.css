@@ -6373,13 +6373,24 @@ select.control {
   line-height: 1.35;
 }
 
-/* 项目奖第 3 章复杂富文本表格：按内容分配列宽并压缩纵向占用。 */
+/* 项目奖第 3 章和个人奖成果转化的富文本表格使用同一紧凑排版。 */
 :is(.preview-pages--progress, .preview-pages--invention)
   .preview-detail-page[data-section-key="details"]
   .preview-rich-text
   table,
+.preview-pages--achievement
+  .preview-text-page[data-section-key="transformation"]
+  .preview-rich-text
+  table,
 .pdf-export-document
-  :is(.preview-progress-document, .preview-invention-document).preview-detail-page[data-section-key="details"]
+  :is(
+    .preview-progress-document,
+    .preview-invention-document
+  ).preview-detail-page[data-section-key="details"]
+  .preview-rich-text
+  table,
+.pdf-export-document
+  .preview-achievement-document.preview-text-page[data-section-key="transformation"]
   .preview-rich-text
   table {
   width: 100% !important;
@@ -6395,8 +6406,21 @@ select.control {
   .preview-rich-text
   table
   :is(col, th, td),
+.preview-pages--achievement
+  .preview-text-page[data-section-key="transformation"]
+  .preview-rich-text
+  table
+  :is(col, th, td),
 .pdf-export-document
-  :is(.preview-progress-document, .preview-invention-document).preview-detail-page[data-section-key="details"]
+  :is(
+    .preview-progress-document,
+    .preview-invention-document
+  ).preview-detail-page[data-section-key="details"]
+  .preview-rich-text
+  table
+  :is(col, th, td),
+.pdf-export-document
+  .preview-achievement-document.preview-text-page[data-section-key="transformation"]
   .preview-rich-text
   table
   :is(col, th, td) {
@@ -6410,8 +6434,21 @@ select.control {
   .preview-rich-text
   table
   :is(th, td, th *, td *),
+.preview-pages--achievement
+  .preview-text-page[data-section-key="transformation"]
+  .preview-rich-text
+  table
+  :is(th, td, th *, td *),
 .pdf-export-document
-  :is(.preview-progress-document, .preview-invention-document).preview-detail-page[data-section-key="details"]
+  :is(
+    .preview-progress-document,
+    .preview-invention-document
+  ).preview-detail-page[data-section-key="details"]
+  .preview-rich-text
+  table
+  :is(th, td, th *, td *),
+.pdf-export-document
+  .preview-achievement-document.preview-text-page[data-section-key="transformation"]
   .preview-rich-text
   table
   :is(th, td, th *, td *) {
@@ -6427,12 +6464,53 @@ select.control {
   .preview-rich-text
   table
   :is(th, td),
+.preview-pages--achievement
+  .preview-text-page[data-section-key="transformation"]
+  .preview-rich-text
+  table
+  :is(th, td),
 .pdf-export-document
-  :is(.preview-progress-document, .preview-invention-document).preview-detail-page[data-section-key="details"]
+  :is(
+    .preview-progress-document,
+    .preview-invention-document
+  ).preview-detail-page[data-section-key="details"]
+  .preview-rich-text
+  table
+  :is(th, td),
+.pdf-export-document
+  .preview-achievement-document.preview-text-page[data-section-key="transformation"]
   .preview-rich-text
   table
   :is(th, td) {
   height: auto !important;
   padding: 0.35mm 0.55mm !important;
   vertical-align: middle;
+}
+
+:is(.preview-pages--progress, .preview-pages--invention)
+  .preview-detail-page[data-section-key="details"]
+  .preview-rich-text
+  table
+  :is(p, ul, ol),
+.preview-pages--achievement
+  .preview-text-page[data-section-key="transformation"]
+  .preview-rich-text
+  table
+  :is(p, ul, ol),
+.pdf-export-document
+  :is(
+    .preview-progress-document,
+    .preview-invention-document
+  ).preview-detail-page[data-section-key="details"]
+  .preview-rich-text
+  table
+  :is(p, ul, ol),
+.pdf-export-document
+  .preview-achievement-document.preview-text-page[data-section-key="transformation"]
+  .preview-rich-text
+  table
+  :is(p, ul, ol) {
+  margin-top: 0;
+  margin-bottom: 0;
+  text-indent: 0;
 }

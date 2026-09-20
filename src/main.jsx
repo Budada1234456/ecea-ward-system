@@ -3055,7 +3055,7 @@ function PreviewRecommendationPage({ body, pageNumber }) {
   );
 }
 
-function splitPreviewContent(content, maxLength = 1250) {
+function splitPreviewContent(content, maxLength = 1250, options = {}) {
   const source = String(content || "").trim();
   if (!source) return ["尚未填写。"];
   if (!isHtmlContent(source)) {
@@ -3069,31 +3069,53 @@ function splitPreviewContent(content, maxLength = 1250) {
     sanitizeRichText(source),
     "text/html",
   );
-  const chunks = [];
-  let nodes = [];
-  let length = 0;
-  const flush = () => {
-    if (!nodes.length) return;
-    chunks.push(nodes.map((node) => node.outerHTML).join(""));
-    nodes = [];
-    length = 0;
-  };
-  for (const node of [...documentNode.body.children]) {
+  const effectiveMaxLength = documentNode.querySelector("table")
+    ? options.tableMaxLength || maxLength
+    : maxLength;
+  const nodeWeight = (node) => {
     const imageCount =
       node.querySelectorAll("img").length + (node.matches("img") ? 1 : 0);
     const tableRowCount =
       node.querySelectorAll("tr").length + (node.matches("tr") ? 1 : 0);
-    const nodeLength =
+    return (
       Math.max((node.textContent || "").length, 40) +
       imageCount * 500 +
-      tableRowCount * 140;
-    if (nodes.length && length + nodeLength > maxLength) flush();
+      tableRowCount * (options.tableRowWeight || 140)
+    );
+  };
+  const chunks = [];
+  let nodes = [];
+  let length = 0;
+  const flush = () => {
+    if (nodes.length) chunks.push(nodes.map((node) => node.outerHTML).join(""));
+    nodes = [];
+    length = 0;
+  };
+  for (const node of [...documentNode.body.children]) {
+    const nodeLength = nodeWeight(node);
+    if (nodes.length && length + nodeLength > effectiveMaxLength) {
+      const precedingNode = nodes.at(-1);
+      if (node.matches("table") && precedingNode?.matches("p, h2, h3")) {
+        nodes.pop();
+        length -= nodeWeight(precedingNode);
+        flush();
+        nodes.push(precedingNode);
+        length = nodeWeight(precedingNode);
+      } else {
+        flush();
+      }
+    }
     nodes.push(node);
     length += nodeLength;
   }
   flush();
   return chunks.length ? chunks : ["尚未填写。"];
 }
+
+const richTablePagination = Object.freeze({
+  tableMaxLength: 1700,
+  tableRowWeight: 75,
+});
 
 function buildPreviewSections(sourceData) {
   const data = normalizeApplicationData(sourceData);
@@ -3163,13 +3185,14 @@ function buildPreviewSections(sourceData) {
       5,
       "engineering",
     );
-    splitPreviewContent(data.transformation).forEach((body, index) =>
-      pages.push({
-        kind: "text",
-        title: `七、科技成果转化及推广情况${index ? "（续）" : ""}`,
-        body,
-        sectionKey: "transformation",
-      }),
+    splitPreviewContent(data.transformation, 1250, richTablePagination).forEach(
+      (body, index) =>
+        pages.push({
+          kind: "text",
+          title: `七、科技成果转化及推广情况${index ? "（续）" : ""}`,
+          body,
+          sectionKey: "transformation",
+        }),
     );
     return pages;
   }
@@ -3188,7 +3211,11 @@ function buildPreviewSections(sourceData) {
     ["三、项目详细内容（5．应用情况）", data.application, "details"],
   ];
   for (const [title, content = "", sectionKey] of textSections) {
-    splitPreviewContent(content).forEach((body, index) => {
+    splitPreviewContent(
+      content,
+      1250,
+      sectionKey === "details" ? richTablePagination : {},
+    ).forEach((body, index) => {
       pages.push({
         kind: "text",
         title: index ? `${title}（续）` : title,
@@ -3203,13 +3230,14 @@ function buildPreviewSections(sourceData) {
     data,
     sectionKey: "details",
   });
-  splitPreviewContent(data.social).forEach((body, index) =>
-    pages.push({
-      kind: "text",
-      title: `三、项目详细内容（7. 社会效益）${index ? "（续）" : ""}`,
-      body,
-      sectionKey: "details",
-    }),
+  splitPreviewContent(data.social, 1250, richTablePagination).forEach(
+    (body, index) =>
+      pages.push({
+        kind: "text",
+        title: `三、项目详细内容（7. 社会效益）${index ? "（续）" : ""}`,
+        body,
+        sectionKey: "details",
+      }),
   );
   const awardChunks = data.awardRecords?.length
     ? Array.from(
