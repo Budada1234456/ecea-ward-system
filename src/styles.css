@@ -5308,7 +5308,7 @@ select.control {
   :is(.preview-form-page > h4, .preview-subtable > h4) {
   font-size: 12pt;
 }
-/* 第 2 至 6 章的单元格内部可能带有旧字号或富文本内联字号。 */
+/* Keep template sizing outside rich text while preserving embedded table layout. */
 .preview-pages--progress
   .preview-page:is(
     [data-section-key="introduction"],
@@ -5318,7 +5318,8 @@ select.control {
     [data-section-key="people"]
   )
   table
-  :is(th, td, th *, td *),
+  :is(th, td, th *, td *)
+  :not(.preview-rich-text *, .preview-cell-rich *),
 .pdf-export-document
   .preview-progress-document:is(
     [data-section-key="introduction"],
@@ -5327,6 +5328,17 @@ select.control {
     [data-section-key="ip"],
     [data-section-key="people"]
   )
+  table
+  :is(th, td, th *, td *)
+  :not(.preview-rich-text *, .preview-cell-rich *),
+.preview-pages--progress
+  .preview-page
+  :is(.preview-rich-text, .preview-cell-rich)
+  table
+  :is(th, td, th *, td *),
+.pdf-export-document
+  .preview-progress-document
+  :is(.preview-rich-text, .preview-cell-rich)
   table
   :is(th, td, th *, td *) {
   font-size: 12pt !important;
@@ -6113,48 +6125,6 @@ select.control {
   border-top: 0;
 }
 
-/* Word imports can leave a different alignment on the final paragraph. */
-:is(.preview-pages--progress, .preview-pages--invention)
-  .preview-detail-page
-  .preview-section-table:is(
-    [aria-label*="与当前国内外同类技术的比较"],
-    [aria-label*="5．应用情况"]
-  )
-  .preview-rich-text
-  > p,
-.pdf-export-document
-  :is(.preview-progress-document, .preview-invention-document)
-  .preview-section-table:is(
-    [aria-label*="与当前国内外同类技术的比较"],
-    [aria-label*="5．应用情况"]
-  )
-  .preview-rich-text
-  > p {
-  text-align: justify !important;
-}
-
-/* Imported Word runs can carry Arial on the final Chinese paragraph. */
-:is(.preview-pages--progress, .preview-pages--invention)
-  .preview-detail-page
-  .preview-section-table:is(
-    [aria-label*="与当前国内外同类技术的比较"],
-    [aria-label*="5．应用情况"]
-  )
-  .preview-rich-text
-  > p
-  *,
-.pdf-export-document
-  :is(.preview-progress-document, .preview-invention-document)
-  .preview-section-table:is(
-    [aria-label*="与当前国内外同类技术的比较"],
-    [aria-label*="5．应用情况"]
-  )
-  .preview-rich-text
-  > p
-  * {
-  font-family: inherit !important;
-}
-
 .preview-economic-page .preview-section-heading-row .preview-table-unit {
   float: right;
   margin: 0;
@@ -6284,9 +6254,21 @@ select.control {
 .preview-pages--progress
   .preview-person-page[data-section-key="people"]
   table
+  :is(th, td, th *, td *)
+  :not(.preview-cell-rich *),
+.pdf-export-document
+  .preview-progress-document.preview-person-page[data-section-key="people"]
+  table
+  :is(th, td, th *, td *)
+  :not(.preview-cell-rich *),
+.preview-pages--progress
+  .preview-person-page[data-section-key="people"]
+  .preview-cell-rich
+  table
   :is(th, td, th *, td *),
 .pdf-export-document
   .preview-progress-document.preview-person-page[data-section-key="people"]
+  .preview-cell-rich
   table
   :is(th, td, th *, td *) {
   font-size: 12pt !important;

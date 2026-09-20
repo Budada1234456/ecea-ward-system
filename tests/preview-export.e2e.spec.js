@@ -270,7 +270,7 @@ test("achievement tables match page one and rich content is not clipped", async 
   }
 });
 
-test("progress preview and PDF export use the Word template font sizes", async ({
+test("progress preview preserves rich text formatting and compact tables", async ({
   page,
 }) => {
   test.setTimeout(90_000);
@@ -314,18 +314,29 @@ test("progress preview and PDF export use the Word template font sizes", async (
         data: {
           data: completeProjectData(title, {
             introduction:
-              '<p><span style="font-size: 8px">项目简介字号应与 Word 模板保持一致。</span></p>',
+              '<p style="text-align: center"><span style="font-family: Arial; font-size: 7.5px; color: #c00000">项目简介保留填写格式。</span></p>',
             technicalContent:
-              '<p><span style="font-size: 9px">详细内容正文应使用小四号字。</span></p><p>表 1 国内外技术对比情况表</p><table style="width: 1200px"><colgroup><col style="width: 240px"><col style="width: 180px"><col style="width: 260px"><col style="width: 180px"><col style="width: 180px"><col style="width: 180px"></colgroup><tbody><tr><th colspan="3"><span style="font-size: 24px">紧凑表头</span></th><th>国内外先进水平</th><th>本项目技术</th><th>对比结果</th></tr><tr><th rowspan="3">安全承载</th><td rowspan="3">资源辨识</td><td><p style="margin: 12px 0; text-indent: 2em; line-height: 2">星顶光伏测算准确度</p></td><td>77.55%</td><td>91%</td><td>国际领先</td></tr><tr><td>承载力评估规模</td><td>局部区域</td><td>省域百万级节点</td><td>国际首次实现</td></tr><tr><td>承载力评估颗粒度</td><td>区县级</td><td>村庄级和配变级</td><td>国际领先</td></tr><tr><th rowspan="3">协同调控</th><td rowspan="2">感知预测</td><td>功率实时感知准确率</td><td>92.5%</td><td>97.55%</td><td>国际领先</td></tr><tr><td>辐照度预测准确率</td><td>93.25%</td><td>95.98%</td><td>国际领先</td></tr><tr><td>调控消纳</td><td>省级分布式资源控制云平台</td><td>接入设备数量超过一百万台</td><td>接入设备数量超过一千万台</td><td>国际领先</td></tr></tbody></table><p>表格之后的正文必须完整显示。</p>',
+              '<p style="text-align: left"><span style="font-family: KaiTi; font-size: 9px; color: #0070c0">详细内容保留填写格式。</span></p><p>表 1 国内外技术对比情况表</p><table style="width: 1200px"><colgroup><col style="width: 240px"><col style="width: 180px"><col style="width: 260px"><col style="width: 180px"><col style="width: 180px"><col style="width: 180px"></colgroup><tbody><tr><th colspan="3"><span style="font-size: 24px">紧凑表头</span></th><th>国内外先进水平</th><th>本项目技术</th><th>对比结果</th></tr><tr><th rowspan="3">安全承载</th><td rowspan="3">资源辨识</td><td><p style="margin: 12px 0; text-indent: 2em; line-height: 2">星顶光伏测算准确度</p></td><td>77.55%</td><td>91%</td><td>国际领先</td></tr><tr><td>承载力评估规模</td><td>局部区域</td><td>省域百万级节点</td><td>国际首次实现</td></tr><tr><td>承载力评估颗粒度</td><td>区县级</td><td>村庄级和配变级</td><td>国际领先</td></tr><tr><th rowspan="3">协同调控</th><td rowspan="2">感知预测</td><td>功率实时感知准确率</td><td>92.5%</td><td>97.55%</td><td>国际领先</td></tr><tr><td>辐照度预测准确率</td><td>93.25%</td><td>95.98%</td><td>国际领先</td></tr><tr><td>调控消纳</td><td>省级分布式资源控制云平台</td><td>接入设备数量超过一百万台</td><td>接入设备数量超过一千万台</td><td>国际领先</td></tr></tbody></table><p>表格之后的正文必须完整显示。</p>',
             comparison:
               '<p><span>同类技术比较前文段。</span></p><p style="margin: 24px 0 3px; text-indent: 0; line-height: 1; text-align: right"><span style="font-family: Arial">同类技术比较末段。</span></p>',
             application:
               '<p><span>应用现状前文段。</span></p><p style="margin: 24px 0 3px; text-indent: 0; line-height: 1; text-align: right"><span style="font-family: Arial">应用现状末段。</span></p>',
+            social:
+              '<p><span>社会效益前文段。</span></p><p><span style="font-family: Arial">社会效益末段。</span></p>',
+            economic:
+              '<p style="text-align: center"><span style="font-family: FangSong; font-size: 10.5px">经济效益保留填写格式。</span></p>',
             people: [
               {
                 ...completePerson("完成人字号验收"),
                 contribution:
-                  '<p><span style="font-size: 8px">个人技术贡献字号应为小四。</span></p>',
+                  '<p style="text-align: right"><span style="font-family: Arial; font-size: 7.5px">个人技术贡献保留填写格式。</span></p>',
+              },
+            ],
+            units: [
+              {
+                ...completeUnit("完成单位字号验收"),
+                contribution:
+                  '<p style="text-align: center"><span style="font-family: KaiTi; font-size: 10.5px">完成单位贡献保留填写格式。</span></p>',
               },
             ],
           }),
@@ -387,8 +398,8 @@ test("progress preview and PDF export use the Word template font sizes", async (
       body: "16px",
       ipTable: "16px",
       entityTable: "16px",
-      introductionNestedText: "16px",
-      detailsNestedText: "16px",
+      introductionNestedText: "7.5px",
+      detailsNestedText: "9px",
       tableUnit: "16px",
       awardNote: "16px",
       pageNumber: "14px",
@@ -457,7 +468,8 @@ test("progress preview and PDF export use the Word template font sizes", async (
         }),
       );
       expect(paragraphStyles).toHaveLength(2);
-      expect(paragraphStyles[1]).toEqual(paragraphStyles[0]);
+      expect(paragraphStyles[0].textAlign).toBe("justify");
+      expect(paragraphStyles[1].textAlign).toBe("right");
 
       const chineseFontFamilies = await page
         .locator('.preview-detail-page[data-section-key="details"]')
@@ -478,8 +490,30 @@ test("progress preview and PDF export use the Word template font sizes", async (
             final: getComputedStyle(final.querySelector("span")).fontFamily,
           };
         }, marker);
-      expect(chineseFontFamilies.final).toBe(chineseFontFamilies.preceding);
+      expect(chineseFontFamilies.preceding).toContain("SimSun");
+      expect(chineseFontFamilies.final).toBe("Arial");
     }
+    const socialFontFamilies = await page
+      .locator('.preview-detail-page[data-section-key="details"]')
+      .filter({ hasText: "社会效益末段。" })
+      .evaluate((section) => {
+        const paragraphs = [
+          ...section.querySelectorAll(".preview-rich-text > p"),
+        ];
+        const preceding = paragraphs.find((node) =>
+          node.textContent.includes("社会效益前文段。"),
+        );
+        const final = paragraphs.find((node) =>
+          node.textContent.includes("社会效益末段。"),
+        );
+        return {
+          preceding: getComputedStyle(preceding.querySelector("span"))
+            .fontFamily,
+          final: getComputedStyle(final.querySelector("span")).fontFamily,
+        };
+      });
+    expect(socialFontFamilies.preceding).toContain("SimSun");
+    expect(socialFontFamilies.final).toBe("Arial");
     const richTablePage = page
       .locator('.preview-detail-page[data-section-key="details"]')
       .filter({ hasText: "紧凑表头" });
@@ -519,7 +553,11 @@ test("progress preview and PDF export use the Word template font sizes", async (
       .locator(".preview-person-page table")
       .evaluate((table) => {
         const textElements = [...table.querySelectorAll("th, td, th *, td *")]
-          .filter((element) => element.textContent?.trim())
+          .filter(
+            (element) =>
+              element.textContent?.trim() &&
+              !element.closest(".preview-cell-rich"),
+          )
           .map((element) => ({
             tag: element.tagName,
             className: element.className,
@@ -533,6 +571,33 @@ test("progress preview and PDF export use the Word template font sizes", async (
       });
     expect(personTableFontAudit.minimum).toBe(16);
     expect(personTableFontAudit.undersized).toEqual([]);
+
+    for (const [marker, expected] of [
+      ["项目简介保留填写格式。", ["7.5px", "Arial", "center"]],
+      ["详细内容保留填写格式。", ["9px", "KaiTi", "left"]],
+      ["经济效益保留填写格式。", ["10.5px", "FangSong", "center"]],
+      ["个人技术贡献保留填写格式。", ["7.5px", "Arial", "right"]],
+      ["完成单位贡献保留填写格式。", ["10.5px", "KaiTi", "center"]],
+    ]) {
+      const styles = await page
+        .getByText(marker, { exact: true })
+        .evaluate((span) => ({
+          fontSize: getComputedStyle(span).fontSize,
+          fontFamily: getComputedStyle(span).fontFamily,
+          textAlign: getComputedStyle(span.closest("p")).textAlign,
+        }));
+      expect(styles).toEqual({
+        fontSize: expected[0],
+        fontFamily: expected[1],
+        textAlign: expected[2],
+      });
+    }
+    await expect(
+      page.getByText("项目简介保留填写格式。", { exact: true }),
+    ).toHaveCSS("color", "rgb(192, 0, 0)");
+    await expect(
+      page.getByText("详细内容保留填写格式。", { exact: true }),
+    ).toHaveCSS("color", "rgb(0, 112, 192)");
 
     let exportPayload;
     await page.route("**/api/pdf-export", async (route) => {
