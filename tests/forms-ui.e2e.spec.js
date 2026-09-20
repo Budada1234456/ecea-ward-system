@@ -421,14 +421,10 @@ test("structured forms, entity ordering and discipline tree work responsively", 
         style: ".preview-toolbar { visibility: hidden !important; }",
       });
     }
-    await page.evaluate(() => {
-      window.__printCalls = 0;
-      window.print = () => {
-        window.__printCalls += 1;
-      };
-    });
-    await page.getByRole("button", { name: "打印 / 保存 PDF" }).click();
-    await expect.poll(() => page.evaluate(() => window.__printCalls)).toBe(1);
+    const downloadPromise = page.waitForEvent("download");
+    await page.getByRole("button", { name: "导出 PDF", exact: true }).click();
+    const pdfDownload = await downloadPromise;
+    expect(pdfDownload.suggestedFilename()).toMatch(/\.pdf$/i);
     await page.getByRole("button", { name: "返回填写" }).click();
 
     await page.screenshot({

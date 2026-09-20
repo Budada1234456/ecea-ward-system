@@ -17,7 +17,7 @@ import {
   timingSafeEqual,
 } from "node:crypto";
 import { extractProjectSourceFields } from "./lib/pdf-fields.mjs";
-import { renderPreviewPdf } from "./lib/pdf-export.mjs";
+import { mergePreviewPdfParts, renderPreviewPdf } from "./lib/pdf-export.mjs";
 import { createWordImportRouter } from "./routes/word-import.mjs";
 import { sanitizeApplicationRichTextData } from "./src/editor/rich-text-node.mjs";
 import { validateApplication } from "./src/forms/application-validation.js";
@@ -562,14 +562,82 @@ app.use(
 
 app.post("/api/pdf-export", async (req, res) => {
   const html = String(req.body?.html || "");
+  const applicationId = Number(req.body?.applicationId);
+  const requestedParts = Array.isArray(req.body?.parts) ? req.body.parts : null;
   const styles = String(req.body?.styles || "");
   const fileName = String(req.body?.fileName || "申报书.pdf")
     .replace(/[\r\n<>:"/\\|?*\x00-\x1f]/g, "_")
     .slice(0, 180);
-  if (!html || html.length > 10 * 1024 * 1024) {
+  const totalHtmlLength = requestedParts
+    ? requestedParts.reduce(
+        (total, part) =>
+          total + (part?.type === "html" ? String(part.html || "").length : 0),
+        0,
+      )
+    : html.length;
+  if (
+    (!requestedParts?.length && !html) ||
+    requestedParts?.length > 200 ||
+    totalHtmlLength > 10 * 1024 * 1024
+  ) {
     return res
       .status(422)
       .json({ ok: false, message: "PDF 导出内容为空或过大" });
+  }
+  let parts = requestedParts;
+  if (parts) {
+    if (
+      !Number.isInteger(applicationId) ||
+      !ownedApplication(applicationId, req.user.id)
+    ) {
+      return res.status(404).json({ ok: false, message: "申报项目不存在" });
+    }
+    const pdfFiles = new Map();
+    let sourcePdfBytes = 0;
+    for (const part of parts.filter((candidate) => candidate?.type === "pdf")) {
+      const fileId = Number(part.fileId);
+      if (pdfFiles.has(fileId)) {
+        return res.status(422).json({ ok: false, message: "PDF 导出分段重复" });
+      }
+      const row = db
+        .prepare(
+          "SELECT * FROM application_files WHERE id = ? AND application_id = ?",
+        )
+        .get(fileId, applicationId);
+      if (
+        !row?.stored_path ||
+        !fs.existsSync(row.stored_path) ||
+        path.extname(row.file_name).toLowerCase() !== ".pdf"
+      ) {
+        return res.status(422).json({
+          ok: false,
+          message: "PDF 导出包含无效或无权访问的原始文件",
+        });
+      }
+      sourcePdfBytes += Number(row.file_size || 0);
+      if (sourcePdfBytes > 300 * 1024 * 1024) {
+        return res.status(422).json({
+          ok: false,
+          message: "PDF 导出文件总大小超过 300MB",
+        });
+      }
+      pdfFiles.set(fileId, row.stored_path);
+    }
+    parts = parts.map((part) => {
+      if (part?.type === "html" && String(part.html || "")) {
+        return { type: "html", html: String(part.html) };
+      }
+      const fileId = Number(part?.fileId);
+      if (part?.type === "pdf" && pdfFiles.has(fileId)) {
+        return { type: "pdf", path: pdfFiles.get(fileId) };
+      }
+      return null;
+    });
+    if (parts.some((part) => !part)) {
+      return res.status(422).json({ ok: false, message: "PDF 导出分段无效" });
+    }
+  } else {
+    parts = [{ type: "html", html }];
   }
   const forwardedProto = String(req.headers["x-forwarded-proto"] || "")
     .split(",")[0]
@@ -592,12 +660,27 @@ app.post("/api/pdf-export", async (req, res) => {
     return res.status(400).json({ ok: false, message: "PDF 导出地址无效" });
   }
   try {
-    const pdf = await renderPreviewPdf({
-      html,
-      styles,
-      baseUrl,
-      sessionToken: parseCookies(req.headers.cookie).award_session,
-    });
+    const sessionToken = parseCookies(req.headers.cookie).award_session;
+    const renderedParts = [];
+    for (const part of parts) {
+      if (part.type === "pdf") {
+        renderedParts.push({
+          pdf: await fsPromises.readFile(part.path),
+          addPageNumbers: true,
+        });
+        continue;
+      }
+      renderedParts.push({
+        pdf: await renderPreviewPdf({
+          html: part.html,
+          styles,
+          baseUrl,
+          sessionToken,
+        }),
+        addPageNumbers: false,
+      });
+    }
+    const pdf = await mergePreviewPdfParts(renderedParts);
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader(
       "Content-Disposition",

@@ -31,7 +31,6 @@ import {
   Megaphone,
   Menu,
   Plus,
-  Printer,
   Phone,
   Search,
   Save,
@@ -3263,10 +3262,14 @@ function buildPreviewSections(sourceData) {
 }
 
 function PreviewSubmittedPage({ page }) {
+  const sourceIsPdf = /\.pdf$/i.test(page.fileName);
   return (
     <article
       className="preview-page preview-submitted-page"
       data-section-key={page.sectionKey}
+      data-source-pdf-id={sourceIsPdf ? page.sourceFileId : undefined}
+      data-source-pdf-page={sourceIsPdf ? page.filePage : undefined}
+      data-source-pdf-pages={sourceIsPdf ? page.filePageCount : undefined}
       aria-label={`${page.title}，${page.fileName}，第 ${page.filePage} 页`}
     >
       <img
@@ -3412,10 +3415,12 @@ function PreviewDialog({
                 return payload.pages.map((previewPage) => ({
                   kind: "submitted",
                   id: `${file.id}-${previewPage.page}`,
+                  sourceFileId: file.id,
                   title: `${section.number}、${section.label}`,
                   sectionKey: section.key,
                   fileName: payload.fileName || file.file_name,
                   filePage: previewPage.page,
+                  filePageCount: payload.pageCount,
                   format: previewPage.format || "image",
                   url: previewPage.url,
                 }));
@@ -3504,6 +3509,81 @@ function PreviewDialog({
       footer.classList.add("preview-page-number");
     });
   }, [previewPages, submittedPagesStatus, wordRenderResults]);
+  const buildPdfExportParts = async (pages) => {
+    const selectedPdfPages = new Map();
+    pages.forEach((page) => {
+      const fileId = page.dataset.sourcePdfId;
+      if (!fileId) return;
+      if (!selectedPdfPages.has(fileId)) selectedPdfPages.set(fileId, []);
+      selectedPdfPages.get(fileId).push(page);
+    });
+    const completePdfIds = new Set(
+      [...selectedPdfPages.entries()]
+        .filter(([, sourcePages]) => {
+          const expected = Number(sourcePages[0].dataset.sourcePdfPages);
+          return (
+            expected > 0 &&
+            sourcePages.length === expected &&
+            sourcePages.every(
+              (page, index) => Number(page.dataset.sourcePdfPage) === index + 1,
+            )
+          );
+        })
+        .map(([fileId]) => fileId),
+    );
+    const rawParts = [];
+    let htmlPages = [];
+    const flushHtml = () => {
+      if (htmlPages.length) rawParts.push({ type: "html", pages: htmlPages });
+      htmlPages = [];
+    };
+    const addedPdfIds = new Set();
+    pages.forEach((page) => {
+      const fileId = page.dataset.sourcePdfId;
+      if (!fileId || !completePdfIds.has(fileId)) {
+        htmlPages.push(page);
+        return;
+      }
+      flushHtml();
+      if (!addedPdfIds.has(fileId)) {
+        rawParts.push({ type: "pdf", fileId: Number(fileId) });
+        addedPdfIds.add(fileId);
+      }
+    });
+    flushHtml();
+    return Promise.all(
+      rawParts.map(async (part) => {
+        if (part.type === "pdf") return part;
+        const clones = part.pages.map((page) => page.cloneNode(true));
+        const sourceImages = part.pages.flatMap((page) => [
+          ...page.querySelectorAll("img"),
+        ]);
+        const clonedImages = clones.flatMap((page) => [
+          ...page.querySelectorAll("img"),
+        ]);
+        await Promise.all(
+          sourceImages.map(async (image, index) => {
+            if (!image.src.startsWith("blob:")) return;
+            const blob = await fetch(image.src).then((response) =>
+              response.blob(),
+            );
+            clonedImages[index].src = await new Promise((resolve, reject) => {
+              const reader = new FileReader();
+              reader.addEventListener("load", () => resolve(reader.result), {
+                once: true,
+              });
+              reader.addEventListener("error", reject, { once: true });
+              reader.readAsDataURL(blob);
+            });
+          }),
+        );
+        return {
+          type: "html",
+          html: clones.map((page) => page.outerHTML).join(""),
+        };
+      }),
+    );
+  };
   const exportSelectedPdf = async (label, selector, fileSuffix) => {
     if (submittedPagesStatus !== "ready") {
       window.alert(
@@ -3520,29 +3600,7 @@ function PreviewDialog({
         window.alert(`当前暂无可导出的${label}内容`);
         return;
       }
-      const clones = pages.map((page) => page.cloneNode(true));
-      const sourceImages = pages.flatMap((page) => [
-        ...page.querySelectorAll("img"),
-      ]);
-      const clonedImages = clones.flatMap((page) => [
-        ...page.querySelectorAll("img"),
-      ]);
-      await Promise.all(
-        sourceImages.map(async (image, index) => {
-          if (!image.src.startsWith("blob:")) return;
-          const blob = await fetch(image.src).then((response) =>
-            response.blob(),
-          );
-          clonedImages[index].src = await new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.addEventListener("load", () => resolve(reader.result), {
-              once: true,
-            });
-            reader.addEventListener("error", reject, { once: true });
-            reader.readAsDataURL(blob);
-          });
-        }),
-      );
+      const parts = await buildPdfExportParts(pages);
       const styles = [
         ...document.head.querySelectorAll('style, link[rel="stylesheet"]'),
       ]
@@ -3553,7 +3611,8 @@ function PreviewDialog({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          html: clones.map((page) => page.outerHTML).join(""),
+          applicationId,
+          parts,
           styles,
           fileName,
         }),
@@ -3574,34 +3633,8 @@ function PreviewDialog({
       setExporting(false);
     }
   };
-  const printPdf = async () => {
-    if (submittedPagesStatus !== "ready") {
-      window.alert(
-        submittedPagesStatus === "error"
-          ? `提交文件尚未合并：${submittedPagesError}`
-          : "正在载入提交文件，请稍后再打印",
-      );
-      return;
-    }
-    const images = [...pagesRef.current.querySelectorAll("img")];
-    await Promise.all(
-      images.map((image) =>
-        image.complete
-          ? image.decode?.().catch(() => {})
-          : new Promise((resolve) => {
-              image.addEventListener("load", resolve, { once: true });
-              image.addEventListener("error", resolve, { once: true });
-            }),
-      ),
-    );
-    const originalTitle = document.title;
-    try {
-      document.title = `${data.projectName || "中国节能协会创新奖"}-申报书`;
-      window.print();
-    } finally {
-      document.title = originalTitle;
-    }
-  };
+  const exportPdf = () =>
+    exportSelectedPdf("申报书", ".preview-page", "申报书");
   useEffect(() => {
     if (
       !sectionExportRequest ||
@@ -3633,11 +3666,15 @@ function PreviewDialog({
           </button>
           <button
             className="primary-button"
-            onClick={printPdf}
-            disabled={submittedPagesStatus !== "ready"}
+            onClick={exportPdf}
+            disabled={exporting || submittedPagesStatus !== "ready"}
           >
-            <Printer size={17} />
-            打印 / 保存 PDF
+            {exporting ? (
+              <LoaderCircle className="spin" size={17} />
+            ) : (
+              <Download size={17} />
+            )}
+            {exporting ? "正在生成" : "导出 PDF"}
           </button>
           <div className="seal-export-menu" aria-label="独立盖章导出">
             <span>独立盖章导出</span>

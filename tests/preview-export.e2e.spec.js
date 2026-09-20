@@ -1,5 +1,9 @@
 import { expect, test } from "@playwright/test";
 import fs from "node:fs/promises";
+import { execFile } from "node:child_process";
+import os from "node:os";
+import path from "node:path";
+import { promisify } from "node:util";
 import { deflateSync } from "node:zlib";
 import { jsPDF } from "jspdf";
 import JSZip from "jszip";
@@ -11,6 +15,7 @@ import {
 } from "./application-fixtures.mjs";
 
 const baseUrl = process.env.TEST_BASE_URL || "http://127.0.0.1:4174";
+const execFileAsync = promisify(execFile);
 const requiredProjectMaterials = [
   "technical_proof",
   "application_proof",
@@ -553,44 +558,69 @@ test("rich media, entity pages and the complete PDF export stay intact", async (
     );
     expect(overflowingPages).toEqual([]);
 
-    await page.emulateMedia({ media: "print" });
-    await expect(page.locator(".preview-toolbar")).toBeHidden();
-    await expect(page.locator(".preview-workspace > aside")).toBeHidden();
-    const nativePrintPdf = await page.pdf({
-      preferCSSPageSize: true,
-      printBackground: true,
-    });
-    const nativePrintPageCount =
-      nativePrintPdf.toString("latin1").match(/\/Type \/Page\b/g)?.length || 0;
-    expect(nativePrintPageCount).toBe(previewPageCount);
-    await page.emulateMedia({ media: "screen" });
-
-    let mainExportRequests = 0;
+    let completeExportPayload;
     page.on("request", (request) => {
       if (
         request.method() === "POST" &&
-        new URL(request.url()).pathname === "/api/pdf-export"
+        new URL(request.url()).pathname === "/api/pdf-export" &&
+        !completeExportPayload
       ) {
-        mainExportRequests += 1;
+        completeExportPayload = request.postDataJSON();
       }
     });
-    await page.evaluate(() => {
-      window.__printCalls = 0;
-      window.print = () => {
-        window.__printCalls += 1;
-      };
-    });
     const exportStartedAt = Date.now();
-    await page.getByRole("button", { name: "打印 / 保存 PDF" }).click();
-    await expect.poll(() => page.evaluate(() => window.__printCalls)).toBe(1);
-    expect(Date.now() - exportStartedAt).toBeLessThan(5_000);
-    expect(mainExportRequests).toBe(0);
+    const downloadPromise = page.waitForEvent("download");
+    await page.getByRole("button", { name: "导出 PDF", exact: true }).click();
+    const download = await downloadPromise;
+    const stream = await download.createReadStream();
+    const chunks = [];
+    for await (const chunk of stream) chunks.push(chunk);
+    const pdf = Buffer.concat(chunks);
+    expect(Date.now() - exportStartedAt).toBeLessThan(30_000);
+    expect(download.suggestedFilename()).toMatch(/\.pdf$/i);
+    expect(
+      completeExportPayload.parts.filter((part) => part.type === "pdf"),
+    ).toHaveLength(3);
+    expect(
+      completeExportPayload.parts
+        .filter((part) => part.type === "html")
+        .map((part) => part.html)
+        .join(""),
+    ).not.toContain("data-source-pdf-id");
+
+    const pdfPath = path.join(os.tmpdir(), `ceca-export-${applicationId}.pdf`);
+    await fs.writeFile(pdfPath, pdf);
+    try {
+      const { stdout: pdfInfo } = await execFileAsync("pdfinfo", [pdfPath]);
+      const exportedPageCount = Number(
+        pdfInfo.match(/^Pages:\s+(\d+)/m)?.[1] || 0,
+      );
+      expect(exportedPageCount).toBe(previewPageCount);
+      const { stdout } = await execFileAsync("pdftotext", [pdfPath, "-"]);
+      const textPages = stdout.split("\f");
+      const introductionPage = textPages.findIndex((text) =>
+        text.includes("项目简介"),
+      );
+      expect(introductionPage).toBeGreaterThan(-1);
+      expect(textPages[introductionPage + 1]).toMatch(
+        /项目简介|项目详细内容/,
+      );
+    } finally {
+      await fs.unlink(pdfPath).catch(() => {});
+    }
 
     const independentExportHtml = [];
     await page.route(
       "**/api/pdf-export",
       async (route) => {
-        independentExportHtml.push(route.request().postDataJSON().html);
+        const payload = route.request().postDataJSON();
+        independentExportHtml.push(
+          payload.html ||
+            payload.parts
+              .filter((part) => part.type === "html")
+              .map((part) => part.html)
+              .join(""),
+        );
         await route.fulfill({
           status: 200,
           contentType: "application/pdf",

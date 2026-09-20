@@ -482,14 +482,10 @@ test("each award loads its own form, validation and preview profile", async ({
     await expect(
       page.getByRole("heading", { name: /八、附件|九、真实性承诺书/ }),
     ).toHaveCount(0);
-    await page.evaluate(() => {
-      window.__printCalls = 0;
-      window.print = () => {
-        window.__printCalls += 1;
-      };
-    });
-    await page.getByRole("button", { name: "打印 / 保存 PDF" }).click();
-    await expect.poll(() => page.evaluate(() => window.__printCalls)).toBe(1);
+    const downloadPromise = page.waitForEvent("download");
+    await page.getByRole("button", { name: "导出 PDF", exact: true }).click();
+    const download = await downloadPromise;
+    expect(download.suggestedFilename()).toMatch(/\.pdf$/i);
     const previewPages = page.locator(".preview-page");
     const previewScreenshotCount = Math.min(await previewPages.count(), 5);
     for (let index = 0; index < previewScreenshotCount; index += 1) {
