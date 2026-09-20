@@ -402,11 +402,6 @@ export function EntityEditor({
                     </label>
                   );
                 })}
-                {entityType === "units" && (
-                  <p className="entity-editor__accuracy-note">
-                    注：务必确保以上相关信息完整无误。
-                  </p>
-                )}
               </div>
             </article>
           )}

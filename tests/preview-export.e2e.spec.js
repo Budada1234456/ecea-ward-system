@@ -1,5 +1,8 @@
 import { expect, test } from "@playwright/test";
+import fs from "node:fs/promises";
 import { deflateSync } from "node:zlib";
+import { jsPDF } from "jspdf";
+import JSZip from "jszip";
 import {
   completePerson,
   completeProjectData,
@@ -52,6 +55,17 @@ function tallPng() {
     pngChunk("IDAT", deflateSync(pixels)),
     pngChunk("IEND", Buffer.alloc(0)),
   ]);
+}
+
+async function withTrailingBlankWordPage(buffer) {
+  const zip = await JSZip.loadAsync(buffer);
+  const documentPart = zip.file("word/document.xml");
+  const xml = await documentPart.async("string");
+  const pageBreak =
+    '<w:p><w:r><w:br w:type="page"/></w:r></w:p><w:p></w:p>';
+  const next = xml.replace(/<w:sectPr(?:\s|>)/, (match) => `${pageBreak}${match}`);
+  zip.file("word/document.xml", next);
+  return zip.generateAsync({ type: "nodebuffer" });
 }
 
 test("rich media, entity pages and the complete PDF export stay intact", async ({
@@ -205,6 +219,109 @@ test("rich media, entity pages and the complete PDF export stay intact", async (
       expect(upload.ok(), await upload.text()).toBe(true);
     }
 
+    const recommendationWord = await fs.readFile(
+      "节能奖填报材料/科技进步奖/八、申报、推荐单位意见.docx",
+    );
+    const recommendationUpload = await page.request.post(
+      `${baseUrl}/api/applications/${applicationId}/files`,
+      {
+        multipart: {
+          category: "section_word:progress:unitRecommendation",
+          file: {
+            name: "八、申报、推荐单位意见.docx",
+            mimeType:
+              "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            buffer: recommendationWord,
+          },
+        },
+      },
+    );
+    expect(recommendationUpload.ok(), await recommendationUpload.text()).toBe(
+      true,
+    );
+
+    const expertRecommendationWord = await withTrailingBlankWordPage(
+      await fs.readFile(
+        "节能奖填报材料/科技进步奖/九、专家推荐意见.docx",
+      ),
+    );
+    const expertRecommendationUpload = await page.request.post(
+      `${baseUrl}/api/applications/${applicationId}/files`,
+      {
+        multipart: {
+          category: "section_word:progress:expertRecommendation",
+          file: {
+            name: "九、专家推荐意见.docx",
+            mimeType:
+              "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            buffer: expertRecommendationWord,
+          },
+        },
+      },
+    );
+    expect(
+      expertRecommendationUpload.ok(),
+      await expertRecommendationUpload.text(),
+    ).toBe(true);
+
+    const signedDocument = new jsPDF();
+    signedDocument.text("Signed declaration page 1", 20, 20);
+    signedDocument.addPage();
+    signedDocument.text("Signed declaration page 2", 20, 20);
+    const authenticityUpload = await page.request.post(
+      `${baseUrl}/api/applications/${applicationId}/files`,
+      {
+        multipart: {
+          category: "section_signed:progress:authenticity",
+          file: {
+            name: "十一、真实性承诺书.pdf",
+            mimeType: "application/pdf",
+            buffer: Buffer.from(signedDocument.output("arraybuffer")),
+          },
+        },
+      },
+    );
+    expect(authenticityUpload.ok(), await authenticityUpload.text()).toBe(true);
+
+    const confidentialityDocument = new jsPDF();
+    confidentialityDocument.text("Confidentiality page 1", 20, 20);
+    confidentialityDocument.addPage();
+    confidentialityDocument.text("Confidentiality page 2", 20, 20);
+    const confidentialityUpload = await page.request.post(
+      `${baseUrl}/api/applications/${applicationId}/files`,
+      {
+        multipart: {
+          category: "section_signed:progress:confidentiality",
+          file: {
+            name: "十二、不涉密承诺函.pdf",
+            mimeType: "application/pdf",
+            buffer: Buffer.from(confidentialityDocument.output("arraybuffer")),
+          },
+        },
+      },
+    );
+    expect(
+      confidentialityUpload.ok(),
+      await confidentialityUpload.text(),
+    ).toBe(true);
+
+    const integrityDocument = new jsPDF();
+    integrityDocument.text("Integrity page 1", 20, 20);
+    const integrityUpload = await page.request.post(
+      `${baseUrl}/api/applications/${applicationId}/files`,
+      {
+        multipart: {
+          category: "section_signed:progress:integrity",
+          file: {
+            name: "十三、诚信承诺书.pdf",
+            mimeType: "application/pdf",
+            buffer: Buffer.from(integrityDocument.output("arraybuffer")),
+          },
+        },
+      },
+    );
+    expect(integrityUpload.ok(), await integrityUpload.text()).toBe(true);
+
     await page.route(
       `**/api/applications/${applicationId}/files`,
       async (route) => {
@@ -247,21 +364,79 @@ test("rich media, entity pages and the complete PDF export stay intact", async (
         name: `第 ${index + 1} 完成单位情况表`,
       });
       await expect(unitTable).toContainText(name);
-      await expect(unitTable).not.toContainText("传真");
-      await expect(unitTable.locator(".preview-unit-note")).toHaveCSS(
-        "color",
-        "rgb(255, 0, 0)",
+      await expect(unitTable).toContainText("传真");
+      await expect(unitTable).toContainText("010-88886666");
+      await expect(unitTable).not.toContainText(
+        "注：务必确保以上相关信息完整无误。",
       );
       await expect(unitTable.locator("xpath=ancestor::article")).toHaveCount(1);
     }
 
-    const recommendationPage = page.locator(".preview-recommendation-page");
+    const basicPage = page.locator(".preview-basic-page");
+    const basicTableFitsPage = await basicPage.evaluate((element) => {
+      const tableBox = element.querySelector(":scope > table").getBoundingClientRect();
+      const footerBox = element.querySelector(":scope > footer").getBoundingClientRect();
+      return tableBox.bottom + 12 < footerBox.top;
+    });
+    expect(basicTableFitsPage).toBe(true);
+
+    const personPagesClearFooter = await page
+      .locator(".preview-person-page")
+      .evaluateAll((pages) =>
+        pages.every((element) => {
+          const tableBox = element
+            .querySelector(":scope > table")
+            .getBoundingClientRect();
+          const footerBox = element
+            .querySelector(":scope > footer")
+            .getBoundingClientRect();
+          return tableBox.bottom + 12 < footerBox.top;
+        }),
+    );
+    expect(personPagesClearFooter).toBe(true);
+
+    const detailPage = page.locator(".preview-detail-page").first();
+    await expect(detailPage.locator(":scope > h3")).toHaveText(
+      "三、项目详细内容",
+    );
     await expect(
-      recommendationPage.getByRole("table", { name: "申报、推荐单位意见" }),
-    ).toHaveCount(1);
+      detailPage.locator(".preview-section-table tr").first().locator("th"),
+    ).toHaveText(/^1．立项背景/);
+
+    const submittedPages = page.locator(".preview-submitted-page");
+    await expect(submittedPages).toHaveCount(15);
     await expect(
-      recommendationPage.locator(".preview-recommendation-table > tbody > tr"),
-    ).toHaveCount(2);
+      submittedPages.filter({ has: page.locator("img") }),
+    ).toHaveCount(13);
+    for (const [sectionKey, expectedPages] of [
+      ["unitRecommendation", 2],
+      ["expertRecommendation", 1],
+      ["attachments", 7],
+      ["authenticity", 2],
+      ["confidentiality", 2],
+      ["integrity", 1],
+    ]) {
+      await expect(
+        page.locator(`.preview-submitted-page[data-section-key="${sectionKey}"]`),
+      ).toHaveCount(expectedPages);
+    }
+    await expect(page.getByText("以本章上传 Word 为准。")).toHaveCount(0);
+    const recommendationWordPage = page.locator(
+      '.preview-submitted-page[aria-label*="八、申报、推荐单位意见.docx"]',
+    );
+    await expect(recommendationWordPage).toHaveAttribute(
+      "aria-label",
+      /八、申报、推荐单位意见\.docx/,
+    );
+    await recommendationWordPage.screenshot({
+      path: "test-results/application-preview-submitted-word.png",
+    });
+    for (const image of await submittedPages.locator("img").all()) {
+      await expect(image).toBeVisible();
+      await expect
+        .poll(() => image.evaluate((element) => element.naturalWidth))
+        .toBeGreaterThan(0);
+    }
     const ipPage = page.locator(".preview-ip-page").first();
     await expect(ipPage.getByRole("heading", { level: 3 })).toHaveText(
       "五、申请、获得知识产权情况表",
@@ -284,15 +459,40 @@ test("rich media, entity pages and the complete PDF export stay intact", async (
     await expect(evaluationTable).toContainText("评价字第001号");
     await expect(evaluationTable.locator("tbody tr")).toHaveCount(4);
     await expect(
-      ipPage.getByRole("table", { name: "3. 应用单位目录" }),
-    ).toContainText("节能示范有限公司");
+      ipPage
+        .getByRole("table", { name: "1. 知识产权证明目录" })
+        .locator("tbody tr"),
+    ).toHaveCount(5);
+    const applicationUnitTable = ipPage.getByRole("table", {
+      name: "3. 应用单位目录",
+    });
+    await expect(applicationUnitTable).toContainText("节能示范有限公司");
+    await expect(applicationUnitTable.locator("tbody tr")).toHaveCount(4);
     await ipPage.screenshot({
       path: "test-results/application-preview-ip-page.png",
       style: ".preview-toolbar { visibility: hidden !important; }",
     });
+    const economicPreview = page.getByRole("table", { name: "经济效益数据" });
+    await expect(
+      economicPreview.locator("tbody").first().locator("tr"),
+    ).toHaveCount(7);
+    await expect(economicPreview).not.toContainText("新增销售额");
 
     const previewPages = page.locator(".preview-page");
     const previewPageCount = await previewPages.count();
+    await expect
+      .poll(() =>
+        previewPages.evaluateAll((pages) =>
+          pages.map(
+            (previewPage) =>
+              previewPage.querySelector(":scope > .preview-page-number")
+                ?.textContent || "",
+          ),
+        ),
+      )
+      .toEqual(
+        Array.from({ length: previewPageCount }, (_, index) => String(index + 1)),
+      );
     for (let index = 0; index < Math.min(previewPageCount, 5); index += 1) {
       await previewPages.nth(index).screenshot({
         path: `test-results/application-preview-page-${index + 1}.png`,

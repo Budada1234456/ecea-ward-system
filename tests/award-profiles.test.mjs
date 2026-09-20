@@ -79,3 +79,16 @@ test("project awards share a skeleton but keep distinct guidance and limits", ()
 test("unknown award values fall back to the progress profile", () => {
   assert.equal(getAwardProfile("历史奖项").value, AWARD_TYPES.PROGRESS);
 });
+
+test("chapters five through seven use system fields for every award", () => {
+  for (const awardType of Object.values(AWARD_TYPES)) {
+    const sections = getAwardSections(awardType);
+    assert.deepEqual(
+      sections.slice(4, 7).map(({ number, uploadMode }) => ({
+        number,
+        uploadMode,
+      })),
+      [5, 6, 7].map((number) => ({ number, uploadMode: "form" })),
+    );
+  }
+});
