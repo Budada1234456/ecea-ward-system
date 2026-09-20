@@ -318,9 +318,9 @@ test("progress preview and PDF export use the Word template font sizes", async (
             technicalContent:
               '<p><span style="font-size: 9px">详细内容正文应使用小四号字。</span></p><p>表 1 国内外技术对比情况表</p><table style="width: 1200px"><colgroup><col style="width: 240px"><col style="width: 180px"><col style="width: 260px"><col style="width: 180px"><col style="width: 180px"><col style="width: 180px"></colgroup><tbody><tr><th colspan="3"><span style="font-size: 24px">紧凑表头</span></th><th>国内外先进水平</th><th>本项目技术</th><th>对比结果</th></tr><tr><th rowspan="3">安全承载</th><td rowspan="3">资源辨识</td><td><p style="margin: 12px 0; text-indent: 2em; line-height: 2">星顶光伏测算准确度</p></td><td>77.55%</td><td>91%</td><td>国际领先</td></tr><tr><td>承载力评估规模</td><td>局部区域</td><td>省域百万级节点</td><td>国际首次实现</td></tr><tr><td>承载力评估颗粒度</td><td>区县级</td><td>村庄级和配变级</td><td>国际领先</td></tr><tr><th rowspan="3">协同调控</th><td rowspan="2">感知预测</td><td>功率实时感知准确率</td><td>92.5%</td><td>97.55%</td><td>国际领先</td></tr><tr><td>辐照度预测准确率</td><td>93.25%</td><td>95.98%</td><td>国际领先</td></tr><tr><td>调控消纳</td><td>省级分布式资源控制云平台</td><td>接入设备数量超过一百万台</td><td>接入设备数量超过一千万台</td><td>国际领先</td></tr></tbody></table><p>表格之后的正文必须完整显示。</p>',
             comparison:
-              '<p>同类技术比较前文段。</p><p style="margin: 24px 0 3px; text-indent: 0; line-height: 1; text-align: right">同类技术比较末段。</p>',
+              '<p><span>同类技术比较前文段。</span></p><p style="margin: 24px 0 3px; text-indent: 0; line-height: 1; text-align: right"><span style="font-family: Arial">同类技术比较末段。</span></p>',
             application:
-              '<p>应用现状前文段。</p><p style="margin: 24px 0 3px; text-indent: 0; line-height: 1; text-align: right">应用现状末段。</p>',
+              '<p><span>应用现状前文段。</span></p><p style="margin: 24px 0 3px; text-indent: 0; line-height: 1; text-align: right"><span style="font-family: Arial">应用现状末段。</span></p>',
             people: [
               {
                 ...completePerson("完成人字号验收"),
@@ -458,6 +458,27 @@ test("progress preview and PDF export use the Word template font sizes", async (
       );
       expect(paragraphStyles).toHaveLength(2);
       expect(paragraphStyles[1]).toEqual(paragraphStyles[0]);
+
+      const chineseFontFamilies = await page
+        .locator('.preview-detail-page[data-section-key="details"]')
+        .filter({ hasText: `${marker}末段。` })
+        .evaluate((section, paragraphMarker) => {
+          const paragraphs = [
+            ...section.querySelectorAll(".preview-rich-text > p"),
+          ];
+          const preceding = paragraphs.find((node) =>
+            node.textContent.includes(`${paragraphMarker}前文段。`),
+          );
+          const final = paragraphs.find((node) =>
+            node.textContent.includes(`${paragraphMarker}末段。`),
+          );
+          return {
+            preceding: getComputedStyle(preceding.querySelector("span"))
+              .fontFamily,
+            final: getComputedStyle(final.querySelector("span")).fontFamily,
+          };
+        }, marker);
+      expect(chineseFontFamilies.final).toBe(chineseFontFamilies.preceding);
     }
     const richTablePage = page
       .locator('.preview-detail-page[data-section-key="details"]')
