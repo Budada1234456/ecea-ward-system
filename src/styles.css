@@ -725,6 +725,78 @@ button {
   flex: 0 0 auto;
   color: #187858;
 }
+.award-level-field {
+  grid-column: 1 / -1;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.award-level-field legend {
+  margin-bottom: 7px;
+  color: #4c596b;
+  font-size: 11px;
+  font-weight: 700;
+}
+.award-level-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.award-level-choice {
+  min-height: 68px;
+  padding: 10px 12px;
+  border: 1px solid #d7dee7;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+}
+.award-level-choice:hover {
+  border-color: #94b8df;
+  background: #f8fbff;
+}
+.award-level-choice.active {
+  border-color: #2779d4;
+  box-shadow: inset 0 0 0 1px #2779d4;
+  background: #f2f7fd;
+}
+.award-level-choice:has(input:focus-visible) {
+  outline: 2px solid #2779d4;
+  outline-offset: 2px;
+}
+.award-level-choice input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.award-level-choice b,
+.award-level-choice small {
+  display: block;
+}
+.award-level-choice b {
+  color: #29384b;
+  font-size: 12px;
+}
+.award-level-choice small {
+  margin-top: 4px;
+  color: #68778a;
+  font-size: 10px;
+  line-height: 1.5;
+}
+.award-level-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin: 7px 0 0;
+  color: #5b6878;
+  font-size: 10px;
+  line-height: 1.55;
+}
+.award-level-note svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color: #2779d4;
+}
 .workflow-choice-field {
   grid-column: 1 / -1;
   min-width: 0;
@@ -4969,10 +5041,12 @@ select.control {
   .create-title-field,
   .create-error,
   .create-deadline-summary,
-  .award-choice-field {
+  .award-choice-field,
+  .award-level-field {
     grid-column: auto;
   }
   .award-choice-grid,
+  .award-level-grid,
   .award-rule-grid,
   .format-facts,
   .two-column-copy,
@@ -6279,27 +6353,132 @@ select.control {
   line-height: 6mm;
 }
 
-/* 科技进步奖第 6 章：主要完成人表全部文字与第一页表格统一为小四。 */
-.preview-pages--progress
-  .preview-person-page[data-section-key="people"]
-  table
-  :is(th, td, th *, td *)
-  :not(.preview-cell-rich *),
+/* 两类项目奖的完成人/单位表固定字段均按原始模板使用宋体小四。 */
+:is(.preview-pages--progress, .preview-pages--invention)
+  .preview-entity-page:is(
+    [data-section-key="people"],
+    [data-section-key="units"]
+  )
+  > table
+  > tbody
+  > tr:not(.preview-contribution-row):not(.preview-declaration-row)
+  > :is(th, td),
+:is(.preview-pages--progress, .preview-pages--invention)
+  .preview-entity-page:is(
+    [data-section-key="people"],
+    [data-section-key="units"]
+  )
+  > table
+  > tbody
+  > .preview-contribution-row
+  > td
+  > :is(strong, span),
+:is(.preview-pages--progress, .preview-pages--invention)
+  .preview-entity-page[data-section-key="people"]
+  > table
+  > tbody
+  > .preview-declaration-row
+  > th,
+:is(.preview-pages--progress, .preview-pages--invention)
+  .preview-entity-page[data-section-key="people"]
+  > table
+  > tbody
+  > .preview-declaration-row
+  > th
+  > span,
 .pdf-export-document
-  .preview-progress-document.preview-person-page[data-section-key="people"]
-  table
-  :is(th, td, th *, td *)
-  :not(.preview-cell-rich *),
-.preview-pages--progress
-  .preview-person-page[data-section-key="people"]
-  .preview-cell-rich
-  table
-  :is(th, td, th *, td *),
+  :is(
+    .preview-progress-document,
+    .preview-invention-document
+  ).preview-entity-page:is(
+    [data-section-key="people"],
+    [data-section-key="units"]
+  )
+  > table
+  > tbody
+  > tr:not(.preview-contribution-row):not(.preview-declaration-row)
+  > :is(th, td),
 .pdf-export-document
-  .preview-progress-document.preview-person-page[data-section-key="people"]
-  .preview-cell-rich
-  table
-  :is(th, td, th *, td *) {
+  :is(
+    .preview-progress-document,
+    .preview-invention-document
+  ).preview-entity-page:is(
+    [data-section-key="people"],
+    [data-section-key="units"]
+  )
+  > table
+  > tbody
+  > .preview-contribution-row
+  > td
+  > :is(strong, span),
+.pdf-export-document
+  :is(
+    .preview-progress-document,
+    .preview-invention-document
+  ).preview-entity-page[data-section-key="people"]
+  > table
+  > tbody
+  > .preview-declaration-row
+  > th,
+.pdf-export-document
+  :is(
+    .preview-progress-document,
+    .preview-invention-document
+  ).preview-entity-page[data-section-key="people"]
+  > table
+  > tbody
+  > .preview-declaration-row
+  > th
+  > span {
+  font-family: SimSun, "Songti SC", "STSong", serif !important;
+  font-size: 12pt !important;
+}
+
+:is(.preview-pages--progress, .preview-pages--invention)
+  .preview-entity-page[data-section-key="people"]
+  .preview-declaration-row
+  > :is(th, td),
+:is(.preview-pages--progress, .preview-pages--invention)
+  .preview-entity-page[data-section-key="people"]
+  .preview-declaration-row
+  > :is(th, td)
+  > :is(span, p),
+:is(.preview-pages--progress, .preview-pages--invention)
+  .preview-entity-page[data-section-key="units"]
+  .preview-stamp-block,
+:is(.preview-pages--progress, .preview-pages--invention)
+  .preview-entity-page[data-section-key="units"]
+  .preview-stamp-block
+  > div,
+.pdf-export-document
+  :is(
+    .preview-progress-document,
+    .preview-invention-document
+  ).preview-entity-page[data-section-key="people"]
+  .preview-declaration-row
+  > :is(th, td),
+.pdf-export-document
+  :is(
+    .preview-progress-document,
+    .preview-invention-document
+  ).preview-entity-page[data-section-key="people"]
+  .preview-declaration-row
+  > :is(th, td)
+  > :is(span, p),
+.pdf-export-document
+  :is(
+    .preview-progress-document,
+    .preview-invention-document
+  ).preview-entity-page[data-section-key="units"]
+  .preview-stamp-block,
+.pdf-export-document
+  :is(
+    .preview-progress-document,
+    .preview-invention-document
+  ).preview-entity-page[data-section-key="units"]
+  .preview-stamp-block
+  > div {
+  font-family: SimSun, "Songti SC", "STSong", serif !important;
   font-size: 12pt !important;
 }
 

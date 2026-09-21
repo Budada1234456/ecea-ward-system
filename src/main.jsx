@@ -66,6 +66,7 @@ import { WordImportDialog } from "./import/WordImportDialog.jsx";
 import {
   AWARD_TYPES,
   awardProfiles,
+  getAwardLevelRule,
   getAwardProfile,
   getAwardSections,
 } from "./award-profiles.js";
@@ -80,7 +81,7 @@ import "./styles.css";
 
 const awardOptions = awardProfiles.map((profile) => ({
   ...profile,
-  mode: profile.mode === "individual" ? "个人奖" : "项目奖",
+  modeLabel: profile.mode === "individual" ? "个人奖" : "项目奖",
 }));
 
 const applicationChannels = [
@@ -163,6 +164,7 @@ function createEmptyData(meta = {}) {
     profileCode: profile.code,
     year: String(meta.year || 2026),
     awardType: profile.value,
+    awardLevel: getAwardLevelRule(profile.value, meta.awardLevel).value,
     applicationMode: profile.mode,
     applicationChannel: "自由申报",
     projectName: meta.title || "",
@@ -572,13 +574,16 @@ function TagEditor({
   );
 }
 
-function AwardTypeLock({ profile }) {
+function AwardTypeLock({ profile, awardLevel }) {
   return (
     <div className="award-type-lock" role="status">
       <LockKeyhole size={16} />
       <span>
         <b>{profile.value}</b>
-        <small>奖项在创建后锁定；如需申报其他奖项，请新建一份申报材料。</small>
+        <small>
+          {awardLevel ? `申报等级：${awardLevel}。` : ""}
+          奖种和等级在创建后锁定；如需变更，请新建申报材料。
+        </small>
       </span>
       <i>{profile.mode === "individual" ? "个人奖" : "项目奖"}</i>
     </div>
@@ -607,7 +612,7 @@ function AchievementBasicForm({ data, setField, applicationId }) {
       </div>
       <div className="form-grid">
         <Field label="奖种" required>
-          <AwardTypeLock profile={profile} />
+          <AwardTypeLock profile={profile} awardLevel={data.awardLevel} />
         </Field>
         <Field label="申报年度" required>
           <select
@@ -819,6 +824,7 @@ function BasicForm({ data, setField, disciplineRecords, applicationId }) {
       />
     );
   const profile = getAwardProfile(data.awardType);
+  const levelRule = getAwardLevelRule(data.awardType, data.awardLevel);
   const toggleSource = (key) =>
     setField(
       "sources",
@@ -856,7 +862,7 @@ function BasicForm({ data, setField, disciplineRecords, applicationId }) {
           </select>
         </Field>
         <Field label="奖种" required>
-          <AwardTypeLock profile={profile} />
+          <AwardTypeLock profile={profile} awardLevel={data.awardLevel} />
         </Field>
         <Field
           label="项目名称（中文）"
@@ -889,7 +895,7 @@ function BasicForm({ data, setField, disciplineRecords, applicationId }) {
         <Field
           label="主要完成人"
           required
-          hint={`按贡献大小排序。本奖项单项授奖人数最多不超过 ${profile.maxPeople} 人，具体以拟申报等级要求为准。`}
+          hint={`按贡献大小排序。${levelRule.label}单项授奖人数不超过 ${levelRule.maxPeople} 人。`}
         >
           <TagEditor
             values={data.people}
@@ -905,7 +911,7 @@ function BasicForm({ data, setField, disciplineRecords, applicationId }) {
         <Field
           label="主要完成单位"
           required
-          hint="单位须具有法人资格，按贡献大小排序。"
+          hint={`单位须具有法人资格，按贡献大小排序。${Number.isFinite(levelRule.maxUnits) ? `${levelRule.label}授奖单位不超过 ${levelRule.maxUnits} 个。` : "现行办法未规定该奖种完成单位数量上限。"}`}
         >
           <TagEditor
             values={data.units}
@@ -3143,7 +3149,8 @@ function PreviewUnitPage({ unit, index, pageNumber }) {
   );
 }
 
-function PreviewRecommendationPage({ body, pageNumber }) {
+function PreviewRecommendationPage({ body, awardLevel, pageNumber }) {
+  const levelMark = (level) => (awardLevel === level ? "☒" : "☐");
   return (
     <article
       className="preview-page preview-form-page preview-recommendation-page"
@@ -3173,8 +3180,9 @@ function PreviewRecommendationPage({ body, pageNumber }) {
           <tr>
             <td>
               <h4>
-                推荐单位推荐意见：（明确推荐等级：□一等奖 □二等奖
-                □三等奖，阐述推荐理由）
+                推荐单位推荐意见：（明确推荐等级：
+                {levelMark("一等奖")}一等奖 {levelMark("二等奖")}
+                二等奖，阐述推荐理由）
               </h4>
               <div className="preview-blank-lines" />
               <div className="preview-signature-area">
@@ -4089,6 +4097,7 @@ function PreviewDialog({
                 <PreviewRecommendationPage
                   key={`recommendation-${index}`}
                   body={page.body}
+                  awardLevel={data.awardLevel}
                   pageNumber={pageNumber}
                 />
               );
@@ -4120,9 +4129,11 @@ function PreviewDialog({
 }
 
 function CreateApplicationDialog({ onClose, onCreated }) {
+  const initialProfile = getAwardProfile(AWARD_TYPES.PROGRESS);
   const [form, setForm] = useState({
     title: "",
     awardType: "节能减排科技进步奖",
+    awardLevel: getAwardLevelRule(initialProfile.value).value,
     year: "2026",
     applicationChannel: "自由申报",
     applicantUnit: "",
@@ -4133,6 +4144,7 @@ function CreateApplicationDialog({ onClose, onCreated }) {
   const selectedAward = awardOptions.find(
     (option) => option.value === form.awardType,
   );
+  const selectedLevel = getAwardLevelRule(form.awardType, form.awardLevel);
   const isAchievement =
     form.awardType === AWARD_TYPES.ACHIEVEMENT ||
     selectedAward?.code === "achievement";
@@ -4212,16 +4224,20 @@ function CreateApplicationDialog({ onClose, onCreated }) {
                     value={option.value}
                     checked={form.awardType === option.value}
                     onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        awardType: event.target.value,
-                        workflowMode: "form",
-                      }))
+                      setForm((current) => {
+                        const awardType = event.target.value;
+                        return {
+                          ...current,
+                          awardType,
+                          awardLevel: getAwardLevelRule(awardType).value,
+                          workflowMode: "form",
+                        };
+                      })
                     }
                   />
                   <span className="award-choice-head">
                     <b>{option.value}</b>
-                    <i>{option.mode}</i>
+                    <i>{option.modeLabel}</i>
                   </span>
                   <small>{option.summary}</small>
                 </label>
@@ -4230,6 +4246,44 @@ function CreateApplicationDialog({ onClose, onCreated }) {
             <p className="award-condition">
               <ShieldCheck size={15} />
               <span>{selectedAward?.conditions}</span>
+            </p>
+          </fieldset>
+          <fieldset className="award-level-field">
+            <legend>申报等级</legend>
+            <div className="award-level-grid">
+              {selectedAward.awardLevels.map((level) => (
+                <label
+                  key={level.value}
+                  className={
+                    form.awardLevel === level.value
+                      ? "award-level-choice active"
+                      : "award-level-choice"
+                  }
+                >
+                  <input
+                    type="radio"
+                    name="awardLevel"
+                    value={level.value}
+                    checked={form.awardLevel === level.value}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        awardLevel: event.target.value,
+                      }))
+                    }
+                  />
+                  <b>{level.label}</b>
+                  <small>{level.description}</small>
+                </label>
+              ))}
+            </div>
+            <p className="award-level-note">
+              <Info size={15} />
+              <span>
+                {selectedLevel.description}
+                {selectedAward.mode === "project" &&
+                  " 特等奖由评审组从拟授一等奖项目中提名，不单独接受申报；现行办法不设三等奖。"}
+              </span>
             </p>
           </fieldset>
           <label>
@@ -4387,7 +4441,7 @@ function AnnouncementCenter({ onNew }) {
           <div className="award-rule-grid">
             {awardOptions.map((award) => (
               <div key={award.value}>
-                <span>{award.mode}</span>
+                <span>{award.modeLabel}</span>
                 <b>{award.value}</b>
                 <p>{award.conditions}</p>
               </div>
@@ -4956,6 +5010,7 @@ function EditorApp({ application, onHome }) {
       ...stored,
       ...localDraft,
       awardType: profile.value,
+      awardLevel: getAwardLevelRule(profile.value, stored.awardLevel).value,
       applicationMode: profile.mode,
       profileCode: profile.code,
       schemaVersion: 2,

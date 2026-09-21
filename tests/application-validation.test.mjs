@@ -84,3 +84,55 @@ test("full validation catches incomplete basic and entity fields before preview"
     ),
   );
 });
+
+test("project entity limits follow the selected award and level", () => {
+  const people = (count) =>
+    Array.from({ length: count }, (_, index) => ({
+      name: `完成人 ${index + 1}`,
+    }));
+  const units = (count) =>
+    Array.from({ length: count }, (_, index) => ({
+      name: `完成单位 ${index + 1}`,
+    }));
+  const messages = (awardType, awardLevel, peopleCount, unitCount) =>
+    validateSection({
+      awardType,
+      sectionKey: "basic",
+      data: {
+        awardType,
+        awardLevel,
+        year: "2026",
+        people: people(peopleCount),
+        units: units(unitCount),
+      },
+    }).map(({ message }) => message);
+
+  const progressSecondPrizeMessages = messages(
+    AWARD_TYPES.PROGRESS,
+    "二等奖",
+    11,
+    8,
+  );
+  assert(
+    progressSecondPrizeMessages.includes("二等奖主要完成人不得超过 10 人"),
+  );
+  assert(
+    progressSecondPrizeMessages.includes("二等奖主要完成单位不得超过 7 个"),
+  );
+  assert(
+    messages(AWARD_TYPES.INVENTION, "二等奖", 7, 12).includes(
+      "二等奖主要完成人不得超过 6 人",
+    ),
+  );
+  assert.equal(
+    messages(AWARD_TYPES.INVENTION, "二等奖", 6, 12).some((message) =>
+      message.includes("主要完成单位不得超过"),
+    ),
+    false,
+  );
+  assert(
+    messages(AWARD_TYPES.PROGRESS, "三等奖", 1, 1).includes(
+      "请选择有效的申报等级",
+    ),
+  );
+});

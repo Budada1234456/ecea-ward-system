@@ -32,6 +32,9 @@ export function completeUnit(name = "完成单位") {
 
 export function completeProjectData(title, overrides = {}) {
   return {
+    year: "2026",
+    awardType: "节能减排科技进步奖",
+    awardLevel: "一等奖",
     projectName: title,
     projectNameEn: "Complete Energy Saving Project",
     applicantUnit: "中国节能测试单位",

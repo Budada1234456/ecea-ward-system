@@ -28,8 +28,10 @@ import {
 import {
   AWARD_TYPES,
   awardProfiles,
+  getAwardLevelRule,
   getAwardProfile,
   getSubmissionRequirements,
+  isValidAwardLevel,
 } from "./src/award-profiles.js";
 
 const execFileAsync = promisify(execFile);
@@ -732,10 +734,28 @@ function parseData(value) {
   }
 }
 
+function normalizeStoredApplicationData(
+  row,
+  sourceData = parseData(row.data_json),
+) {
+  const profile = getAwardProfile(row.award_type || sourceData.awardType);
+  return {
+    ...sourceData,
+    awardType: profile.value,
+    awardLevel: getAwardLevelRule(profile.value, sourceData.awardLevel).value,
+    applicationMode: profile.mode,
+    profileCode: profile.code,
+    schemaVersion: 2,
+  };
+}
+
 function applicationFromRow(row) {
   if (!row) return null;
   const { data_json: dataJson, ...meta } = row;
-  return { ...meta, data: parseData(dataJson) };
+  return {
+    ...meta,
+    data: normalizeStoredApplicationData(row, parseData(dataJson)),
+  };
 }
 
 function calculateProgress(data) {
@@ -1472,6 +1492,7 @@ if (count === 0) {
   const seed = {
     year: "2026",
     awardType: "节能减排科技进步奖",
+    awardLevel: getAwardLevelRule("节能减排科技进步奖").value,
     projectName: title,
   };
   const result = db
@@ -1524,6 +1545,9 @@ app.post("/api/applications", (req, res) => {
   const requestedAwardType = String(req.body.awardType || AWARD_TYPES.PROGRESS);
   const profile = getAwardProfile(requestedAwardType);
   const awardType = profile.value;
+  const requestedAwardLevel = String(
+    req.body.awardLevel || getAwardLevelRule(awardType).value,
+  );
   const year = Number(req.body.year || new Date().getFullYear());
   const applicationChannel = String(req.body.applicationChannel || "自由申报");
   const applicantUnit = String(req.body.applicantUnit || "").trim();
@@ -1533,6 +1557,8 @@ app.post("/api/applications", (req, res) => {
       : "form";
   if (!awardProfiles.some(({ value }) => value === requestedAwardType))
     return res.status(422).json({ ok: false, message: "请选择有效的奖项类别" });
+  if (!isValidAwardLevel(awardType, requestedAwardLevel))
+    return res.status(422).json({ ok: false, message: "请选择有效的申报等级" });
   if (!title)
     return res.status(422).json({
       ok: false,
@@ -1544,6 +1570,7 @@ app.post("/api/applications", (req, res) => {
     profileCode: profile.code,
     year: String(year),
     awardType,
+    awardLevel: requestedAwardLevel,
     applicationMode: profile.mode,
     applicationChannel,
     applicantUnit,
@@ -1589,12 +1616,17 @@ app.put("/api/applications/:id", (req, res) => {
   const row = ownedApplication(id, req.user.id);
   if (!row)
     return res.status(404).json({ ok: false, message: "申报项目不存在" });
+  const storedData = normalizeStoredApplicationData(row);
   const data = sanitizeApplicationRichTextData({
-    ...parseData(row.data_json),
+    ...storedData,
     ...(req.body.data || {}),
   });
   const profile = getAwardProfile(row.award_type);
   data.awardType = profile.value;
+  data.awardLevel = getAwardLevelRule(
+    profile.value,
+    storedData.awardLevel,
+  ).value;
   data.applicationMode = profile.mode;
   data.profileCode = profile.code;
   data.schemaVersion = 2;
@@ -1633,7 +1665,7 @@ app.post("/api/applications/:id/duplicate", (req, res) => {
   const row = ownedApplication(id, req.user.id);
   if (!row)
     return res.status(404).json({ ok: false, message: "申报项目不存在" });
-  const data = parseData(row.data_json);
+  const data = normalizeStoredApplicationData(row);
   data.projectName = `${row.title}（副本）`;
   const timestamp = now();
   const result = db
@@ -1667,7 +1699,7 @@ app.post("/api/applications/:id/submit", (req, res) => {
   const row = ownedApplication(id, req.user.id);
   if (!row)
     return res.status(404).json({ ok: false, message: "申报项目不存在" });
-  const data = parseData(row.data_json);
+  const data = normalizeStoredApplicationData(row);
   const profile = getAwardProfile(row.award_type);
   const files = db
     .prepare(
@@ -1694,10 +1726,6 @@ app.post("/api/applications/:id/submit", (req, res) => {
       missing.push("代表性知识产权不得超过 10 项");
   }
   if (profile.mode === "project") {
-    if ((data.people || []).length > profile.maxPeople)
-      missing.push(`主要完成人不得超过 ${profile.maxPeople} 人`);
-    if (profile.maxUnits && (data.units || []).length > profile.maxUnits)
-      missing.push(`主要完成单位不得超过 ${profile.maxUnits} 个`);
     if (
       !hasMinimumApplicationDuration(
         data.applicationUnits,

@@ -2,9 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   AWARD_TYPES,
+  getAwardLevelRule,
   getAwardProfile,
   getAwardSections,
   getSubmissionRequirements,
+  isValidAwardLevel,
 } from "../src/award-profiles.js";
 
 test("achievement applications use a candidate-specific material structure", () => {
@@ -66,8 +68,31 @@ test("project awards share a skeleton but keep distinct guidance and limits", ()
   assert.equal(invention.submissionFields.length, 6);
   assert.equal(progress.minimumApplicationYears, 1);
   assert.equal(invention.minimumApplicationYears, 2);
-  assert.equal(progress.maxPeople, 15);
-  assert.equal(invention.maxPeople, 10);
+  assert.deepEqual(
+    progress.awardLevels.map(({ value, maxPeople, maxUnits }) => ({
+      value,
+      maxPeople,
+      maxUnits,
+    })),
+    [
+      { value: "一等奖", maxPeople: 15, maxUnits: 10 },
+      { value: "二等奖", maxPeople: 10, maxUnits: 7 },
+    ],
+  );
+  assert.deepEqual(
+    invention.awardLevels.map(({ value, maxPeople, maxUnits }) => ({
+      value,
+      maxPeople,
+      maxUnits,
+    })),
+    [
+      { value: "一等奖", maxPeople: 10, maxUnits: null },
+      { value: "二等奖", maxPeople: 6, maxUnits: null },
+    ],
+  );
+  assert.equal(getAwardLevelRule(AWARD_TYPES.ACHIEVEMENT).value, "不分等级");
+  assert.equal(getAwardLevelRule(AWARD_TYPES.PROGRESS, "二等奖").maxUnits, 7);
+  assert.equal(isValidAwardLevel(AWARD_TYPES.PROGRESS, "三等奖"), false);
   assert.equal(getAwardSections(progress.value).length, 13);
   assert.equal(
     getAwardSections(invention.value)[12].templateFile,

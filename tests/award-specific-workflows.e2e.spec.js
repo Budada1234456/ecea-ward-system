@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { jsPDF } from "jspdf";
+import { DatabaseSync } from "node:sqlite";
+import { fileURLToPath } from "node:url";
 import {
   completePerson,
   completeProjectData,
@@ -47,7 +49,12 @@ test("each award loads its own form, validation and preview profile", async ({
   });
   expect(registration.ok(), await registration.text()).toBe(true);
 
-  const create = async (awardType, title, workflowMode = "form") => {
+  const create = async (
+    awardType,
+    title,
+    workflowMode = "form",
+    awardLevel,
+  ) => {
     const response = await page.request.post(`${baseUrl}/api/applications`, {
       data: {
         awardType,
@@ -55,6 +62,7 @@ test("each award loads its own form, validation and preview profile", async ({
         applicantUnit: "中国节能测试单位",
         year: 2026,
         workflowMode,
+        ...(awardLevel ? { awardLevel } : {}),
       },
     });
     expect(response.ok(), await response.text()).toBe(true);
@@ -107,6 +115,20 @@ test("each award loads its own form, validation and preview profile", async ({
     await expect(
       createDialog.getByText("候选人姓名", { exact: true }),
     ).toBeVisible();
+    await expect(
+      createDialog
+        .locator(".award-level-field")
+        .getByText("不分等级", { exact: true }),
+    ).toBeVisible();
+    await createDialog
+      .locator(".award-choice", { hasText: "节能减排科技进步奖" })
+      .click();
+    await expect(
+      createDialog.locator(".award-level-choice", { hasText: "二等奖" }),
+    ).toContainText("授奖单位不超过 7 个");
+    await expect(
+      createDialog.getByText("现行办法不设三等奖", { exact: false }),
+    ).toBeVisible();
     await createDialog.getByRole("button", { name: "取消" }).click();
 
     const invalidAward = await page.request.post(
@@ -120,10 +142,34 @@ test("each award loads its own form, validation and preview profile", async ({
       },
     );
     expect(invalidAward.status()).toBe(422);
+    const invalidLevel = await page.request.post(
+      `${baseUrl}/api/applications`,
+      {
+        data: {
+          awardType: "节能减排科技进步奖",
+          awardLevel: "三等奖",
+          title: `无效等级-${suffix}`,
+          applicantUnit: "测试单位",
+        },
+      },
+    );
+    expect(invalidLevel.status()).toBe(422);
 
     const achievement = await create("节能减排科技成就奖", achievementTitle);
-    const progress = await create("节能减排科技进步奖", progressTitle);
-    const invention = await create("节能减排技术发明奖", inventionTitle);
+    const progress = await create(
+      "节能减排科技进步奖",
+      progressTitle,
+      "form",
+      "二等奖",
+    );
+    const invention = await create(
+      "节能减排技术发明奖",
+      inventionTitle,
+      "form",
+      "一等奖",
+    );
+    expect(progress.data.awardLevel).toBe("二等奖");
+    expect(invention.data.awardLevel).toBe("一等奖");
     const documentProgress = await create(
       "节能减排科技进步奖",
       documentTitle,
@@ -152,6 +198,7 @@ test("each award loads its own form, validation and preview profile", async ({
         data: {
           data: {
             awardType: "节能减排技术发明奖",
+            awardLevel: "一等奖",
             projectName: achievementTitle,
             applicantUnit: "中国节能测试单位",
             candidate: {
@@ -172,8 +219,53 @@ test("each award loads its own form, validation and preview profile", async ({
     expect(lockedUpdate.ok(), await lockedUpdate.text()).toBe(true);
     const lockedBody = await lockedUpdate.json();
     expect(lockedBody.application.award_type).toBe("节能减排科技成就奖");
+    expect(lockedBody.application.data.awardLevel).toBe("不分等级");
     expect(lockedBody.application.data.applicationMode).toBe("individual");
     expect(lockedBody.application.data.profileCode).toBe("achievement");
+
+    const levelLockedUpdate = await page.request.put(
+      `${baseUrl}/api/applications/${progress.id}`,
+      {
+        data: {
+          data: { ...progress.data, awardLevel: "一等奖" },
+        },
+      },
+    );
+    expect(levelLockedUpdate.ok(), await levelLockedUpdate.text()).toBe(true);
+    expect((await levelLockedUpdate.json()).application.data.awardLevel).toBe(
+      "二等奖",
+    );
+
+    const legacy = await create("节能减排科技进步奖", `历史项目-${suffix}`);
+    const database = new DatabaseSync(
+      fileURLToPath(new URL("../data/award-system.db", import.meta.url)),
+    );
+    const legacyData = { ...legacy.data };
+    delete legacyData.awardLevel;
+    database
+      .prepare("UPDATE applications SET data_json = ? WHERE id = ?")
+      .run(JSON.stringify(legacyData), legacy.id);
+    database.close();
+
+    const legacyDetail = await page.request.get(
+      `${baseUrl}/api/applications/${legacy.id}`,
+    );
+    expect(legacyDetail.ok(), await legacyDetail.text()).toBe(true);
+    expect((await legacyDetail.json()).application.data.awardLevel).toBe(
+      "一等奖",
+    );
+    const legacyDuplicate = await page.request.post(
+      `${baseUrl}/api/applications/${legacy.id}/duplicate`,
+    );
+    expect(legacyDuplicate.ok(), await legacyDuplicate.text()).toBe(true);
+    const legacyCopy = (await legacyDuplicate.json()).application;
+    applications.push(legacyCopy.id);
+    expect(legacyCopy.data.awardLevel).toBe("一等奖");
+    const legacySubmit = await page.request.post(
+      `${baseUrl}/api/applications/${legacy.id}/submit`,
+    );
+    expect(legacySubmit.status()).toBe(422);
+    expect((await legacySubmit.json()).missing).not.toContain("申报等级");
 
     const overAgeSubmit = await page.request.post(
       `${baseUrl}/api/applications/${achievement.id}/submit`,
@@ -402,7 +494,9 @@ test("each award loads its own form, validation and preview profile", async ({
       .getByRole("button", { name: achievementTitle, exact: true })
       .click();
     await expect(page.getByRole("heading", { name: "基本情况" })).toBeVisible();
-    await expect(page.getByText("奖项在创建后锁定")).toBeVisible();
+    await expect(
+      page.getByText("奖种和等级在创建后锁定", { exact: false }),
+    ).toBeVisible();
     await expect(
       page.getByRole("button", { name: /所获科技奖励和荣誉称号情况/ }),
     ).toBeVisible();

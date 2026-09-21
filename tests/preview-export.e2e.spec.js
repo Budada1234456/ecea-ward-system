@@ -622,6 +622,148 @@ test("progress preview preserves rich text formatting and compact tables", async
   }
 });
 
+test("invention person and unit template fields use Song typeface at 12pt", async ({
+  page,
+}) => {
+  const suffix = `${Date.now()}${Math.floor(Math.random() * 1000)}`;
+  const username = `inventionfont${suffix}`;
+  const title = `技术发明奖固定字段验收-${suffix}`;
+  let applicationId;
+
+  const registration = await page.request.post(`${baseUrl}/api/auth/register`, {
+    data: {
+      username,
+      email: `${username}@example.test`,
+      displayName: "技术发明奖字体验收用户",
+      password: `InventionFont-${suffix}`,
+    },
+  });
+  expect(registration.ok(), await registration.text()).toBe(true);
+
+  try {
+    const created = await page.request.post(`${baseUrl}/api/applications`, {
+      data: {
+        title,
+        year: 2026,
+        awardType: "节能减排技术发明奖",
+        awardLevel: "二等奖",
+      },
+    });
+    const createBody = await created.json();
+    expect(created.ok(), JSON.stringify(createBody)).toBe(true);
+    applicationId = createBody.application.id;
+
+    const seeded = await page.request.put(
+      `${baseUrl}/api/applications/${applicationId}`,
+      {
+        data: {
+          data: completeProjectData(title, {
+            awardType: "节能减排技术发明奖",
+            awardLevel: "二等奖",
+            people: [completePerson("发明奖完成人")],
+            units: [completeUnit("发明奖完成单位")],
+          }),
+        },
+      },
+    );
+    expect(seeded.ok(), await seeded.text()).toBe(true);
+
+    await page.goto(baseUrl);
+    await page.getByRole("button", { name: title, exact: true }).click();
+    await page.getByRole("button", { name: "预览当前申报书" }).click();
+    await expect(page.locator(".preview-pages")).toHaveClass(
+      /preview-pages--invention/,
+    );
+    for (const [pageSelector, labels] of [
+      [".preview-person-page", ["姓 名", "性别", "排名"]],
+      [".preview-unit-page", ["单位名称", "所在地", "联系人"]],
+    ]) {
+      const fixedFields = page.locator(pageSelector).locator("th");
+      for (const label of labels) {
+        const cell = fixedFields.filter({ hasText: label }).first();
+        await expect(cell).toHaveCSS("font-size", "16px");
+        expect(
+          await cell.evaluate(
+            (element) => getComputedStyle(element).fontFamily,
+          ),
+        ).toContain("SimSun");
+      }
+    }
+
+    for (const selector of [
+      ".preview-person-page .preview-declaration-row td",
+      ".preview-person-page .preview-declaration-row td p",
+      ".preview-unit-page .preview-stamp-block",
+      ".preview-unit-page .preview-stamp-block > div",
+    ]) {
+      const fixedField = page.locator(selector).first();
+      await expect(fixedField).toHaveCSS("font-size", "16px");
+      expect(
+        await fixedField.evaluate(
+          (element) => getComputedStyle(element).fontFamily,
+        ),
+      ).toContain("SimSun");
+    }
+
+    const exportContextAudit = await page.evaluate(() => {
+      const wrapper = document.createElement("div");
+      wrapper.className = "pdf-export-document";
+      for (const selector of [".preview-person-page", ".preview-unit-page"]) {
+        const clone = document.querySelector(selector).cloneNode(true);
+        clone.classList.add("preview-invention-document");
+        wrapper.append(clone);
+      }
+      document.body.append(wrapper);
+      const selectors = [
+        ".preview-declaration-row td",
+        ".preview-declaration-row td p",
+        ".preview-stamp-block",
+        ".preview-stamp-block > div",
+      ];
+      const styles = selectors.map((selector) => {
+        const computed = getComputedStyle(wrapper.querySelector(selector));
+        return {
+          fontSize: computed.fontSize,
+          fontFamily: computed.fontFamily,
+        };
+      });
+      wrapper.remove();
+      return styles;
+    });
+    expect(exportContextAudit.every(({ fontSize }) => fontSize === "16px")).toBe(
+      true,
+    );
+    expect(
+      exportContextAudit.every(({ fontFamily }) =>
+        fontFamily.includes("SimSun"),
+      ),
+    ).toBe(true);
+
+    let exportPayload;
+    await page.route("**/api/pdf-export", async (route) => {
+      exportPayload = route.request().postDataJSON();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/pdf",
+        body: "%PDF-1.4\n%%EOF",
+      });
+    });
+    await page.getByRole("button", { name: "导出 PDF", exact: true }).click();
+    await expect.poll(() => exportPayload).toBeTruthy();
+    const exportedHtml = exportPayload.parts
+      .filter((part) => part.type === "html")
+      .map((part) => part.html)
+      .join("");
+    expect(exportedHtml).toContain("preview-invention-document");
+    expect(exportedHtml).toContain("preview-person-page");
+    expect(exportedHtml).toContain("preview-unit-page");
+  } finally {
+    if (applicationId) {
+      await page.request.delete(`${baseUrl}/api/applications/${applicationId}`);
+    }
+  }
+});
+
 function crc32(buffer) {
   let crc = 0xffffffff;
   for (const byte of buffer) {
@@ -662,9 +804,11 @@ async function withTrailingBlankWordPage(buffer) {
   const zip = await JSZip.loadAsync(buffer);
   const documentPart = zip.file("word/document.xml");
   const xml = await documentPart.async("string");
-  const pageBreak =
-    '<w:p><w:r><w:br w:type="page"/></w:r></w:p><w:p></w:p>';
-  const next = xml.replace(/<w:sectPr(?:\s|>)/, (match) => `${pageBreak}${match}`);
+  const pageBreak = '<w:p><w:r><w:br w:type="page"/></w:r></w:p><w:p></w:p>';
+  const next = xml.replace(
+    /<w:sectPr(?:\s|>)/,
+    (match) => `${pageBreak}${match}`,
+  );
   zip.file("word/document.xml", next);
   return zip.generateAsync({ type: "nodebuffer" });
 }
@@ -842,9 +986,7 @@ test("rich media, entity pages and the complete PDF export stay intact", async (
     );
 
     const expertRecommendationWord = await withTrailingBlankWordPage(
-      await fs.readFile(
-        "节能奖填报材料/科技进步奖/九、专家推荐意见.docx",
-      ),
+      await fs.readFile("节能奖填报材料/科技进步奖/九、专家推荐意见.docx"),
     );
     const expertRecommendationUpload = await page.request.post(
       `${baseUrl}/api/applications/${applicationId}/files`,
@@ -903,10 +1045,9 @@ test("rich media, entity pages and the complete PDF export stay intact", async (
         },
       },
     );
-    expect(
-      confidentialityUpload.ok(),
-      await confidentialityUpload.text(),
-    ).toBe(true);
+    expect(confidentialityUpload.ok(), await confidentialityUpload.text()).toBe(
+      true,
+    );
 
     const integrityDocument = new jsPDF();
     integrityDocument.text("Integrity page 1", 20, 20);
@@ -991,8 +1132,12 @@ test("rich media, entity pages and the complete PDF export stay intact", async (
     expect(dateRowLayout.height).toBeLessThanOrEqual(40);
     expect(dateRowLayout.valuesStayOnOneLine).toBe(true);
     const basicTableFitsPage = await basicPage.evaluate((element) => {
-      const tableBox = element.querySelector(":scope > table").getBoundingClientRect();
-      const footerBox = element.querySelector(":scope > footer").getBoundingClientRect();
+      const tableBox = element
+        .querySelector(":scope > table")
+        .getBoundingClientRect();
+      const footerBox = element
+        .querySelector(":scope > footer")
+        .getBoundingClientRect();
       return tableBox.bottom + 12 < footerBox.top;
     });
     expect(basicTableFitsPage).toBe(true);
@@ -1009,7 +1154,7 @@ test("rich media, entity pages and the complete PDF export stay intact", async (
             .getBoundingClientRect();
           return tableBox.bottom + 12 < footerBox.top;
         }),
-    );
+      );
     expect(personPagesClearFooter).toBe(true);
 
     const detailPage = page.locator(".preview-detail-page").first();
@@ -1034,7 +1179,9 @@ test("rich media, entity pages and the complete PDF export stay intact", async (
       ["integrity", 1],
     ]) {
       await expect(
-        page.locator(`.preview-submitted-page[data-section-key="${sectionKey}"]`),
+        page.locator(
+          `.preview-submitted-page[data-section-key="${sectionKey}"]`,
+        ),
       ).toHaveCount(expectedPages);
     }
     await expect(page.getByText("以本章上传 Word 为准。")).toHaveCount(0);
@@ -1050,14 +1197,16 @@ test("rich media, entity pages and the complete PDF export stay intact", async (
     });
     await expect
       .poll(() =>
-        submittedPages.locator("img").evaluateAll((images) =>
-          images.every(
-            (image) =>
-              image.complete &&
-              image.naturalWidth > 0 &&
-              image.getBoundingClientRect().width > 0,
+        submittedPages
+          .locator("img")
+          .evaluateAll((images) =>
+            images.every(
+              (image) =>
+                image.complete &&
+                image.naturalWidth > 0 &&
+                image.getBoundingClientRect().width > 0,
+            ),
           ),
-        ),
       )
       .toBe(true);
     const ipPage = page.locator(".preview-ip-page").first();
@@ -1114,7 +1263,9 @@ test("rich media, entity pages and the complete PDF export stay intact", async (
         ),
       )
       .toEqual(
-        Array.from({ length: previewPageCount }, (_, index) => String(index + 1)),
+        Array.from({ length: previewPageCount }, (_, index) =>
+          String(index + 1),
+        ),
       );
     for (let index = 0; index < Math.min(previewPageCount, 5); index += 1) {
       await previewPages.nth(index).screenshot({
@@ -1198,9 +1349,7 @@ test("rich media, entity pages and the complete PDF export stay intact", async (
         text.includes("项目简介"),
       );
       expect(introductionPage).toBeGreaterThan(-1);
-      expect(textPages[introductionPage + 1]).toMatch(
-        /项目简介|项目详细内容/,
-      );
+      expect(textPages[introductionPage + 1]).toMatch(/项目简介|项目详细内容/);
     } finally {
       await fs.unlink(pdfPath).catch(() => {});
     }
