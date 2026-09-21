@@ -245,6 +245,73 @@ test("split chapter templates download, import and persist independently", async
   });
 });
 
+test("invention intellectual-property chapter matches the shared project template", async ({
+  page,
+}) => {
+  const suffix = `${Date.now()}${Math.floor(Math.random() * 1000)}`;
+  const username = `forminventionip${suffix}`;
+
+  const registration = await page.request.post(`${baseUrl}/api/auth/register`, {
+    data: {
+      username,
+      email: `${username}@example.test`,
+      displayName: "技术发明奖知识产权验收用户",
+      password: `InventionIp-${suffix}`,
+    },
+  });
+  expect(registration.ok(), await registration.text()).toBe(true);
+
+  const creation = await page.request.post(`${baseUrl}/api/applications`, {
+    data: {
+      awardType: "节能减排技术发明奖",
+      title: `技术发明奖知识产权验收-${suffix}`,
+      applicantUnit: "中国节能测试单位",
+      year: 2026,
+      workflowMode: "form",
+    },
+  });
+  expect(creation.ok(), await creation.text()).toBe(true);
+  const application = (await creation.json()).application;
+
+  await page.goto(`${baseUrl}/#/applications/${application.id}`);
+  await page.locator(".sidebar nav button").nth(4).click();
+
+  await expect(
+    page.getByRole("heading", { name: "申请、获得知识产权情况表" }),
+  ).toBeVisible();
+  const directoryRows = page.locator(".ip-directory-row");
+  await expect(directoryRows).toHaveCount(3);
+  await expect(directoryRows.locator(".ip-directory-label")).toHaveText([
+    "1．知识产权证明目录",
+    "2．技术评价证明及行业审批文件目录",
+    "3．应用单位目录",
+  ]);
+  await expect(
+    directoryRows.nth(0).getByRole("button", { name: "添加知识产权" }),
+  ).toBeVisible();
+  await expect(
+    directoryRows.nth(1).getByRole("button", { name: "添加文件" }),
+  ).toBeVisible();
+  await expect(
+    directoryRows.nth(2).getByRole("button", { name: "添加应用单位" }),
+  ).toBeVisible();
+
+  const templateLink = page.getByRole("link", { name: "下载本章模板" });
+  await expect(templateLink).toHaveAttribute(
+    "href",
+    /%E6%8A%80%E6%9C%AF%E5%8F%91%E6%98%8E%E5%A5%96.*%E4%BA%94%E3%80%81%E7%94%B3%E8%AF%B7%E3%80%81%E8%8E%B7%E5%BE%97%E7%9F%A5%E8%AF%86%E4%BA%A7%E6%9D%83%E6%83%85%E5%86%B5%E8%A1%A8\.docx/,
+  );
+
+  await directoryRows.nth(1).getByRole("button", { name: "添加文件" }).click();
+  await page.getByRole("button", { name: "保存草稿", exact: true }).click();
+  await expect(page.getByText(/已自动保存/)).toBeVisible();
+  const saved = await page.request.get(
+    `${baseUrl}/api/applications/${application.id}`,
+  );
+  expect(saved.ok(), await saved.text()).toBe(true);
+  expect((await saved.json()).application.data.technicalEvaluation).toBe("");
+});
+
 test("achievement chapters download and PDF attachments upload", async ({
   page,
 }) => {

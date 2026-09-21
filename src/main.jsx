@@ -1326,10 +1326,15 @@ function escapeTableValue(value) {
 }
 
 function serializeTechnicalEvaluation(records) {
-  if (!records.length) return "";
+  const completedRecords = records.filter((record) =>
+    technicalEvaluationFields.some((field) =>
+      String(record[field.key] || "").trim(),
+    ),
+  );
+  if (!completedRecords.length) return "";
   const rows = [
     technicalEvaluationFields.map((field) => field.label),
-    ...records.map((record) =>
+    ...completedRecords.map((record) =>
       technicalEvaluationFields.map((field) => record[field.key] || ""),
     ),
   ];
@@ -1351,6 +1356,37 @@ function TechnicalEvaluationTable({ value, onChange }) {
       addLabel="添加文件"
       emptyLabel="暂无技术评价证明或行业审批文件"
       className="technical-evaluation-collection"
+    />
+  );
+}
+
+function ProjectIpSection({ data, setField }) {
+  return (
+    <RecordsSection
+      number={5}
+      title="申请、获得知识产权情况表"
+      type="ip"
+      records={data.ipRecords}
+      onChange={(value) => setField("ipRecords", value)}
+      directoryLabel="1．知识产权证明目录"
+      tableTitle="知识产权证明目录"
+      addLabel="添加知识产权"
+      supplement={
+        <>
+          <DirectoryRow label="2．技术评价证明及行业审批文件目录">
+            <TechnicalEvaluationTable
+              value={data.technicalEvaluation || ""}
+              onChange={(value) => setField("technicalEvaluation", value)}
+            />
+          </DirectoryRow>
+          <DirectoryRow label="3．应用单位目录">
+            <ApplicationUnitsTable
+              records={data.applicationUnits || []}
+              onChange={(value) => setField("applicationUnits", value)}
+            />
+          </DirectoryRow>
+        </>
+      }
     />
   );
 }
@@ -5346,35 +5382,7 @@ function EditorApp({ application, onHome }) {
         />
       );
     if (active === "ip")
-      return (
-        <RecordsSection
-          number={5}
-          title="申请、获得知识产权情况表"
-          type="ip"
-          records={data.ipRecords}
-          onChange={(value) => setField("ipRecords", value)}
-          applicationId={application.id}
-          directoryLabel="1．知识产权证明目录"
-          tableTitle="知识产权证明目录"
-          addLabel="添加知识产权"
-          supplement={
-            <>
-              <DirectoryRow label="2．技术评价证明及行业审批文件目录">
-                <TechnicalEvaluationTable
-                  value={data.technicalEvaluation || ""}
-                  onChange={(value) => setField("technicalEvaluation", value)}
-                />
-              </DirectoryRow>
-              <DirectoryRow label="3．应用单位目录">
-                <ApplicationUnitsTable
-                  records={data.applicationUnits || []}
-                  onChange={(value) => setField("applicationUnits", value)}
-                />
-              </DirectoryRow>
-            </>
-          }
-        />
-      );
+      return <ProjectIpSection data={data} setField={setField} />;
     if (active === "people")
       return (
         <EntityEditor
