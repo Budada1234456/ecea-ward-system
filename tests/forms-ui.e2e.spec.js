@@ -162,13 +162,13 @@ test("structured forms, entity ordering and discipline tree work responsively", 
 
     await page.setViewportSize({ width: 1100, height: 900 });
     await page.getByRole("button", { name: /知识产权情况/ }).click();
-    await page.getByRole("button", { name: "添加记录" }).click();
+    await page.getByRole("button", { name: "添加知识产权" }).click();
     const names = page.getByLabel("授权（申请）项目名称");
     await expect(names).toHaveCount(3);
     await names.nth(2).blur();
     await expect(page.getByText("请填写授权（申请）项目名称")).toBeVisible();
     await page
-      .getByRole("region", { name: "结构化数据表" })
+      .getByRole("region", { name: "知识产权证明目录" })
       .getByRole("button", { name: "删除第2条记录" })
       .click();
     await page
@@ -277,10 +277,14 @@ test("structured forms, entity ordering and discipline tree work responsively", 
     await page.getByRole("button", { name: /主要完成人/ }).click();
     await expect(
       page.getByText("完成人合作关系说明", { exact: true }),
-    ).toHaveCount(0);
+    ).toBeVisible();
     await expect(
       page.getByText("完成人合作关系情况汇总表", { exact: true }),
-    ).toHaveCount(0);
+    ).toBeVisible();
+    const cooperationSection = page.locator(".cooperation-section");
+    await expect(
+      cooperationSection.getByRole("link", { name: "下载本章模板" }),
+    ).toHaveAttribute("href", /完成人合作关系说明|%E5%AE%8C%E6%88%90%E4%BA%BA/);
     await page.getByRole("button", { name: /主要完成单位/ }).click();
     await expect(page.getByLabel("完成单位列表")).toContainText("甲完成单位");
     await page
@@ -310,8 +314,9 @@ test("structured forms, entity ordering and discipline tree work responsively", 
 
     await page.getByRole("button", { name: "预览当前申报书" }).click();
     await expect(page.getByText("申报书预览", { exact: true })).toBeVisible();
-    await expect(page.getByText(/完成人合作关系说明/)).toHaveCount(0);
-    await expect(page.getByText(/完成人合作关系情况汇总表/)).toHaveCount(0);
+    await expect(
+      page.getByRole("table", { name: "完成人合作关系情况汇总表" }),
+    ).toContainText("共同研发");
     const basicPreview = page.locator(".preview-basic-page");
     await expect(basicPreview.locator(".preview-date-range-value")).toHaveCount(
       2,
@@ -323,14 +328,13 @@ test("structured forms, entity ordering and discipline tree work responsively", 
       page.getByRole("table", { name: "经济效益数据" }),
     ).toContainText("2025");
     const economicPreview = page.getByRole("table", { name: "经济效益数据" });
-    await expect(economicPreview.locator("col")).toHaveCount(6);
+    await expect(economicPreview.locator("col")).toHaveCount(5);
     await expect(economicPreview).toContainText("创收外汇（万美元）");
-    await expect(economicPreview).toContainText("新增销售额");
-    await expect(economicPreview).toContainText("100");
+    await expect(economicPreview).not.toContainText("新增销售额");
     await expect(economicPreview).toContainText("富文本计算依据");
     await expect(
       economicPreview.locator(".preview-economic-basis td"),
-    ).toHaveAttribute("colspan", "6");
+    ).toHaveAttribute("colspan", "5");
     const awardPreview = page.getByRole("table", {
       name: "四、本项目曾获奖励情况",
     });

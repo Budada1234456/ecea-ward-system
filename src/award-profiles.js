@@ -157,18 +157,6 @@ const projectAttachmentMaterials = [
   ],
 ];
 
-// The filling instructions require items 1-7 for project awards. Item 8 is
-// conditional and is uploaded when it applies to the project.
-const projectRequiredAttachmentGroups = [
-  { label: "1. 技术证明材料", categories: ["technical_proof"] },
-  { label: "2. 应用证明", categories: ["application_proof"] },
-  { label: "3. 科技成果评价报告", categories: ["evaluation_report"] },
-  { label: "4. 科技查新报告", categories: ["novelty_report"] },
-  { label: "5. 国家发明专利证明", categories: ["patent_proof"] },
-  { label: "6. 主要完成人身份证", categories: ["inventor_id"] },
-  { label: "7. 主要完成单位营业执照", categories: ["unit_license"] },
-];
-
 const profiles = {
   [AWARD_TYPES.ACHIEVEMENT]: {
     value: AWARD_TYPES.ACHIEVEMENT,
@@ -220,27 +208,8 @@ const profiles = {
         "可选上传候选人科技创新、客观评价和学术贡献等证明，不超过 20 个文件。",
       ],
     ],
-    requiredAttachmentGroups: [
-      {
-        label: "科技奖励和荣誉证明",
-        categories: ["achievement_honors"],
-      },
-      {
-        label: "代表性论文或专著",
-        categories: [
-          "achievement_papers",
-          "achievement_books",
-          "achievement_publications",
-        ],
-      },
-      { label: "知识产权证明", categories: ["achievement_ip"] },
-      { label: "科研项目证明", categories: ["achievement_research"] },
-      { label: "效益证明", categories: ["achievement_benefits"] },
-    ],
-    fileLimits: {
-      achievement_publications: 5,
-      achievement_other: 20,
-    },
+    requiredAttachmentGroups: [],
+    fileLimits: {},
   },
   [AWARD_TYPES.PROGRESS]: {
     value: AWARD_TYPES.PROGRESS,
@@ -274,7 +243,7 @@ const profiles = {
     innovationLabel: "主要技术创新点",
     recommendationMaterials: projectRecommendationMaterials,
     attachmentMaterials: projectAttachmentMaterials,
-    requiredAttachmentGroups: projectRequiredAttachmentGroups,
+    requiredAttachmentGroups: [],
     fileLimits: {},
   },
   [AWARD_TYPES.INVENTION]: {
@@ -311,7 +280,7 @@ const profiles = {
     innovationLabel: "主要技术发明点",
     recommendationMaterials: projectRecommendationMaterials,
     attachmentMaterials: projectAttachmentMaterials,
-    requiredAttachmentGroups: projectRequiredAttachmentGroups,
+    requiredAttachmentGroups: [],
     fileLimits: {},
   },
 };
@@ -334,9 +303,12 @@ export function getAwardSections(value) {
     uploadMode:
       index >= 4 && index <= 6
         ? "form"
-        : signedChapterKeys.has(key)
-          ? "signed"
-          : "word",
+        : profile.mode === "project" &&
+            ["unitRecommendation", "expertRecommendation"].includes(key)
+          ? "document"
+          : signedChapterKeys.has(key)
+            ? "signed"
+            : "word",
     requirement:
       chapterRequirements[key] ||
       "请严格按照本章模板中的栏目、顺序、字数限制和填写说明完成内容。",

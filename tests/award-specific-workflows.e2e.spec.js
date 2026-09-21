@@ -138,11 +138,11 @@ test("each award loads its own form, validation and preview profile", async ({
     expect(incomplete.missing).toContain("候选人工作单位");
     expect(incomplete.missing).toContain("科技成果转化及推广");
     expect(incomplete.missing).toContain("节能减排相关工作总结");
-    expect(incomplete.missing).toContain("科技奖励和荣誉证明");
-    expect(incomplete.missing).toContain("代表性论文或专著");
-    expect(incomplete.missing).toContain("知识产权证明");
-    expect(incomplete.missing).toContain("科研项目证明");
-    expect(incomplete.missing).toContain("效益证明");
+    expect(incomplete.missing).not.toContain("科技奖励和荣誉证明");
+    expect(incomplete.missing).not.toContain("代表性论文或专著");
+    expect(incomplete.missing).not.toContain("知识产权证明");
+    expect(incomplete.missing).not.toContain("科研项目证明");
+    expect(incomplete.missing).not.toContain("效益证明");
     expect(incomplete.missing).not.toContain("主要完成人");
     expect(incomplete.missing).not.toContain("主要完成单位");
 
@@ -183,23 +183,16 @@ test("each award loads its own form, validation and preview profile", async ({
       "候选人申报年末年龄须在 60 周岁及以下",
     );
 
-    for (let index = 0; index < 20; index += 1) {
-      const upload = await uploadMaterial(achievement.id, "achievement_other");
-      expect(upload.ok(), await upload.text()).toBe(true);
-    }
-    const extraOptionalMaterial = await uploadMaterial(
+    const optionalMaterial = await uploadMaterial(
       achievement.id,
       "achievement_other",
     );
-    expect(extraOptionalMaterial.status()).toBe(422);
-    expect((await extraOptionalMaterial.json()).message).toContain(
-      "不得超过 20 个文件",
-    );
+    expect(optionalMaterial.ok(), await optionalMaterial.text()).toBe(true);
     const optionalOnlySubmit = await page.request.post(
       `${baseUrl}/api/applications/${achievement.id}/submit`,
     );
     expect(optionalOnlySubmit.status()).toBe(422);
-    expect((await optionalOnlySubmit.json()).missing).toContain(
+    expect((await optionalOnlySubmit.json()).missing).not.toContain(
       "科技奖励和荣誉证明",
     );
 
@@ -211,19 +204,11 @@ test("each award loads its own form, validation and preview profile", async ({
       const upload = await uploadMaterial(achievement.id, category);
       expect(upload.ok(), await upload.text()).toBe(true);
     }
-    for (let index = 0; index < 5; index += 1) {
-      const upload = await uploadMaterial(
-        achievement.id,
-        "achievement_publications",
-      );
-      expect(upload.ok(), await upload.text()).toBe(true);
-    }
-    const extraPaper = await uploadMaterial(
+    const publication = await uploadMaterial(
       achievement.id,
       "achievement_publications",
     );
-    expect(extraPaper.status()).toBe(422);
-    expect((await extraPaper.json()).message).toContain("不得超过 5 个文件");
+    expect(publication.ok(), await publication.text()).toBe(true);
     const longAchievementPdf = await uploadMaterial(
       achievement.id,
       "achievement_benefits",
@@ -233,7 +218,10 @@ test("each award loads its own form, validation and preview profile", async ({
         buffer: longPdf,
       },
     );
-    expect(longAchievementPdf.ok(), await longAchievementPdf.text()).toBe(true);
+    expect(longAchievementPdf.status()).toBe(422);
+    expect((await longAchievementPdf.json()).message).toContain(
+      "附件总页数不得超过 40 页",
+    );
 
     const correctedAge = await page.request.put(
       `${baseUrl}/api/applications/${achievement.id}`,
@@ -357,29 +345,13 @@ test("each award loads its own form, validation and preview profile", async ({
       },
     );
     expect(validProgress.ok(), await validProgress.text()).toBe(true);
-    const missingProjectFiles = await page.request.post(
+    const projectWithoutAttachments = await page.request.post(
       `${baseUrl}/api/applications/${progress.id}/submit`,
     );
-    const missingProjectFileErrors = (await missingProjectFiles.json()).missing;
-    expect(missingProjectFileErrors).toEqual(
-      expect.arrayContaining([
-        "1. 技术证明材料",
-        "2. 应用证明",
-        "3. 科技成果评价报告",
-        "4. 科技查新报告",
-        "5. 国家发明专利证明",
-        "6. 主要完成人身份证",
-        "7. 主要完成单位营业执照",
-      ]),
-    );
-    for (const category of requiredProjectMaterials) {
-      const upload = await uploadMaterial(progress.id, category);
-      expect(upload.ok(), await upload.text()).toBe(true);
-    }
-    const progressSubmit = await page.request.post(
-      `${baseUrl}/api/applications/${progress.id}/submit`,
-    );
-    expect(progressSubmit.ok(), await progressSubmit.text()).toBe(true);
+    expect(
+      projectWithoutAttachments.ok(),
+      await projectWithoutAttachments.text(),
+    ).toBe(true);
 
     await seedProject(invention, "2024-10", "2026-09");
     const shortInventionSubmit = await page.request.post(

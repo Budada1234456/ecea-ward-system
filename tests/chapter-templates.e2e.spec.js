@@ -3,6 +3,7 @@ import JSZip from "jszip";
 import { DOMParser } from "@xmldom/xmldom";
 import { jsPDF } from "jspdf";
 import path from "node:path";
+import { completeProjectData } from "./application-fixtures.mjs";
 
 const baseUrl = process.env.TEST_BASE_URL || "http://127.0.0.1:4174";
 
@@ -310,6 +311,106 @@ test("invention intellectual-property chapter matches the shared project templat
   );
   expect(saved.ok(), await saved.text()).toBe(true);
   expect((await saved.json()).application.data.technicalEvaluation).toBe("");
+
+  const recommendationPdf = new jsPDF();
+  recommendationPdf.text("Recommendation", 20, 20);
+  for (const [chapterIndex, sectionKey] of [
+    [7, "unitRecommendation"],
+    [8, "expertRecommendation"],
+  ]) {
+    await page.locator(".sidebar nav button").nth(chapterIndex).click();
+    await expect(
+      page.getByRole("button", { name: "上传Word / PDF" }),
+    ).toBeVisible();
+    const pdfUpload = await page.request.post(
+      `${baseUrl}/api/applications/${application.id}/files`,
+      {
+        multipart: {
+          category: `section_document:invention:${sectionKey}`,
+          file: {
+            name: `${sectionKey}.pdf`,
+            mimeType: "application/pdf",
+            buffer: Buffer.from(recommendationPdf.output("arraybuffer")),
+          },
+        },
+      },
+    );
+    expect(pdfUpload.ok(), await pdfUpload.text()).toBe(true);
+    const wordUpload = await page.request.post(
+      `${baseUrl}/api/applications/${application.id}/files`,
+      {
+        multipart: {
+          category: `section_document:invention:${sectionKey}`,
+          file: {
+            name: `${sectionKey}.docx`,
+            mimeType:
+              "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            buffer: await introductionDocx("专家或单位意见回传验收。"),
+          },
+        },
+      },
+    );
+    expect(wordUpload.ok(), await wordUpload.text()).toBe(true);
+  }
+
+  const richTable =
+    '<p>技术发明奖表格</p><table style="width: 1200px"><tbody><tr><th>技术指标</th><th>国内外先进水平</th><th>本项目技术</th></tr><tr><td>转换效率</td><td>85%</td><td>92%</td></tr></tbody></table>';
+  await page.getByRole("button", { name: "项目中心" }).click();
+  await page.waitForTimeout(1000);
+  const previewSeed = await page.request.put(
+    `${baseUrl}/api/applications/${application.id}`,
+    {
+      data: {
+        data: completeProjectData(`技术发明奖知识产权验收-${suffix}`, {
+          technicalContent: richTable,
+          disciplines: [
+            {
+              name: "能源系统工程",
+              code: "4806010",
+              status: "confirmed",
+              path: ["480", "48060", "4806010"],
+            },
+          ],
+          cooperationRecords: [
+            {
+              method: "联合研发",
+              collaborators: "甲完成人、乙完成人",
+              period: "2024-01 至 2026-01",
+              output: "形成核心发明",
+              evidence: "附件 1",
+              notes: "无",
+            },
+          ],
+        }),
+      },
+    },
+  );
+  expect(previewSeed.ok(), await previewSeed.text()).toBe(true);
+  await page.goto(`${baseUrl}/#/applications/${application.id}`);
+  let previewAlert = "";
+  page.once("dialog", async (dialog) => {
+    previewAlert = dialog.message();
+    await dialog.dismiss();
+  });
+  await page.getByRole("button", { name: "生成预览" }).click();
+  await page.waitForTimeout(1000);
+  expect(previewAlert).toBe("");
+  const inventionRichTable = page
+    .locator(
+      '.preview-detail-page[data-section-key="details"] .preview-rich-text table',
+    )
+    .first();
+  await expect(inventionRichTable).toBeVisible();
+  const tableLayout = await inventionRichTable.evaluate((table) => ({
+    borderCollapse: getComputedStyle(table).borderCollapse,
+    width: table.getBoundingClientRect().width,
+    containerWidth: table.parentElement.getBoundingClientRect().width,
+  }));
+  expect(tableLayout.borderCollapse).toBe("collapse");
+  expect(tableLayout.width).toBeLessThanOrEqual(tableLayout.containerWidth + 1);
+  await expect(
+    page.getByRole("table", { name: "完成人合作关系情况汇总表" }),
+  ).toContainText("形成核心发明");
 });
 
 test("achievement chapters download and PDF attachments upload", async ({

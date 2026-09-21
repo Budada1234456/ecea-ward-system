@@ -41,6 +41,20 @@ test("a section rejects missing required fields and text over its limit", () => 
   );
 });
 
+test("attachments are optional for every award", () => {
+  for (const awardType of Object.values(AWARD_TYPES)) {
+    assert.deepEqual(
+      validateSection({
+        awardType,
+        sectionKey: "attachments",
+        data: { awardType },
+        files: [],
+      }),
+      [],
+    );
+  }
+});
+
 test("full validation catches incomplete basic and entity fields before preview", () => {
   const errors = validateApplication({
     awardType: AWARD_TYPES.PROGRESS,

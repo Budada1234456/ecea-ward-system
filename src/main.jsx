@@ -1646,6 +1646,7 @@ function AttachmentSection({
       file.file_type !== "source_pdf" &&
       !file.file_type.startsWith("content_image:") &&
       !file.file_type.startsWith("section_word:") &&
+      !file.file_type.startsWith("section_document:") &&
       !file.file_type.startsWith("section_signed:"),
   );
   const sourceFile = files.find((file) => file.file_type === "source_pdf");
@@ -1661,16 +1662,13 @@ function AttachmentSection({
           <h2>{isAchievement ? "证明材料" : "附件目录"}</h2>
         </div>
       </div>
-      {!isAchievement && (
-        <div className="form-guidance attachment-guidance">
-          <Info size={16} />
-          <span>
-            依据《填写说明》，第 1 至 7 项为必备附件；第 8
-            项按项目实际情况提交。
-            请按每项标注的原件、复印件及盖章要求准备材料。
-          </span>
-        </div>
-      )}
+      <div className="form-guidance attachment-guidance">
+        <Info size={16} />
+        <span>
+          附件均按申报实际情况选填，无需上传全部类别；已上传附件合计不得超过 40
+          页。
+        </span>
+      </div>
       {sourceFile && (
         <div className="final-document-bar">
           <FileCheck2 size={20} />
@@ -1699,17 +1697,13 @@ function AttachmentSection({
       )}
       <div
         className={
-          !isAchievement && totalPages > 40
-            ? "attachment-summary over"
-            : "attachment-summary"
+          totalPages > 40 ? "attachment-summary over" : "attachment-summary"
         }
       >
         <Info size={17} />
         <span>
           <b>
-            {isAchievement
-              ? `证明附件共 ${attachmentFiles.length} 件，合计 ${totalPages} 页`
-              : `附件共 ${attachmentFiles.length} 件，合计 ${totalPages} / 40 页`}
+            附件共 {attachmentFiles.length} 件，合计 {totalPages} / 40 页
           </b>
           <small>
             支持 PDF、JPG、PNG，单个文件不超过 100 MB；多页图片请先合并为
@@ -1717,11 +1711,9 @@ function AttachmentSection({
           </small>
         </span>
         <strong>
-          {isAchievement
-            ? "按材料类型分别上传"
-            : totalPages > 40
-              ? `超出 ${totalPages - 40} 页`
-              : `还可上传 ${40 - totalPages} 页`}
+          {totalPages > 40
+            ? `超出 ${totalPages - 40} 页`
+            : `还可上传 ${40 - totalPages} 页`}
         </strong>
       </div>
       <div className="attachment-list">
@@ -1879,6 +1871,8 @@ function TemplateOnlySection({ section, profile }) {
             请下载本章原始模板填写；完成签字、盖章后，通过上方按钮上传 PDF
             或清晰扫描图片留存。
           </p>
+        ) : section.uploadMode === "document" ? (
+          <p>请下载本章原始模板填写；完成后通过上方按钮上传 Word 或 PDF。</p>
         ) : (
           <p>
             请下载本章原始模板填写；完成后通过上方“上传本章 Word”留存并识别。
@@ -1895,9 +1889,15 @@ function SectionTemplateBar({
   uploadedFile,
   onUpload,
 }) {
-  const signedUploadRef = useRef(null);
+  const directUploadRef = useRef(null);
   const isSignedUpload = section.uploadMode === "signed";
+  const isDocumentUpload = section.uploadMode === "document";
   const isFormEntry = section.uploadMode === "form";
+  const uploadLabel = isSignedUpload
+    ? "签章文件"
+    : isDocumentUpload
+      ? "Word / PDF"
+      : "本章 Word";
   return (
     <section
       className={`section-template-bar${isFormEntry ? " section-template-bar--form" : ""}`}
@@ -1906,7 +1906,9 @@ function SectionTemplateBar({
           ? "本章系统填写"
           : isSignedUpload
             ? "本章签章文件"
-            : "本章 Word 模板"
+            : isDocumentUpload
+              ? "本章 Word 或 PDF 文件"
+              : "本章 Word 模板"
       }
     >
       <div className="section-template-copy">
@@ -1933,12 +1935,16 @@ function SectionTemplateBar({
           <Download size={16} />
           下载本章模板
         </a>
-        {isSignedUpload && (
+        {(isSignedUpload || isDocumentUpload) && (
           <input
-            ref={signedUploadRef}
+            ref={directUploadRef}
             hidden
             type="file"
-            accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
+            accept={
+              isSignedUpload
+                ? ".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
+                : ".docx,.pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/pdf"
+            }
             onChange={(event) => {
               onUpload(event.target.files?.[0]);
               event.target.value = "";
@@ -1955,16 +1961,59 @@ function SectionTemplateBar({
             className="primary-button"
             type="button"
             onClick={() =>
-              isSignedUpload ? signedUploadRef.current?.click() : onUpload()
+              isSignedUpload || isDocumentUpload
+                ? directUploadRef.current?.click()
+                : onUpload()
             }
           >
             <Upload size={16} />
-            {uploadedFile
-              ? `重新上传${isSignedUpload ? "签章文件" : "本章 Word"}`
-              : `上传${isSignedUpload ? "签章文件" : "本章 Word"}`}
+            {uploadedFile ? `重新上传${uploadLabel}` : `上传${uploadLabel}`}
           </button>
         )}
       </div>
+    </section>
+  );
+}
+
+function CooperationRecordsSection({
+  records,
+  onChange,
+  applicationId,
+  uploadedFile,
+  onUpload,
+}) {
+  const templateSection = {
+    key: "peopleCooperation",
+    templateFile: "完成人合作关系说明.docx",
+    templateHref:
+      "/materials/%E6%8A%80%E6%9C%AF%E5%8F%91%E6%98%8E%E5%A5%96/%E5%AE%8C%E6%88%90%E4%BA%BA%E5%90%88%E4%BD%9C%E5%85%B3%E7%B3%BB%E8%AF%B4%E6%98%8E.docx",
+    uploadMode: "document",
+    requirement:
+      "下载模板填写完成人合作关系说明，可回传 Word 或 PDF；下方同步填写合作关系情况汇总表。",
+  };
+  return (
+    <section className="form-section cooperation-section">
+      <div className="section-heading">
+        <div>
+          <span className="section-index">06-A</span>
+          <h2>完成人合作关系说明</h2>
+        </div>
+      </div>
+      <SectionTemplateBar
+        applicationId={applicationId}
+        section={templateSection}
+        uploadedFile={uploadedFile}
+        onUpload={onUpload}
+      />
+      <StructuredTable
+        group="cooperationRecords"
+        title="完成人合作关系情况汇总表"
+        value={records}
+        onChange={onChange}
+        addLabel="添加合作关系"
+        emptyLabel="暂无合作关系记录"
+        showIndex
+      />
     </section>
   );
 }
@@ -2980,6 +3029,57 @@ function PreviewPersonPage({ person, index, pageNumber }) {
   );
 }
 
+function PreviewCooperationPage({ records, pageNumber, continued }) {
+  const rows = [
+    ...records,
+    ...Array(Math.max(0, 10 - records.length)).fill({}),
+  ];
+  return (
+    <article
+      className="preview-page preview-form-page preview-cooperation-page"
+      data-section-key="people"
+    >
+      <h3>完成人合作关系情况汇总表{continued ? "（续）" : ""}</h3>
+      <table aria-label="完成人合作关系情况汇总表">
+        <colgroup>
+          <col style={{ width: "7%" }} />
+          <col style={{ width: "16%" }} />
+          <col style={{ width: "18%" }} />
+          <col style={{ width: "14%" }} />
+          <col style={{ width: "19%" }} />
+          <col style={{ width: "16%" }} />
+          <col style={{ width: "10%" }} />
+        </colgroup>
+        <thead>
+          <tr>
+            <th>序号</th>
+            <th>合作方式（联合研发／试验验证／推广应用等）</th>
+            <th>合作者（姓名／单位）</th>
+            <th>合作时间</th>
+            <th>合作成果</th>
+            <th>证明材料（附件编号）</th>
+            <th>备注</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((record, index) => (
+            <tr key={record.id || index}>
+              <td>{index + 1}</td>
+              <td>{record.method || ""}</td>
+              <td>{record.collaborators || ""}</td>
+              <td>{record.period || ""}</td>
+              <td>{record.output || ""}</td>
+              <td>{record.evidence || ""}</td>
+              <td>{record.notes || ""}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <footer>{pageNumber}</footer>
+    </article>
+  );
+}
+
 function PreviewUnitPage({ unit, index, pageNumber }) {
   return (
     <article
@@ -3322,6 +3422,22 @@ function buildPreviewSections(sourceData) {
       index,
     }),
   );
+  const cooperationChunks = data.cooperationRecords?.length
+    ? Array.from(
+        { length: Math.ceil(data.cooperationRecords.length / 10) },
+        (_, index) =>
+          data.cooperationRecords.slice(index * 10, (index + 1) * 10),
+      )
+    : [[]];
+  cooperationChunks.forEach((records, index) =>
+    pages.push({
+      kind: "cooperation",
+      title: "完成人合作关系情况汇总表",
+      records,
+      continued: index > 0,
+      sectionKey: "people",
+    }),
+  );
   data.units.forEach((unit, index) =>
     pages.push({
       kind: "unit",
@@ -3444,7 +3560,18 @@ function PreviewDialog({
       setSubmittedPagesError("");
       setWordRenderResults({});
       const profile = getAwardProfile(data.awardType);
-      const sections = getAwardSections(data.awardType).slice(7);
+      const sections = [
+        ...(profile.mode === "project"
+          ? [
+              {
+                key: "peopleCooperation",
+                label: "完成人合作关系说明",
+                number: 6,
+              },
+            ]
+          : []),
+        ...getAwardSections(data.awardType).slice(7),
+      ];
       const attachmentCategories = new Set(
         profile.attachmentMaterials.map(([category]) => category),
       );
@@ -3456,6 +3583,7 @@ function PreviewDialog({
           sections.map(async (section) => {
             const directTypes = new Set([
               `section_word:${profile.code}:${section.key}`,
+              `section_document:${profile.code}:${section.key}`,
               `section_signed:${profile.code}:${section.key}`,
             ]);
             const files = applicationFiles
@@ -3551,10 +3679,29 @@ function PreviewDialog({
       setSubmittedPagesStatus("ready");
     }
   }, [submittedPages, submittedPagesStatus, wordRenderResults]);
-  const previewPages = useMemo(
-    () => [...buildPreviewSections(data), ...submittedPages],
-    [data, submittedPages],
-  );
+  const previewPages = useMemo(() => {
+    const generatedPages = buildPreviewSections(data);
+    const cooperationDocuments = submittedPages.filter(
+      (page) => page.sectionKey === "peopleCooperation",
+    );
+    const laterDocuments = submittedPages.filter(
+      (page) => page.sectionKey !== "peopleCooperation",
+    );
+    const cooperationIndex = generatedPages.findIndex(
+      (page) => page.kind === "cooperation",
+    );
+    if (cooperationIndex < 0)
+      return [...generatedPages, ...cooperationDocuments, ...laterDocuments];
+    return [
+      ...generatedPages.slice(0, cooperationIndex),
+      ...cooperationDocuments.map((page) => ({
+        ...page,
+        sectionKey: "people",
+      })),
+      ...generatedPages.slice(cooperationIndex),
+      ...laterDocuments,
+    ];
+  }, [data, submittedPages]);
   const renderedWordPageCount = submittedPages
     .filter((page) => page.format === "word")
     .reduce(
@@ -3913,6 +4060,15 @@ function PreviewDialog({
               return (
                 <PreviewPersonPage
                   key={page.person.id}
+                  {...page}
+                  pageNumber={pageNumber}
+                />
+              );
+            }
+            if (page.kind === "cooperation") {
+              return (
+                <PreviewCooperationPage
+                  key={`cooperation-${index}`}
                   {...page}
                   pageNumber={pageNumber}
                 />
@@ -4961,6 +5117,7 @@ function EditorApp({ application, onHome }) {
       applicationFiles.some(
         (file) =>
           file.file_type === `section_word:${awardProfile.code}:${key}` ||
+          file.file_type === `section_document:${awardProfile.code}:${key}` ||
           file.file_type === `section_signed:${awardProfile.code}:${key}`,
       );
     if (awardProfile.code === "achievement") {
@@ -4977,12 +5134,7 @@ function EditorApp({ application, onHome }) {
         research: hasRecord(data.researchRecords, "researchRecords"),
         engineering: hasRecord(data.engineeringRecords, "engineeringRecords"),
         transformation: hasContent(data.transformation),
-        attachments: awardProfile.requiredAttachmentGroups.every(
-          ({ categories }) =>
-            categories.some((category) =>
-              applicationFiles.some((file) => file.file_type === category),
-            ),
-        ),
+        attachments: true,
         authenticity: hasSectionFile("authenticity"),
         integrity: hasSectionFile("integrity"),
       };
@@ -5036,13 +5188,7 @@ function EditorApp({ application, onHome }) {
       unitRecommendation:
         hasCompleteSourcePdf || hasSectionFile("unitRecommendation"),
       expertRecommendation: hasSectionFile("expertRecommendation"),
-      attachments:
-        hasCompleteSourcePdf ||
-        awardProfile.requiredAttachmentGroups.every(({ categories }) =>
-          categories.some((category) =>
-            applicationFiles.some((file) => file.file_type === category),
-          ),
-        ),
+      attachments: true,
       authenticity: hasSectionFile("authenticity"),
       confidentiality: hasSectionFile("confidentiality"),
       integrity: hasSectionFile("integrity"),
@@ -5157,6 +5303,38 @@ function EditorApp({ application, onHome }) {
     const payload = await response.json();
     if (!response.ok || !payload.ok) {
       window.alert(payload.message || "签章文件上传失败");
+      return;
+    }
+    const previousFiles = applicationFiles.filter(
+      (existing) =>
+        existing.file_type === category && existing.id !== payload.file.id,
+    );
+    await Promise.allSettled(
+      previousFiles.map((existing) =>
+        apiFetch(`/api/applications/${application.id}/files/${existing.id}`, {
+          method: "DELETE",
+        }),
+      ),
+    );
+    await loadSourceFile();
+  };
+  const uploadDocumentSection = async (section, file) => {
+    if (!file) return;
+    if (!/\.(docx|pdf)$/i.test(file.name)) {
+      window.alert("章节回传文件仅支持 Word（DOCX）或 PDF");
+      return;
+    }
+    const category = `section_document:${awardProfile.code}:${section.key}`;
+    const body = new FormData();
+    body.append("file", file);
+    body.append("category", category);
+    const response = await apiFetch(
+      `/api/applications/${application.id}/files`,
+      { method: "POST", body },
+    );
+    const payload = await response.json();
+    if (!response.ok || !payload.ok) {
+      window.alert(payload.message || "章节文件上传失败");
       return;
     }
     const previousFiles = applicationFiles.filter(
@@ -5385,28 +5563,43 @@ function EditorApp({ application, onHome }) {
       return <ProjectIpSection data={data} setField={setField} />;
     if (active === "people")
       return (
-        <EntityEditor
-          entityType="people"
-          number={6}
-          value={data.people}
-          onChange={(value) => setField("people", value)}
-          renderCustomField={({ field, record, index, update }) =>
-            field.key === "contribution" ? (
-              <div className="person-contribution">
-                <div className="person-contribution-label">
-                  对本项目主要贡献
+        <>
+          <EntityEditor
+            entityType="people"
+            number={6}
+            value={data.people}
+            onChange={(value) => setField("people", value)}
+            renderCustomField={({ field, record, index, update }) =>
+              field.key === "contribution" ? (
+                <div className="person-contribution">
+                  <div className="person-contribution-label">
+                    对本项目主要贡献
+                  </div>
+                  <RichTextEditor
+                    value={record.contribution}
+                    onChange={(value) => update("contribution", value)}
+                    applicationId={application.id}
+                    fieldKey={`person-${record.id || index}-contribution`}
+                    label={`${record.name || `第 ${index + 1} 完成人`}对本项目主要贡献`}
+                  />
                 </div>
-                <RichTextEditor
-                  value={record.contribution}
-                  onChange={(value) => update("contribution", value)}
-                  applicationId={application.id}
-                  fieldKey={`person-${record.id || index}-contribution`}
-                  label={`${record.name || `第 ${index + 1} 完成人`}对本项目主要贡献`}
-                />
-              </div>
-            ) : null
-          }
-        />
+              ) : null
+            }
+          />
+          <CooperationRecordsSection
+            records={data.cooperationRecords || []}
+            onChange={(value) => setField("cooperationRecords", value)}
+            applicationId={application.id}
+            uploadedFile={applicationFiles.find(
+              (file) =>
+                file.file_type ===
+                `section_document:${awardProfile.code}:peopleCooperation`,
+            )}
+            onUpload={(file) =>
+              uploadDocumentSection({ key: "peopleCooperation" }, file)
+            }
+          />
+        </>
       );
     if (active === "units")
       return (
@@ -5638,12 +5831,16 @@ function EditorApp({ application, onHome }) {
                 file.file_type ===
                   `section_word:${awardProfile.code}:${currentSection.key}` ||
                 file.file_type ===
+                  `section_document:${awardProfile.code}:${currentSection.key}` ||
+                file.file_type ===
                   `section_signed:${awardProfile.code}:${currentSection.key}`,
             )}
             onUpload={(file) =>
               currentSection.uploadMode === "signed"
                 ? uploadSignedSection(currentSection, file)
-                : setWordImportSection(currentSection)
+                : currentSection.uploadMode === "document"
+                  ? uploadDocumentSection(currentSection, file)
+                  : setWordImportSection(currentSection)
             }
           />
           {currentContent()}

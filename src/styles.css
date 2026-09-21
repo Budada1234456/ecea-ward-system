@@ -6242,6 +6242,35 @@ select.control {
   margin-top: 2mm;
 }
 
+.preview-cooperation-page > h3 {
+  margin: 0 0 5mm;
+  font-family: SimHei, "Heiti SC", "Microsoft YaHei", sans-serif;
+  font-size: 16pt;
+  text-align: center;
+}
+
+.preview-cooperation-page table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 9pt;
+  line-height: 1.25;
+}
+
+.preview-cooperation-page :is(th, td) {
+  height: 17mm;
+  padding: 1mm;
+  border: 0.18mm solid #222;
+  overflow-wrap: anywhere;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.preview-cooperation-page thead th {
+  height: 25mm;
+  font-weight: 400;
+}
+
 .preview-basic-page > footer,
 .preview-person-page > footer {
   z-index: 2;
@@ -6420,6 +6449,7 @@ select.control {
   width: 100% !important;
   max-width: 100% !important;
   margin: 1mm 0 !important;
+  border-collapse: collapse;
   table-layout: auto;
   font-size: 8pt !important;
   line-height: 1.15 !important;

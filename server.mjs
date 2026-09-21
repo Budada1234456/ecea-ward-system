@@ -1347,6 +1347,7 @@ async function pdfPageCount(filePath) {
 function isSectionSubmission(row) {
   return (
     row?.file_type?.startsWith("section_word:") ||
+    row?.file_type?.startsWith("section_document:") ||
     row?.file_type?.startsWith("section_signed:")
   );
 }
@@ -1762,12 +1763,16 @@ app.post(
     const profile = getAwardProfile(exists.award_type);
     const isContentImage = category.startsWith("content_image:");
     const isSectionWord = category.startsWith("section_word:");
+    const isSectionDocument = category.startsWith("section_document:");
     const isSignedSection = category.startsWith("section_signed:");
     const validSectionWord = new RegExp(
       `^section_word:${profile.code}:[a-zA-Z]+$`,
     ).test(category);
     const validSignedSection = new RegExp(
       `^section_signed:${profile.code}:(authenticity|confidentiality|integrity)$`,
+    ).test(category);
+    const validSectionDocument = new RegExp(
+      `^section_document:${profile.code}:(unitRecommendation|expertRecommendation|peopleCooperation)$`,
     ).test(category);
     const allowedCategories = new Set([
       ...profile.recommendationMaterials.map(([value]) => value),
@@ -1777,6 +1782,7 @@ app.post(
       !isContentImage &&
       !allowedCategories.has(category) &&
       !validSectionWord &&
+      !validSectionDocument &&
       !validSignedSection
     ) {
       await fsPromises.unlink(req.file.path).catch(() => {});
@@ -1799,6 +1805,13 @@ app.post(
         message: "章节文件仅支持 DOC、DOCX",
       });
     }
+    if (isSectionDocument && ![".docx", ".pdf"].includes(extension)) {
+      await fsPromises.unlink(req.file.path).catch(() => {});
+      return res.status(422).json({
+        ok: false,
+        message: "章节回传文件仅支持 DOCX、PDF",
+      });
+    }
     if (
       isSignedSection &&
       ![".pdf", ".jpg", ".jpeg", ".png"].includes(extension)
@@ -1811,6 +1824,7 @@ app.post(
     }
     if (
       !isSectionWord &&
+      !isSectionDocument &&
       !isSignedSection &&
       !isContentImage &&
       ![".pdf", ".jpg", ".jpeg", ".png"].includes(extension)
@@ -1847,19 +1861,20 @@ app.post(
     );
     await persistUploadedFile(req.file.path, storedPath);
     let pageCount = extension === ".pdf" ? await pdfPageCount(storedPath) : 1;
-    const shouldLimitPages =
-      profile.mode === "project" &&
-      !isContentImage &&
-      !isSectionWord &&
-      !isSignedSection &&
-      category !== "source_pdf";
+    const attachmentCategories = profile.attachmentMaterials.map(
+      ([value]) => value,
+    );
+    const shouldLimitPages = attachmentCategories.includes(category);
     if (shouldLimitPages) {
+      const placeholders = attachmentCategories.map(() => "?").join(", ");
       const currentPages = Number(
         db
           .prepare(
-            "SELECT COALESCE(SUM(page_count), 0) AS total FROM application_files WHERE application_id = ? AND file_type != 'source_pdf' AND file_type NOT LIKE 'content_image:%'",
+            `SELECT COALESCE(SUM(page_count), 0) AS total
+             FROM application_files
+             WHERE application_id = ? AND file_type IN (${placeholders})`,
           )
-          .get(applicationId).total || 0,
+          .get(applicationId, ...attachmentCategories).total || 0,
       );
       if (currentPages + pageCount > 40) {
         await fsPromises.unlink(storedPath).catch(() => {});
@@ -1887,7 +1902,11 @@ app.post(
         timestamp,
       );
     const fileId = Number(result.lastInsertRowid);
-    if ((isSectionWord && extension !== ".doc") || isSignedSection) {
+    if (
+      (isSectionWord && extension !== ".doc") ||
+      isSectionDocument ||
+      isSignedSection
+    ) {
       try {
         const previewPages = await ensureSectionPreview({
           id: fileId,

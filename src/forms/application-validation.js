@@ -173,30 +173,7 @@ function attachmentErrors({ data, files, profile, sectionKey }) {
   }
 
   if (sectionKey !== "attachments") return [];
-  if (profile.requiredAttachmentGroups.length) {
-    return profile.requiredAttachmentGroups
-      .filter(({ categories }) =>
-        categories.every((category) => !types.has(category)),
-      )
-      .map(({ categories, label }) => ({
-        sectionKey,
-        key: categories[0],
-        message: `请上传${label}`,
-      }));
-  }
-
-  const hasSupportingMaterial = profile.attachmentMaterials.some(([category]) =>
-    types.has(category),
-  );
-  return hasSupportingMaterial
-    ? []
-    : [
-        {
-          sectionKey,
-          key: "supportingMaterial",
-          message: "请上传项目证明材料",
-        },
-      ];
+  return [];
 }
 
 function sectionTextFields(profile, sectionKey) {

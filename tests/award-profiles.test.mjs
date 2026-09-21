@@ -12,9 +12,8 @@ test("achievement applications use a candidate-specific material structure", () 
 
   assert.equal(profile.mode, "individual");
   assert.equal(profile.subjectLabel, "候选人姓名");
-  assert.equal(profile.fileLimits.achievement_other, 20);
-  assert.equal(profile.fileLimits.achievement_publications, 5);
-  assert.equal(profile.requiredAttachmentGroups.length, 5);
+  assert.deepEqual(profile.fileLimits, {});
+  assert.equal(profile.requiredAttachmentGroups.length, 0);
   assert.deepEqual(
     getAwardSections(profile.value).map(({ key }) => key),
     [
@@ -89,6 +88,20 @@ test("chapters five through seven use system fields for every award", () => {
         uploadMode,
       })),
       [5, 6, 7].map((number) => ({ number, uploadMode: "form" })),
+    );
+  }
+});
+
+test("project recommendation chapters accept Word or PDF documents", () => {
+  for (const awardType of [AWARD_TYPES.PROGRESS, AWARD_TYPES.INVENTION]) {
+    assert.deepEqual(
+      getAwardSections(awardType)
+        .slice(7, 9)
+        .map(({ key, uploadMode }) => ({ key, uploadMode })),
+      [
+        { key: "unitRecommendation", uploadMode: "document" },
+        { key: "expertRecommendation", uploadMode: "document" },
+      ],
     );
   }
 });
