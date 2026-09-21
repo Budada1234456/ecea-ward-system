@@ -43,7 +43,9 @@ const hostArgument = process.argv.find((argument) =>
 );
 const port = Number(portArgument?.slice(7) || process.env.PORT || 4174);
 const host = hostArgument?.slice(7) || process.env.HOST || "127.0.0.1";
-const root = path.dirname(fileURLToPath(import.meta.url));
+const serverSourcePath = fileURLToPath(import.meta.url);
+const backendStartedAt = new Date();
+const root = path.dirname(serverSourcePath);
 const dataDir = path.join(root, "data");
 const allowInsecurePasswordReset =
   process.env.ALLOW_INSECURE_PASSWORD_RESET === "true";
@@ -2431,7 +2433,16 @@ app.get("/api/health", (_req, res) => {
       "SELECT COUNT(*) AS total FROM applications WHERE archived_at IS NULL",
     )
     .get().total;
-  res.json({ ok: true, database: "sqlite", applications });
+  const backendSourceModifiedAt = fs.statSync(serverSourcePath).mtime;
+  res.json({
+    ok: true,
+    database: "sqlite",
+    applications,
+    backendStartedAt: backendStartedAt.toISOString(),
+    backendSourceModifiedAt: backendSourceModifiedAt.toISOString(),
+    restartRequired:
+      backendSourceModifiedAt.getTime() > backendStartedAt.getTime(),
+  });
 });
 
 const materialsDirectory = path.join(root, "节能奖填报材料");
