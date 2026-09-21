@@ -413,6 +413,112 @@ test("invention intellectual-property chapter matches the shared project templat
   ).toContainText("形成核心发明");
 });
 
+test("project awards accept DOC, DOCX and PDF cooperation statements", async ({
+  page,
+}) => {
+  const suffix = `${Date.now()}${Math.floor(Math.random() * 1000)}`;
+  const pdf = new jsPDF();
+  pdf.text("Cooperation statement", 20, 20);
+
+  for (const [index, [awardType, awardCode]] of [
+    ["节能减排科技进步奖", "progress"],
+    ["节能减排技术发明奖", "invention"],
+  ].entries()) {
+    const username = `coop${index}${suffix}`;
+    const registration = await page.request.post(
+      `${baseUrl}/api/auth/register`,
+      {
+        data: {
+          username,
+          email: `${username}@example.test`,
+          displayName: `${awardType}合作关系验收用户`,
+          password: `Cooperation-${suffix}-${index}`,
+        },
+      },
+    );
+    expect(registration.ok(), await registration.text()).toBe(true);
+
+    const creation = await page.request.post(`${baseUrl}/api/applications`, {
+      data: {
+        awardType,
+        title: `${awardType}合作关系验收-${suffix}`,
+        applicantUnit: "中国节能测试单位",
+        year: 2026,
+        workflowMode: "form",
+      },
+    });
+    expect(creation.ok(), await creation.text()).toBe(true);
+    const application = (await creation.json()).application;
+
+    await page.goto(`${baseUrl}/#/applications/${application.id}`);
+    await page.locator(".sidebar nav button").nth(5).click();
+    const cooperationInput = page.locator(
+      '.cooperation-section input[type="file"]',
+    );
+    await expect(cooperationInput).toHaveAttribute("accept", /\.doc,/);
+    await expect(cooperationInput).toHaveAttribute("accept", /\.docx/);
+    await expect(cooperationInput).toHaveAttribute("accept", /\.pdf/);
+
+    const category = `section_document:${awardCode}:peopleCooperation`;
+    const uploadedFiles = [];
+    for (const file of [
+      {
+        name: "完成人合作关系说明.doc",
+        mimeType: "application/msword",
+        buffer: Buffer.from("legacy Word cooperation statement"),
+      },
+      {
+        name: "完成人合作关系说明.docx",
+        mimeType:
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        buffer: await introductionDocx("完成人合作关系说明验收。"),
+      },
+      {
+        name: "完成人合作关系说明.pdf",
+        mimeType: "application/pdf",
+        buffer: Buffer.from(pdf.output("arraybuffer")),
+      },
+    ]) {
+      const upload = await page.request.post(
+        `${baseUrl}/api/applications/${application.id}/files`,
+        { multipart: { category, file } },
+      );
+      expect(upload.ok(), await upload.text()).toBe(true);
+      uploadedFiles.push((await upload.json()).file);
+    }
+
+    const legacyWord = uploadedFiles.find((file) =>
+      file.file_name.endsWith(".doc"),
+    );
+    const legacyWordDownload = await page.request.get(
+      `${baseUrl}/api/applications/${application.id}/files/${legacyWord.id}/download`,
+    );
+    expect(legacyWordDownload.ok(), await legacyWordDownload.text()).toBe(true);
+    expect(legacyWordDownload.headers()["content-type"]).toContain(
+      "application/msword",
+    );
+    for (const file of uploadedFiles.filter(
+      (candidate) => !candidate.file_name.endsWith(".doc"),
+    )) {
+      const preview = await page.request.get(
+        `${baseUrl}/api/applications/${application.id}/files/${file.id}/preview`,
+      );
+      expect(preview.ok(), await preview.text()).toBe(true);
+      expect((await preview.json()).pages.length).toBeGreaterThan(0);
+    }
+
+    const files = await page.request.get(
+      `${baseUrl}/api/applications/${application.id}/files`,
+    );
+    expect(files.ok(), await files.text()).toBe(true);
+    expect(
+      (await files.json()).list.filter(
+        (file) => file.file_type === category,
+      ),
+    ).toHaveLength(3);
+  }
+});
+
 test("achievement chapters download and PDF attachments upload", async ({
   page,
 }) => {

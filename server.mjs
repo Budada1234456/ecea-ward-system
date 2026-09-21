@@ -1805,11 +1805,14 @@ app.post(
         message: "章节文件仅支持 DOC、DOCX",
       });
     }
-    if (isSectionDocument && ![".docx", ".pdf"].includes(extension)) {
+    if (
+      isSectionDocument &&
+      ![".doc", ".docx", ".pdf"].includes(extension)
+    ) {
       await fsPromises.unlink(req.file.path).catch(() => {});
       return res.status(422).json({
         ok: false,
-        message: "章节回传文件仅支持 DOCX、PDF",
+        message: "章节回传文件仅支持 DOC、DOCX、PDF",
       });
     }
     if (
@@ -1904,7 +1907,7 @@ app.post(
     const fileId = Number(result.lastInsertRowid);
     if (
       (isSectionWord && extension !== ".doc") ||
-      isSectionDocument ||
+      (isSectionDocument && extension !== ".doc") ||
       isSignedSection
     ) {
       try {

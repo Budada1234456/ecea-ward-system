@@ -1943,7 +1943,7 @@ function SectionTemplateBar({
             accept={
               isSignedUpload
                 ? ".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
-                : ".docx,.pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/pdf"
+                : ".doc,.docx,.pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/pdf"
             }
             onChange={(event) => {
               onUpload(event.target.files?.[0]);
@@ -3601,6 +3601,7 @@ function PreviewDialog({
                   recommendationCategories.has(candidate.file_type)
                 );
               })
+              .filter((candidate) => !/\.doc$/i.test(candidate.file_name))
               .sort((left, right) => Number(left.id) - Number(right.id));
             const filePages = await Promise.all(
               files.map(async (file) => {
@@ -5320,8 +5321,8 @@ function EditorApp({ application, onHome }) {
   };
   const uploadDocumentSection = async (section, file) => {
     if (!file) return;
-    if (!/\.(docx|pdf)$/i.test(file.name)) {
-      window.alert("章节回传文件仅支持 Word（DOCX）或 PDF");
+    if (!/\.(doc|docx|pdf)$/i.test(file.name)) {
+      window.alert("章节回传文件仅支持 Word（DOC、DOCX）或 PDF");
       return;
     }
     const category = `section_document:${awardProfile.code}:${section.key}`;
