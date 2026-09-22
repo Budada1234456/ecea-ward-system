@@ -127,8 +127,8 @@ test("each award loads its own form, validation and preview profile", async ({
       createDialog.locator(".award-level-choice", { hasText: "二等奖" }),
     ).toContainText("授奖单位不超过 7 个");
     await expect(
-      createDialog.getByText("现行办法不设三等奖", { exact: false }),
-    ).toBeVisible();
+      createDialog.locator(".award-level-choice", { hasText: "三等奖" }),
+    ).toContainText("无特别备注要求");
     await createDialog.getByRole("button", { name: "取消" }).click();
 
     const invalidAward = await page.request.post(
@@ -142,18 +142,16 @@ test("each award loads its own form, validation and preview profile", async ({
       },
     );
     expect(invalidAward.status()).toBe(422);
-    const invalidLevel = await page.request.post(
-      `${baseUrl}/api/applications`,
-      {
-        data: {
-          awardType: "节能减排科技进步奖",
-          awardLevel: "三等奖",
-          title: `无效等级-${suffix}`,
-          applicantUnit: "测试单位",
-        },
+    const thirdPrize = await page.request.post(`${baseUrl}/api/applications`, {
+      data: {
+        awardType: "节能减排科技进步奖",
+        awardLevel: "三等奖",
+        title: `三等奖项目-${suffix}`,
+        applicantUnit: "测试单位",
       },
-    );
-    expect(invalidLevel.status()).toBe(422);
+    });
+    expect(thirdPrize.ok(), await thirdPrize.text()).toBe(true);
+    applications.push((await thirdPrize.json()).application.id);
 
     const achievement = await create("节能减排科技成就奖", achievementTitle);
     const progress = await create(
@@ -280,6 +278,33 @@ test("each award loads its own form, validation and preview profile", async ({
       "achievement_other",
     );
     expect(optionalMaterial.ok(), await optionalMaterial.text()).toBe(true);
+    const optionalFile = (await optionalMaterial.json()).file;
+    const optionalReplacement = await uploadMaterial(
+      achievement.id,
+      "achievement_other",
+      {
+        name: "achievement-other-latest.png",
+        mimeType: "image/png",
+        buffer: tinyPng,
+      },
+    );
+    expect(optionalReplacement.ok(), await optionalReplacement.text()).toBe(
+      true,
+    );
+    const replacementFile = (await optionalReplacement.json()).file;
+    const supersededDownload = await page.request.get(
+      `${baseUrl}/api/applications/${achievement.id}/files/${optionalFile.id}/download`,
+    );
+    expect(supersededDownload.status()).toBe(404);
+    const currentFiles = await page.request.get(
+      `${baseUrl}/api/applications/${achievement.id}/files`,
+    );
+    expect(currentFiles.ok(), await currentFiles.text()).toBe(true);
+    expect(
+      (await currentFiles.json()).list.filter(
+        (file) => file.file_type === "achievement_other",
+      ),
+    ).toEqual([expect.objectContaining({ id: replacementFile.id })]);
     const optionalOnlySubmit = await page.request.post(
       `${baseUrl}/api/applications/${achievement.id}/submit`,
     );

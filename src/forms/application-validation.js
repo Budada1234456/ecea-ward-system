@@ -257,7 +257,10 @@ export function validateSection({
     }
     if (profile.mode === "project") {
       const levelRule = getAwardLevelRule(profile.value, data.awardLevel);
-      if ((data.people || []).length > levelRule.maxPeople) {
+      if (
+        Number.isFinite(levelRule.maxPeople) &&
+        (data.people || []).length > levelRule.maxPeople
+      ) {
         errors.push({
           sectionKey: "people",
           key: "people",

@@ -77,6 +77,7 @@ test("project awards share a skeleton but keep distinct guidance and limits", ()
     [
       { value: "一等奖", maxPeople: 15, maxUnits: 10 },
       { value: "二等奖", maxPeople: 10, maxUnits: 7 },
+      { value: "三等奖", maxPeople: null, maxUnits: null },
     ],
   );
   assert.deepEqual(
@@ -88,11 +89,12 @@ test("project awards share a skeleton but keep distinct guidance and limits", ()
     [
       { value: "一等奖", maxPeople: 10, maxUnits: null },
       { value: "二等奖", maxPeople: 6, maxUnits: null },
+      { value: "三等奖", maxPeople: null, maxUnits: null },
     ],
   );
   assert.equal(getAwardLevelRule(AWARD_TYPES.ACHIEVEMENT).value, "不分等级");
   assert.equal(getAwardLevelRule(AWARD_TYPES.PROGRESS, "二等奖").maxUnits, 7);
-  assert.equal(isValidAwardLevel(AWARD_TYPES.PROGRESS, "三等奖"), false);
+  assert.equal(isValidAwardLevel(AWARD_TYPES.PROGRESS, "三等奖"), true);
   assert.equal(getAwardSections(progress.value).length, 13);
   assert.equal(
     getAwardSections(invention.value)[12].templateFile,

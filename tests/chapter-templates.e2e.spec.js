@@ -484,27 +484,26 @@ test("project awards accept DOC, DOCX and PDF cooperation statements", async ({
         { multipart: { category, file } },
       );
       expect(upload.ok(), await upload.text()).toBe(true);
-      uploadedFiles.push((await upload.json()).file);
+      const uploadedFile = (await upload.json()).file;
+      uploadedFiles.push(uploadedFile);
+      const download = await page.request.get(
+        `${baseUrl}/api/applications/${application.id}/files/${uploadedFile.id}/download`,
+      );
+      expect(download.ok(), await download.text()).toBe(true);
+      if (!uploadedFile.file_name.endsWith(".doc")) {
+        const preview = await page.request.get(
+          `${baseUrl}/api/applications/${application.id}/files/${uploadedFile.id}/preview`,
+        );
+        expect(preview.ok(), await preview.text()).toBe(true);
+        expect((await preview.json()).pages.length).toBeGreaterThan(0);
+      }
     }
 
-    const legacyWord = uploadedFiles.find((file) =>
-      file.file_name.endsWith(".doc"),
-    );
-    const legacyWordDownload = await page.request.get(
-      `${baseUrl}/api/applications/${application.id}/files/${legacyWord.id}/download`,
-    );
-    expect(legacyWordDownload.ok(), await legacyWordDownload.text()).toBe(true);
-    expect(legacyWordDownload.headers()["content-type"]).toContain(
-      "application/msword",
-    );
-    for (const file of uploadedFiles.filter(
-      (candidate) => !candidate.file_name.endsWith(".doc"),
-    )) {
-      const preview = await page.request.get(
-        `${baseUrl}/api/applications/${application.id}/files/${file.id}/preview`,
+    for (const supersededFile of uploadedFiles.slice(0, -1)) {
+      const supersededDownload = await page.request.get(
+        `${baseUrl}/api/applications/${application.id}/files/${supersededFile.id}/download`,
       );
-      expect(preview.ok(), await preview.text()).toBe(true);
-      expect((await preview.json()).pages.length).toBeGreaterThan(0);
+      expect(supersededDownload.status()).toBe(404);
     }
 
     const files = await page.request.get(
@@ -512,10 +511,13 @@ test("project awards accept DOC, DOCX and PDF cooperation statements", async ({
     );
     expect(files.ok(), await files.text()).toBe(true);
     expect(
-      (await files.json()).list.filter(
-        (file) => file.file_type === category,
-      ),
-    ).toHaveLength(3);
+      (await files.json()).list.filter((file) => file.file_type === category),
+    ).toEqual([
+      expect.objectContaining({
+        id: uploadedFiles.at(-1).id,
+        file_name: "完成人合作关系说明.pdf",
+      }),
+    ]);
   }
 });
 

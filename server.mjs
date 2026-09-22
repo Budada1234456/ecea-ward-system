@@ -1905,9 +1905,10 @@ app.post(
           .prepare(
             `SELECT COALESCE(SUM(page_count), 0) AS total
              FROM application_files
-             WHERE application_id = ? AND file_type IN (${placeholders})`,
+             WHERE application_id = ? AND file_type IN (${placeholders})
+               AND file_type != ?`,
           )
-          .get(applicationId, ...attachmentCategories).total || 0,
+          .get(applicationId, ...attachmentCategories, category).total || 0,
       );
       if (currentPages + pageCount > 40) {
         await fsPromises.unlink(storedPath).catch(() => {});
@@ -1963,6 +1964,38 @@ app.post(
           ok: false,
           message: error.message || "无法生成章节文件预览",
         });
+      }
+    }
+    if (!isContentImage) {
+      const replaceableTypes = isSectionSubmission({ file_type: category })
+        ? ["section_word", "section_document", "section_signed"].map(
+            (prefix) =>
+              `${prefix}:${profile.code}:${category.split(":").at(-1)}`,
+          )
+        : [category];
+      const placeholders = replaceableTypes.map(() => "?").join(", ");
+      const supersededRows = db
+        .prepare(
+          `SELECT * FROM application_files
+           WHERE application_id = ? AND id != ?
+             AND file_type IN (${placeholders})`,
+        )
+        .all(applicationId, fileId, ...replaceableTypes);
+      if (supersededRows.length) {
+        db.prepare(
+          `DELETE FROM application_files
+           WHERE application_id = ? AND id != ?
+             AND file_type IN (${placeholders})`,
+        ).run(applicationId, fileId, ...replaceableTypes);
+        await Promise.allSettled(
+          supersededRows.map(async (row) => {
+            await fsPromises.rm(sectionPreviewDirectory(row), {
+              recursive: true,
+              force: true,
+            });
+            await fsPromises.unlink(row.stored_path).catch(() => {});
+          }),
+        );
       }
     }
     writeAudit(applicationId, "file_upload", `上传附件 ${fileName}`);

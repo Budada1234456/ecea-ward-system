@@ -130,9 +130,18 @@ test("project entity limits follow the selected award and level", () => {
     ),
     false,
   );
-  assert(
-    messages(AWARD_TYPES.PROGRESS, "三等奖", 1, 1).includes(
-      "请选择有效的申报等级",
+  const progressThirdPrizeMessages = messages(
+    AWARD_TYPES.PROGRESS,
+    "三等奖",
+    20,
+    20,
+  );
+  assert.equal(
+    progressThirdPrizeMessages.some(
+      (message) =>
+        message.includes("请选择有效的申报等级") ||
+        message.includes("不得超过"),
     ),
+    false,
   );
 });

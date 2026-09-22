@@ -895,7 +895,7 @@ function BasicForm({ data, setField, disciplineRecords, applicationId }) {
         <Field
           label="主要完成人"
           required
-          hint={`按贡献大小排序。${levelRule.label}单项授奖人数不超过 ${levelRule.maxPeople} 人。`}
+          hint={`按贡献大小排序。${Number.isFinite(levelRule.maxPeople) ? `${levelRule.label}单项授奖人数不超过 ${levelRule.maxPeople} 人。` : `${levelRule.label}无特别备注要求。`}`}
         >
           <TagEditor
             values={data.people}
@@ -1550,7 +1550,11 @@ function RecommendationUploadSection({
                 ) : (
                   <Upload size={16} />
                 )}
-                {uploading === category ? "上传中" : "上传附件"}
+                {uploading === category
+                  ? "上传中"
+                  : categoryFiles.length
+                    ? "重新上传"
+                    : "上传附件"}
                 <input
                   hidden
                   type="file"
@@ -1757,7 +1761,11 @@ function AttachmentSection({
                   ) : (
                     <Upload size={15} />
                   )}
-                  {uploading === key ? "上传中" : "上传"}
+                  {uploading === key
+                    ? "上传中"
+                    : groupFiles.length
+                      ? "重新上传"
+                      : "上传"}
                   <input
                     hidden
                     type="file"
@@ -3182,7 +3190,7 @@ function PreviewRecommendationPage({ body, awardLevel, pageNumber }) {
               <h4>
                 推荐单位推荐意见：（明确推荐等级：
                 {levelMark("一等奖")}一等奖 {levelMark("二等奖")}
-                二等奖，阐述推荐理由）
+                二等奖 {levelMark("三等奖")}三等奖，阐述推荐理由）
               </h4>
               <div className="preview-blank-lines" />
               <div className="preview-signature-area">
@@ -3586,6 +3594,13 @@ function PreviewDialog({
       const recommendationCategories = new Set(
         profile.recommendationMaterials.map(([category]) => category),
       );
+      const latestFilesByType = new Map();
+      applicationFiles.forEach((file) => {
+        const current = latestFilesByType.get(file.file_type);
+        if (!current || Number(file.id) > Number(current.id))
+          latestFilesByType.set(file.file_type, file);
+      });
+      const latestApplicationFiles = [...latestFilesByType.values()];
       try {
         const sectionPages = await Promise.all(
           sections.map(async (section) => {
@@ -3594,9 +3609,13 @@ function PreviewDialog({
               `section_document:${profile.code}:${section.key}`,
               `section_signed:${profile.code}:${section.key}`,
             ]);
-            const files = applicationFiles
+            const latestDirectFile = latestApplicationFiles
+              .filter((candidate) => directTypes.has(candidate.file_type))
+              .sort((left, right) => Number(right.id) - Number(left.id))[0];
+            const files = latestApplicationFiles
               .filter((candidate) => {
-                if (directTypes.has(candidate.file_type)) return true;
+                if (directTypes.has(candidate.file_type))
+                  return candidate.id === latestDirectFile?.id;
                 if (
                   section.key === "attachments" &&
                   (attachmentCategories.has(candidate.file_type) ||
@@ -4250,7 +4269,9 @@ function CreateApplicationDialog({ onClose, onCreated }) {
           </fieldset>
           <fieldset className="award-level-field">
             <legend>申报等级</legend>
-            <div className="award-level-grid">
+            <div
+              className={`award-level-grid${selectedAward.awardLevels.length === 3 ? " award-level-grid--three" : ""}`}
+            >
               {selectedAward.awardLevels.map((level) => (
                 <label
                   key={level.value}
@@ -4282,7 +4303,7 @@ function CreateApplicationDialog({ onClose, onCreated }) {
               <span>
                 {selectedLevel.description}
                 {selectedAward.mode === "project" &&
-                  " 特等奖由评审组从拟授一等奖项目中提名，不单独接受申报；现行办法不设三等奖。"}
+                  " 特等奖由评审组从拟授一等奖项目中提名，不单独接受申报。"}
               </span>
             </p>
           </fieldset>

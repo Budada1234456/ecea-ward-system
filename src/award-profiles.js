@@ -241,6 +241,13 @@ const profiles = {
         maxPeople: 10,
         maxUnits: 7,
       },
+      {
+        value: "三等奖",
+        label: "三等奖",
+        description: "无特别备注要求。",
+        maxPeople: null,
+        maxUnits: null,
+      },
     ],
     sections: progressSections,
     detailFields: [
@@ -290,6 +297,13 @@ const profiles = {
         label: "二等奖",
         description: "单项授奖人数不超过 6 人；主要完成单位须具有法人资格。",
         maxPeople: 6,
+        maxUnits: null,
+      },
+      {
+        value: "三等奖",
+        label: "三等奖",
+        description: "无特别备注要求。",
+        maxPeople: null,
         maxUnits: null,
       },
     ],
