@@ -244,7 +244,7 @@ const profiles = {
       {
         value: "三等奖",
         label: "三等奖",
-        description: "无特别备注要求。",
+        description: "",
         maxPeople: null,
         maxUnits: null,
       },
@@ -302,7 +302,7 @@ const profiles = {
       {
         value: "三等奖",
         label: "三等奖",
-        description: "无特别备注要求。",
+        description: "",
         maxPeople: null,
         maxUnits: null,
       },

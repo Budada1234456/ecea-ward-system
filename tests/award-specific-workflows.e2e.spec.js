@@ -128,7 +128,7 @@ test("each award loads its own form, validation and preview profile", async ({
     ).toContainText("授奖单位不超过 7 个");
     await expect(
       createDialog.locator(".award-level-choice", { hasText: "三等奖" }),
-    ).toContainText("无特别备注要求");
+    ).toHaveText("三等奖");
     await createDialog.getByRole("button", { name: "取消" }).click();
 
     const invalidAward = await page.request.post(

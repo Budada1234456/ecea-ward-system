@@ -895,7 +895,7 @@ function BasicForm({ data, setField, disciplineRecords, applicationId }) {
         <Field
           label="主要完成人"
           required
-          hint={`按贡献大小排序。${Number.isFinite(levelRule.maxPeople) ? `${levelRule.label}单项授奖人数不超过 ${levelRule.maxPeople} 人。` : `${levelRule.label}无特别备注要求。`}`}
+          hint={`按贡献大小排序。${Number.isFinite(levelRule.maxPeople) ? `${levelRule.label}单项授奖人数不超过 ${levelRule.maxPeople} 人。` : ""}`}
         >
           <TagEditor
             values={data.people}
