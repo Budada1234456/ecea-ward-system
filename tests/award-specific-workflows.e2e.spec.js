@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { jsPDF } from "jspdf";
+import { DatabaseSync } from "node:sqlite";
+import { fileURLToPath } from "node:url";
 import {
   completePerson,
   completeProjectData,
@@ -47,7 +49,12 @@ test("each award loads its own form, validation and preview profile", async ({
   });
   expect(registration.ok(), await registration.text()).toBe(true);
 
-  const create = async (awardType, title, workflowMode = "form") => {
+  const create = async (
+    awardType,
+    title,
+    workflowMode = "form",
+    awardLevel,
+  ) => {
     const response = await page.request.post(`${baseUrl}/api/applications`, {
       data: {
         awardType,
@@ -55,6 +62,7 @@ test("each award loads its own form, validation and preview profile", async ({
         applicantUnit: "中国节能测试单位",
         year: 2026,
         workflowMode,
+        ...(awardLevel ? { awardLevel } : {}),
       },
     });
     expect(response.ok(), await response.text()).toBe(true);
@@ -107,6 +115,20 @@ test("each award loads its own form, validation and preview profile", async ({
     await expect(
       createDialog.getByText("候选人姓名", { exact: true }),
     ).toBeVisible();
+    await expect(
+      createDialog
+        .locator(".award-level-field")
+        .getByText("不分等级", { exact: true }),
+    ).toBeVisible();
+    await createDialog
+      .locator(".award-choice", { hasText: "节能减排科技进步奖" })
+      .click();
+    await expect(
+      createDialog.locator(".award-level-choice", { hasText: "二等奖" }),
+    ).toContainText("授奖单位不超过 7 个");
+    await expect(
+      createDialog.locator(".award-level-choice", { hasText: "三等奖" }),
+    ).toHaveText("三等奖");
     await createDialog.getByRole("button", { name: "取消" }).click();
 
     const invalidAward = await page.request.post(
@@ -120,10 +142,32 @@ test("each award loads its own form, validation and preview profile", async ({
       },
     );
     expect(invalidAward.status()).toBe(422);
+    const thirdPrize = await page.request.post(`${baseUrl}/api/applications`, {
+      data: {
+        awardType: "节能减排科技进步奖",
+        awardLevel: "三等奖",
+        title: `三等奖项目-${suffix}`,
+        applicantUnit: "测试单位",
+      },
+    });
+    expect(thirdPrize.ok(), await thirdPrize.text()).toBe(true);
+    applications.push((await thirdPrize.json()).application.id);
 
     const achievement = await create("节能减排科技成就奖", achievementTitle);
-    const progress = await create("节能减排科技进步奖", progressTitle);
-    const invention = await create("节能减排技术发明奖", inventionTitle);
+    const progress = await create(
+      "节能减排科技进步奖",
+      progressTitle,
+      "form",
+      "二等奖",
+    );
+    const invention = await create(
+      "节能减排技术发明奖",
+      inventionTitle,
+      "form",
+      "一等奖",
+    );
+    expect(progress.data.awardLevel).toBe("二等奖");
+    expect(invention.data.awardLevel).toBe("一等奖");
     const documentProgress = await create(
       "节能减排科技进步奖",
       documentTitle,
@@ -138,11 +182,11 @@ test("each award loads its own form, validation and preview profile", async ({
     expect(incomplete.missing).toContain("候选人工作单位");
     expect(incomplete.missing).toContain("科技成果转化及推广");
     expect(incomplete.missing).toContain("节能减排相关工作总结");
-    expect(incomplete.missing).toContain("科技奖励和荣誉证明");
-    expect(incomplete.missing).toContain("代表性论文或专著");
-    expect(incomplete.missing).toContain("知识产权证明");
-    expect(incomplete.missing).toContain("科研项目证明");
-    expect(incomplete.missing).toContain("效益证明");
+    expect(incomplete.missing).not.toContain("科技奖励和荣誉证明");
+    expect(incomplete.missing).not.toContain("代表性论文或专著");
+    expect(incomplete.missing).not.toContain("知识产权证明");
+    expect(incomplete.missing).not.toContain("科研项目证明");
+    expect(incomplete.missing).not.toContain("效益证明");
     expect(incomplete.missing).not.toContain("主要完成人");
     expect(incomplete.missing).not.toContain("主要完成单位");
 
@@ -152,6 +196,7 @@ test("each award loads its own form, validation and preview profile", async ({
         data: {
           data: {
             awardType: "节能减排技术发明奖",
+            awardLevel: "一等奖",
             projectName: achievementTitle,
             applicantUnit: "中国节能测试单位",
             candidate: {
@@ -172,8 +217,53 @@ test("each award loads its own form, validation and preview profile", async ({
     expect(lockedUpdate.ok(), await lockedUpdate.text()).toBe(true);
     const lockedBody = await lockedUpdate.json();
     expect(lockedBody.application.award_type).toBe("节能减排科技成就奖");
+    expect(lockedBody.application.data.awardLevel).toBe("不分等级");
     expect(lockedBody.application.data.applicationMode).toBe("individual");
     expect(lockedBody.application.data.profileCode).toBe("achievement");
+
+    const levelLockedUpdate = await page.request.put(
+      `${baseUrl}/api/applications/${progress.id}`,
+      {
+        data: {
+          data: { ...progress.data, awardLevel: "一等奖" },
+        },
+      },
+    );
+    expect(levelLockedUpdate.ok(), await levelLockedUpdate.text()).toBe(true);
+    expect((await levelLockedUpdate.json()).application.data.awardLevel).toBe(
+      "二等奖",
+    );
+
+    const legacy = await create("节能减排科技进步奖", `历史项目-${suffix}`);
+    const database = new DatabaseSync(
+      fileURLToPath(new URL("../data/award-system.db", import.meta.url)),
+    );
+    const legacyData = { ...legacy.data };
+    delete legacyData.awardLevel;
+    database
+      .prepare("UPDATE applications SET data_json = ? WHERE id = ?")
+      .run(JSON.stringify(legacyData), legacy.id);
+    database.close();
+
+    const legacyDetail = await page.request.get(
+      `${baseUrl}/api/applications/${legacy.id}`,
+    );
+    expect(legacyDetail.ok(), await legacyDetail.text()).toBe(true);
+    expect((await legacyDetail.json()).application.data.awardLevel).toBe(
+      "一等奖",
+    );
+    const legacyDuplicate = await page.request.post(
+      `${baseUrl}/api/applications/${legacy.id}/duplicate`,
+    );
+    expect(legacyDuplicate.ok(), await legacyDuplicate.text()).toBe(true);
+    const legacyCopy = (await legacyDuplicate.json()).application;
+    applications.push(legacyCopy.id);
+    expect(legacyCopy.data.awardLevel).toBe("一等奖");
+    const legacySubmit = await page.request.post(
+      `${baseUrl}/api/applications/${legacy.id}/submit`,
+    );
+    expect(legacySubmit.status()).toBe(422);
+    expect((await legacySubmit.json()).missing).not.toContain("申报等级");
 
     const overAgeSubmit = await page.request.post(
       `${baseUrl}/api/applications/${achievement.id}/submit`,
@@ -183,23 +273,43 @@ test("each award loads its own form, validation and preview profile", async ({
       "候选人申报年末年龄须在 60 周岁及以下",
     );
 
-    for (let index = 0; index < 20; index += 1) {
-      const upload = await uploadMaterial(achievement.id, "achievement_other");
-      expect(upload.ok(), await upload.text()).toBe(true);
-    }
-    const extraOptionalMaterial = await uploadMaterial(
+    const optionalMaterial = await uploadMaterial(
       achievement.id,
       "achievement_other",
     );
-    expect(extraOptionalMaterial.status()).toBe(422);
-    expect((await extraOptionalMaterial.json()).message).toContain(
-      "不得超过 20 个文件",
+    expect(optionalMaterial.ok(), await optionalMaterial.text()).toBe(true);
+    const optionalFile = (await optionalMaterial.json()).file;
+    const optionalReplacement = await uploadMaterial(
+      achievement.id,
+      "achievement_other",
+      {
+        name: "achievement-other-latest.png",
+        mimeType: "image/png",
+        buffer: tinyPng,
+      },
     );
+    expect(optionalReplacement.ok(), await optionalReplacement.text()).toBe(
+      true,
+    );
+    const replacementFile = (await optionalReplacement.json()).file;
+    const supersededDownload = await page.request.get(
+      `${baseUrl}/api/applications/${achievement.id}/files/${optionalFile.id}/download`,
+    );
+    expect(supersededDownload.status()).toBe(404);
+    const currentFiles = await page.request.get(
+      `${baseUrl}/api/applications/${achievement.id}/files`,
+    );
+    expect(currentFiles.ok(), await currentFiles.text()).toBe(true);
+    expect(
+      (await currentFiles.json()).list.filter(
+        (file) => file.file_type === "achievement_other",
+      ),
+    ).toEqual([expect.objectContaining({ id: replacementFile.id })]);
     const optionalOnlySubmit = await page.request.post(
       `${baseUrl}/api/applications/${achievement.id}/submit`,
     );
     expect(optionalOnlySubmit.status()).toBe(422);
-    expect((await optionalOnlySubmit.json()).missing).toContain(
+    expect((await optionalOnlySubmit.json()).missing).not.toContain(
       "科技奖励和荣誉证明",
     );
 
@@ -211,19 +321,11 @@ test("each award loads its own form, validation and preview profile", async ({
       const upload = await uploadMaterial(achievement.id, category);
       expect(upload.ok(), await upload.text()).toBe(true);
     }
-    for (let index = 0; index < 5; index += 1) {
-      const upload = await uploadMaterial(
-        achievement.id,
-        "achievement_publications",
-      );
-      expect(upload.ok(), await upload.text()).toBe(true);
-    }
-    const extraPaper = await uploadMaterial(
+    const publication = await uploadMaterial(
       achievement.id,
       "achievement_publications",
     );
-    expect(extraPaper.status()).toBe(422);
-    expect((await extraPaper.json()).message).toContain("不得超过 5 个文件");
+    expect(publication.ok(), await publication.text()).toBe(true);
     const longAchievementPdf = await uploadMaterial(
       achievement.id,
       "achievement_benefits",
@@ -233,7 +335,10 @@ test("each award loads its own form, validation and preview profile", async ({
         buffer: longPdf,
       },
     );
-    expect(longAchievementPdf.ok(), await longAchievementPdf.text()).toBe(true);
+    expect(longAchievementPdf.status()).toBe(422);
+    expect((await longAchievementPdf.json()).message).toContain(
+      "附件总页数不得超过 40 页",
+    );
 
     const correctedAge = await page.request.put(
       `${baseUrl}/api/applications/${achievement.id}`,
@@ -357,29 +462,13 @@ test("each award loads its own form, validation and preview profile", async ({
       },
     );
     expect(validProgress.ok(), await validProgress.text()).toBe(true);
-    const missingProjectFiles = await page.request.post(
+    const projectWithoutAttachments = await page.request.post(
       `${baseUrl}/api/applications/${progress.id}/submit`,
     );
-    const missingProjectFileErrors = (await missingProjectFiles.json()).missing;
-    expect(missingProjectFileErrors).toEqual(
-      expect.arrayContaining([
-        "1. 技术证明材料",
-        "2. 应用证明",
-        "3. 科技成果评价报告",
-        "4. 科技查新报告",
-        "5. 国家发明专利证明",
-        "6. 主要完成人身份证",
-        "7. 主要完成单位营业执照",
-      ]),
-    );
-    for (const category of requiredProjectMaterials) {
-      const upload = await uploadMaterial(progress.id, category);
-      expect(upload.ok(), await upload.text()).toBe(true);
-    }
-    const progressSubmit = await page.request.post(
-      `${baseUrl}/api/applications/${progress.id}/submit`,
-    );
-    expect(progressSubmit.ok(), await progressSubmit.text()).toBe(true);
+    expect(
+      projectWithoutAttachments.ok(),
+      await projectWithoutAttachments.text(),
+    ).toBe(true);
 
     await seedProject(invention, "2024-10", "2026-09");
     const shortInventionSubmit = await page.request.post(
@@ -430,7 +519,9 @@ test("each award loads its own form, validation and preview profile", async ({
       .getByRole("button", { name: achievementTitle, exact: true })
       .click();
     await expect(page.getByRole("heading", { name: "基本情况" })).toBeVisible();
-    await expect(page.getByText("奖项在创建后锁定")).toBeVisible();
+    await expect(
+      page.getByText("奖种和等级在创建后锁定", { exact: false }),
+    ).toBeVisible();
     await expect(
       page.getByRole("button", { name: /所获科技奖励和荣誉称号情况/ }),
     ).toBeVisible();
@@ -483,13 +574,9 @@ test("each award loads its own form, validation and preview profile", async ({
       page.getByRole("heading", { name: /八、附件|九、真实性承诺书/ }),
     ).toHaveCount(0);
     const downloadPromise = page.waitForEvent("download");
-    await page.getByRole("button", { name: "导出系统生成 PDF" }).click();
+    await page.getByRole("button", { name: "导出 PDF", exact: true }).click();
     const download = await downloadPromise;
-    const stream = await download.createReadStream();
-    let downloadedBytes = 0;
-    for await (const chunk of stream) downloadedBytes += chunk.length;
     expect(download.suggestedFilename()).toMatch(/\.pdf$/i);
-    expect(downloadedBytes).toBeGreaterThan(10_000);
     const previewPages = page.locator(".preview-page");
     const previewScreenshotCount = Math.min(await previewPages.count(), 5);
     for (let index = 0; index < previewScreenshotCount; index += 1) {

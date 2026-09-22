@@ -157,18 +157,6 @@ const projectAttachmentMaterials = [
   ],
 ];
 
-// The filling instructions require items 1-7 for project awards. Item 8 is
-// conditional and is uploaded when it applies to the project.
-const projectRequiredAttachmentGroups = [
-  { label: "1. 技术证明材料", categories: ["technical_proof"] },
-  { label: "2. 应用证明", categories: ["application_proof"] },
-  { label: "3. 科技成果评价报告", categories: ["evaluation_report"] },
-  { label: "4. 科技查新报告", categories: ["novelty_report"] },
-  { label: "5. 国家发明专利证明", categories: ["patent_proof"] },
-  { label: "6. 主要完成人身份证", categories: ["inventor_id"] },
-  { label: "7. 主要完成单位营业执照", categories: ["unit_license"] },
-];
-
 const profiles = {
   [AWARD_TYPES.ACHIEVEMENT]: {
     value: AWARD_TYPES.ACHIEVEMENT,
@@ -178,10 +166,17 @@ const profiles = {
     subjectLabel: "候选人姓名",
     summary: "奖励长期活跃在节能减排科技前沿并作出重大原创贡献的个人。",
     conditions: "候选人申报年末不超过 60 周岁，须为主要发明成果第一完成人。",
+    awardLevels: [
+      {
+        value: "不分等级",
+        label: "不分等级",
+        description: "面向个人申报，每年授奖人数不超过 20 人。",
+        maxPeople: 1,
+        maxUnits: 0,
+      },
+    ],
     sections: achievementSections,
     minimumApplicationYears: null,
-    maxPeople: 1,
-    maxUnits: 0,
     detailContentLabel: "候选人代表性科技贡献",
     innovationLabel: "候选人核心成就",
     recommendationMaterials: [
@@ -220,27 +215,8 @@ const profiles = {
         "可选上传候选人科技创新、客观评价和学术贡献等证明，不超过 20 个文件。",
       ],
     ],
-    requiredAttachmentGroups: [
-      {
-        label: "科技奖励和荣誉证明",
-        categories: ["achievement_honors"],
-      },
-      {
-        label: "代表性论文或专著",
-        categories: [
-          "achievement_papers",
-          "achievement_books",
-          "achievement_publications",
-        ],
-      },
-      { label: "知识产权证明", categories: ["achievement_ip"] },
-      { label: "科研项目证明", categories: ["achievement_research"] },
-      { label: "效益证明", categories: ["achievement_benefits"] },
-    ],
-    fileLimits: {
-      achievement_publications: 5,
-      achievement_other: 20,
-    },
+    requiredAttachmentGroups: [],
+    fileLimits: {},
   },
   [AWARD_TYPES.PROGRESS]: {
     value: AWARD_TYPES.PROGRESS,
@@ -250,6 +226,29 @@ const profiles = {
     subjectLabel: "项目名称",
     summary: "奖励在技术创新、成果应用和产业化方面推动行业科技进步的项目。",
     conditions: "成果实践应用超过 1 年，近 2 年完成国家科技成果登记系统评价。",
+    awardLevels: [
+      {
+        value: "一等奖",
+        label: "一等奖",
+        description: "单项授奖人数不超过 15 人，授奖单位不超过 10 个。",
+        maxPeople: 15,
+        maxUnits: 10,
+      },
+      {
+        value: "二等奖",
+        label: "二等奖",
+        description: "单项授奖人数不超过 10 人，授奖单位不超过 7 个。",
+        maxPeople: 10,
+        maxUnits: 7,
+      },
+      {
+        value: "三等奖",
+        label: "三等奖",
+        description: "",
+        maxPeople: null,
+        maxUnits: null,
+      },
+    ],
     sections: progressSections,
     detailFields: [
       ["background", "1．立项背景"],
@@ -268,13 +267,11 @@ const profiles = {
       ["application", "应用情况"],
     ],
     minimumApplicationYears: 1,
-    maxPeople: 15,
-    maxUnits: 10,
     detailContentLabel: "详细技术内容或科学研究内容",
     innovationLabel: "主要技术创新点",
     recommendationMaterials: projectRecommendationMaterials,
     attachmentMaterials: projectAttachmentMaterials,
-    requiredAttachmentGroups: projectRequiredAttachmentGroups,
+    requiredAttachmentGroups: [],
     fileLimits: {},
   },
   [AWARD_TYPES.INVENTION]: {
@@ -287,6 +284,29 @@ const profiles = {
       "奖励国内外首创并在新工艺、新材料、新系统能效提升方面取得突破的技术发明。",
     conditions:
       "成果试验、应用超过 2 年，近 2 年完成国家科技成果登记系统评价。",
+    awardLevels: [
+      {
+        value: "一等奖",
+        label: "一等奖",
+        description: "单项授奖人数不超过 10 人；主要完成单位须具有法人资格。",
+        maxPeople: 10,
+        maxUnits: null,
+      },
+      {
+        value: "二等奖",
+        label: "二等奖",
+        description: "单项授奖人数不超过 6 人；主要完成单位须具有法人资格。",
+        maxPeople: 6,
+        maxUnits: null,
+      },
+      {
+        value: "三等奖",
+        label: "三等奖",
+        description: "",
+        maxPeople: null,
+        maxUnits: null,
+      },
+    ],
     sections: inventionSections,
     detailFields: [
       ["background", "1．立项背景"],
@@ -305,13 +325,11 @@ const profiles = {
       ["application", "应用情况"],
     ],
     minimumApplicationYears: 2,
-    maxPeople: 10,
-    maxUnits: 0,
     detailContentLabel: "技术原理、技术方法及核心措施",
     innovationLabel: "主要技术发明点",
     recommendationMaterials: projectRecommendationMaterials,
     attachmentMaterials: projectAttachmentMaterials,
-    requiredAttachmentGroups: projectRequiredAttachmentGroups,
+    requiredAttachmentGroups: [],
     fileLimits: {},
   },
 };
@@ -320,6 +338,20 @@ export const awardProfiles = Object.freeze(Object.values(profiles));
 
 export function getAwardProfile(value) {
   return profiles[value] || profiles[AWARD_TYPES.PROGRESS];
+}
+
+export function getAwardLevelRule(awardType, awardLevel) {
+  const profile = getAwardProfile(awardType);
+  return (
+    profile.awardLevels.find(({ value }) => value === awardLevel) ||
+    profile.awardLevels[0]
+  );
+}
+
+export function isValidAwardLevel(awardType, awardLevel) {
+  return getAwardProfile(awardType).awardLevels.some(
+    ({ value }) => value === awardLevel,
+  );
 }
 
 export function getAwardSections(value) {
@@ -334,9 +366,12 @@ export function getAwardSections(value) {
     uploadMode:
       index >= 4 && index <= 6
         ? "form"
-        : signedChapterKeys.has(key)
-          ? "signed"
-          : "word",
+        : profile.mode === "project" &&
+            ["unitRecommendation", "expertRecommendation"].includes(key)
+          ? "document"
+          : signedChapterKeys.has(key)
+            ? "signed"
+            : "word",
     requirement:
       chapterRequirements[key] ||
       "请严格按照本章模板中的栏目、顺序、字数限制和填写说明完成内容。",

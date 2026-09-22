@@ -1,5 +1,9 @@
 import { expect, test } from "@playwright/test";
 import fs from "node:fs/promises";
+import { execFile } from "node:child_process";
+import os from "node:os";
+import path from "node:path";
+import { promisify } from "node:util";
 import { deflateSync } from "node:zlib";
 import { jsPDF } from "jspdf";
 import JSZip from "jszip";
@@ -11,6 +15,7 @@ import {
 } from "./application-fixtures.mjs";
 
 const baseUrl = process.env.TEST_BASE_URL || "http://127.0.0.1:4174";
+const execFileAsync = promisify(execFile);
 const requiredProjectMaterials = [
   "technical_proof",
   "application_proof",
@@ -20,6 +25,744 @@ const requiredProjectMaterials = [
   "inventor_id",
   "unit_license",
 ];
+
+test("achievement tables match page one and rich content is not clipped", async ({
+  page,
+}) => {
+  test.setTimeout(90_000);
+  const suffix = `${Date.now()}${Math.floor(Math.random() * 1000)}`;
+  const username = `fonttest${suffix}`;
+  const title = `个人奖项排版验收-${suffix}`;
+  let applicationId;
+
+  const registerResponse = await page.request.post(
+    `${baseUrl}/api/auth/register`,
+    {
+      data: {
+        username,
+        email: `${username}@example.test`,
+        displayName: "个人奖项排版验收用户",
+        password: `Achievement-${suffix}`,
+      },
+    },
+  );
+  expect(registerResponse.ok(), await registerResponse.text()).toBe(true);
+
+  const createResponse = await page.request.post(
+    `${baseUrl}/api/applications`,
+    {
+      data: {
+        title,
+        year: 2026,
+        awardType: "节能减排科技成就奖",
+        workflowMode: "form",
+      },
+    },
+  );
+  const createBody = await createResponse.json();
+  expect(createResponse.ok(), JSON.stringify(createBody)).toBe(true);
+  applicationId = createBody.application.id;
+
+  try {
+    const imageResponse = await page.request.post(
+      `${baseUrl}/api/applications/${applicationId}/files`,
+      {
+        multipart: {
+          category: "content_image:transformation",
+          file: {
+            name: "achievement-layout.png",
+            mimeType: "image/png",
+            buffer: tinyPng,
+          },
+        },
+      },
+    );
+    const imageBody = await imageResponse.json();
+    expect(imageResponse.ok(), JSON.stringify(imageBody)).toBe(true);
+    const imageUrl = `/api/applications/${applicationId}/files/${imageBody.file.id}/download?inline=1`;
+    const denseRows = Array.from(
+      { length: 8 },
+      (_, index) =>
+        `<tr><td><p style="margin: 12px 0; text-indent: 2em; line-height: 2">技术指标 ${index + 1}</p></td><td>成果转化和推广应用情况说明 ${index + 1}</td><td>达到行业先进水平</td></tr>`,
+    ).join("");
+    const transformation = [
+      "<p>科技成果转化分页起始标记</p>",
+      `<p><img src="${imageUrl}" alt="成果转化验收图片" style="width: 80%"></p>`,
+      `<p>${"成果已在多家单位完成推广应用。".repeat(10)}</p>`,
+      "<p>表 1 科技成果转化情况表</p>",
+      `<table style="width: 1200px"><colgroup><col style="width: 360px"><col style="width: 420px"><col style="width: 420px"></colgroup><tbody>${denseRows}</tbody></table>`,
+      "<p>表后正文应与表格连续排版。</p>",
+      `<p>${"项目形成了稳定的产业化应用能力。".repeat(12)}</p>`,
+      "<p>科技成果转化分页结束标记</p>",
+    ].join("");
+    const records = Array.from({ length: 6 }, (_, index) => ({
+      name: `个人奖项记录 ${index + 1}`,
+      org: "中国节能测试单位",
+      date: "2026-09-04",
+      totalPeople: "5",
+      personalRank: "1",
+    }));
+    const seedResponse = await page.request.put(
+      `${baseUrl}/api/applications/${applicationId}`,
+      {
+        data: {
+          data: completeProjectData(title, {
+            workSummary: "候选人长期从事节能减排科技工作。",
+            candidate: {
+              birthDate: "1986-05-04",
+              workUnit: "北京理工大学",
+            },
+            awardRecords: records,
+            paperRecords: records.map((record) => ({
+              title: record.name,
+              contribution: "本人完成主要研究工作",
+            })),
+            ipRecords: records.map((record) => ({
+              name: record.name,
+              type: "发明专利",
+              country: "中国",
+              authorizationNumber: `ZL2026${record.totalPeople}`,
+            })),
+            researchRecords: records,
+            engineeringRecords: records,
+            transformation,
+          }),
+        },
+      },
+    );
+    expect(seedResponse.ok(), await seedResponse.text()).toBe(true);
+
+    for (const category of [
+      "achievement_honors",
+      "achievement_publications",
+      "achievement_ip",
+      "achievement_research",
+      "achievement_benefits",
+    ]) {
+      const uploadResponse = await page.request.post(
+        `${baseUrl}/api/applications/${applicationId}/files`,
+        {
+          multipart: {
+            category,
+            file: {
+              name: `${category}.png`,
+              mimeType: "image/png",
+              buffer: tinyPng,
+            },
+          },
+        },
+      );
+      expect(uploadResponse.ok(), await uploadResponse.text()).toBe(true);
+    }
+
+    await page.goto(baseUrl);
+    await page.getByRole("button", { name: title, exact: true }).click();
+    await page.getByRole("button", { name: "生成预览" }).click();
+    await expect(page.locator(".preview-pages")).toHaveClass(
+      /preview-pages--achievement/,
+    );
+
+    const tableFonts = await page.evaluate(() => {
+      const basic = document.querySelector(
+        ".preview-achievement-basic > table td",
+      );
+      const sections = [
+        "honors",
+        "publications",
+        "achievementIp",
+        "research",
+        "engineering",
+      ];
+      return {
+        basic: getComputedStyle(basic).fontSize,
+        sections: sections.map(
+          (key) =>
+            getComputedStyle(
+              document.querySelector(
+                `.preview-table-page[data-section-key="${key}"] td`,
+              ),
+            ).fontSize,
+        ),
+      };
+    });
+    expect(tableFonts.basic).toBe("14.6667px");
+    expect(tableFonts.sections).toEqual(
+      Array.from({ length: 5 }, () => tableFonts.basic),
+    );
+
+    const transformationPages = page.locator(
+      '.preview-text-page[data-section-key="transformation"]',
+    );
+    expect(await transformationPages.count()).toBeGreaterThan(1);
+    await expect(transformationPages.last()).toContainText(
+      "科技成果转化分页结束标记",
+    );
+    const richTablePage = transformationPages.filter({
+      has: page.locator(".preview-rich-text table"),
+    });
+    await expect(richTablePage).toContainText("表 1 科技成果转化情况表");
+    await expect(richTablePage).toContainText("表后正文应与表格连续排版。");
+    const richTableLayout = await richTablePage
+      .locator(".preview-rich-text table")
+      .evaluate((table) => {
+        const container = table.closest(".preview-rich-text");
+        const cell = table.querySelector("td");
+        const cellParagraph = table.querySelector("td p");
+        const column = table.querySelector("col");
+        const tableWidth = table.getBoundingClientRect().width;
+        const cellStyle = getComputedStyle(cell);
+        return {
+          fitsContainer:
+            tableWidth <= container.getBoundingClientRect().width + 0.5,
+          tableLayout: getComputedStyle(table).tableLayout,
+          columnsFitTable:
+            Number.parseFloat(getComputedStyle(column).width) <= tableWidth &&
+            Number.parseFloat(cellStyle.width) <= tableWidth,
+          cellFontSize: cellStyle.fontSize,
+          cellPaddingTop: Number.parseFloat(cellStyle.paddingTop),
+          paragraphMarginTop: getComputedStyle(cellParagraph).marginTop,
+          paragraphMarginBottom: getComputedStyle(cellParagraph).marginBottom,
+          paragraphTextIndent: getComputedStyle(cellParagraph).textIndent,
+          paragraphLineHeight: getComputedStyle(cellParagraph).lineHeight,
+        };
+      });
+    expect(richTableLayout).toEqual({
+      fitsContainer: true,
+      tableLayout: "auto",
+      columnsFitTable: true,
+      cellFontSize: "10.6667px",
+      cellPaddingTop: expect.any(Number),
+      paragraphMarginTop: "0px",
+      paragraphMarginBottom: "0px",
+      paragraphTextIndent: "0px",
+      paragraphLineHeight: "12.2667px",
+    });
+    expect(richTableLayout.cellPaddingTop).toBeLessThan(2);
+    const clippingAudit = await transformationPages.evaluateAll((pages) =>
+      pages.map((previewPage) => {
+        const body = previewPage.querySelector(".preview-body-text");
+        const footer = previewPage.querySelector(":scope > footer");
+        return {
+          bodyFits: body.scrollHeight <= body.clientHeight + 1,
+          clearsFooter:
+            body.getBoundingClientRect().bottom + 8 <=
+            footer.getBoundingClientRect().top,
+        };
+      }),
+    );
+    expect(clippingAudit.every(({ bodyFits }) => bodyFits)).toBe(true);
+    expect(clippingAudit.every(({ clearsFooter }) => clearsFooter)).toBe(true);
+    await page
+      .locator('.preview-table-page[data-section-key="honors"]')
+      .first()
+      .screenshot({
+        path: "test-results/achievement-honors-font.png",
+        style: ".preview-toolbar { visibility: hidden !important; }",
+      });
+    await richTablePage.screenshot({
+      path: "test-results/achievement-transformation-page.png",
+      style: ".preview-toolbar { visibility: hidden !important; }",
+    });
+  } finally {
+    if (applicationId) {
+      await page.request.delete(`${baseUrl}/api/applications/${applicationId}`);
+    }
+  }
+});
+
+test("progress preview preserves rich text formatting and compact tables", async ({
+  page,
+}) => {
+  test.setTimeout(90_000);
+  const suffix = `${Date.now()}${Math.floor(Math.random() * 1000)}`;
+  const username = `fonttest${suffix}`;
+  const title = `科技进步奖字号验收-${suffix}`;
+  let applicationId;
+
+  const registerResponse = await page.request.post(
+    `${baseUrl}/api/auth/register`,
+    {
+      data: {
+        username,
+        email: `${username}@example.test`,
+        displayName: "字号验收用户",
+        password: `Font-${suffix}`,
+      },
+    },
+  );
+  expect(registerResponse.ok(), await registerResponse.text()).toBe(true);
+
+  const createResponse = await page.request.post(
+    `${baseUrl}/api/applications`,
+    {
+      data: {
+        title,
+        year: 2026,
+        awardType: "节能减排科技进步奖",
+        workflowMode: "form",
+      },
+    },
+  );
+  const createBody = await createResponse.json();
+  expect(createResponse.ok(), JSON.stringify(createBody)).toBe(true);
+  applicationId = createBody.application.id;
+
+  try {
+    const seedResponse = await page.request.put(
+      `${baseUrl}/api/applications/${applicationId}`,
+      {
+        data: {
+          data: completeProjectData(title, {
+            introduction:
+              '<p style="text-align: center"><span style="font-family: Arial; font-size: 7.5px; color: #c00000">项目简介保留填写格式。</span></p>',
+            technicalContent:
+              '<p style="text-align: left"><span style="font-family: KaiTi; font-size: 9px; color: #0070c0">详细内容保留填写格式。</span></p><p>表 1 国内外技术对比情况表</p><table style="width: 1200px"><colgroup><col style="width: 240px"><col style="width: 180px"><col style="width: 260px"><col style="width: 180px"><col style="width: 180px"><col style="width: 180px"></colgroup><tbody><tr><th colspan="3"><span style="font-size: 24px">紧凑表头</span></th><th>国内外先进水平</th><th>本项目技术</th><th>对比结果</th></tr><tr><th rowspan="3">安全承载</th><td rowspan="3">资源辨识</td><td><p style="margin: 12px 0; text-indent: 2em; line-height: 2">星顶光伏测算准确度</p></td><td>77.55%</td><td>91%</td><td>国际领先</td></tr><tr><td>承载力评估规模</td><td>局部区域</td><td>省域百万级节点</td><td>国际首次实现</td></tr><tr><td>承载力评估颗粒度</td><td>区县级</td><td>村庄级和配变级</td><td>国际领先</td></tr><tr><th rowspan="3">协同调控</th><td rowspan="2">感知预测</td><td>功率实时感知准确率</td><td>92.5%</td><td>97.55%</td><td>国际领先</td></tr><tr><td>辐照度预测准确率</td><td>93.25%</td><td>95.98%</td><td>国际领先</td></tr><tr><td>调控消纳</td><td>省级分布式资源控制云平台</td><td>接入设备数量超过一百万台</td><td>接入设备数量超过一千万台</td><td>国际领先</td></tr></tbody></table><p>表格之后的正文必须完整显示。</p>',
+            comparison:
+              '<p><span>同类技术比较前文段。</span></p><p style="margin: 24px 0 3px; text-indent: 0; line-height: 1; text-align: right"><span style="font-family: Arial">同类技术比较末段。</span></p>',
+            application:
+              '<p><span>应用现状前文段。</span></p><p style="margin: 24px 0 3px; text-indent: 0; line-height: 1; text-align: right"><span style="font-family: Arial">应用现状末段。</span></p>',
+            social:
+              '<p><span>社会效益前文段。</span></p><p><span style="font-family: Arial">社会效益末段。</span></p>',
+            economic:
+              '<p style="text-align: center"><span style="font-family: FangSong; font-size: 10.5px">经济效益保留填写格式。</span></p>',
+            people: [
+              {
+                ...completePerson("完成人字号验收"),
+                contribution:
+                  '<p style="text-align: right"><span style="font-family: Arial; font-size: 7.5px">个人技术贡献保留填写格式。</span></p>',
+              },
+            ],
+            units: [
+              {
+                ...completeUnit("完成单位字号验收"),
+                contribution:
+                  '<p style="text-align: center"><span style="font-family: KaiTi; font-size: 10.5px">完成单位贡献保留填写格式。</span></p>',
+              },
+            ],
+          }),
+        },
+      },
+    );
+    expect(seedResponse.ok(), await seedResponse.text()).toBe(true);
+
+    for (const category of [
+      "recommendation_signed",
+      ...requiredProjectMaterials,
+    ]) {
+      const upload = await page.request.post(
+        `${baseUrl}/api/applications/${applicationId}/files`,
+        {
+          multipart: {
+            category,
+            file: {
+              name: `${category}.png`,
+              mimeType: "image/png",
+              buffer: tinyPng,
+            },
+          },
+        },
+      );
+      expect(upload.ok(), await upload.text()).toBe(true);
+    }
+
+    await page.goto(baseUrl);
+    await page.getByRole("button", { name: title, exact: true }).click();
+    await page.getByRole("button", { name: "预览当前申报书" }).click();
+    await expect(page.locator(".preview-pages")).toHaveClass(
+      /preview-pages--progress/,
+    );
+
+    const fontSizes = await page.evaluate(() => {
+      const size = (selector) =>
+        getComputedStyle(document.querySelector(selector)).fontSize;
+      return {
+        basicTable: size(".preview-basic-page > table"),
+        sectionTitle: size(".preview-form-page > h3"),
+        body: size(".preview-body-text"),
+        ipTable: size(".preview-ip-page .preview-subtable table"),
+        entityTable: size(".preview-entity-page table"),
+        introductionNestedText: size(
+          '.preview-page[data-section-key="introduction"] td span',
+        ),
+        detailsNestedText: size(
+          '.preview-page[data-section-key="details"] td span',
+        ),
+        tableUnit: size(".preview-economic-page .preview-table-unit"),
+        awardNote: size(".preview-award-page .preview-note-row td"),
+        pageNumber: size(".preview-page > footer"),
+      };
+    });
+    expect(fontSizes).toEqual({
+      basicTable: "16px",
+      sectionTitle: "21.3333px",
+      body: "16px",
+      ipTable: "16px",
+      entityTable: "16px",
+      introductionNestedText: "7.5px",
+      detailsNestedText: "9px",
+      tableUnit: "16px",
+      awardNote: "16px",
+      pageNumber: "14px",
+    });
+    const detailRichTableLayout = await page
+      .locator(
+        '.preview-detail-page[data-section-key="details"] .preview-rich-text table',
+      )
+      .first()
+      .evaluate((table) => {
+        const container = table.closest(".preview-rich-text");
+        const cell = table.querySelector("td");
+        const column = table.querySelector("col");
+        const nestedText = table.querySelector("span");
+        const cellParagraph = table.querySelector("td p");
+        const cellStyle = getComputedStyle(cell);
+        const tableWidth = table.getBoundingClientRect().width;
+        return {
+          fitsContainer:
+            tableWidth <= container.getBoundingClientRect().width + 0.5,
+          tableLayout: getComputedStyle(table).tableLayout,
+          columnsFitTable:
+            Number.parseFloat(getComputedStyle(column).width) <= tableWidth &&
+            Number.parseFloat(cellStyle.width) <= tableWidth,
+          nestedFontSize: getComputedStyle(nestedText).fontSize,
+          cellPaddingTop: Number.parseFloat(cellStyle.paddingTop),
+          paragraphMarginTop: getComputedStyle(cellParagraph).marginTop,
+          paragraphMarginBottom: getComputedStyle(cellParagraph).marginBottom,
+          paragraphTextIndent: getComputedStyle(cellParagraph).textIndent,
+          paragraphLineHeight: getComputedStyle(cellParagraph).lineHeight,
+          bodyFits: container.scrollHeight <= container.clientHeight + 1,
+          tableFitsBody:
+            table.getBoundingClientRect().bottom <=
+            container.getBoundingClientRect().bottom + 1,
+        };
+      });
+    expect(detailRichTableLayout).toEqual({
+      fitsContainer: true,
+      tableLayout: "auto",
+      columnsFitTable: true,
+      nestedFontSize: "10.6667px",
+      cellPaddingTop: expect.any(Number),
+      paragraphMarginTop: "0px",
+      paragraphMarginBottom: "0px",
+      paragraphTextIndent: "0px",
+      paragraphLineHeight: "12.2667px",
+      bodyFits: true,
+      tableFitsBody: true,
+    });
+    expect(detailRichTableLayout.cellPaddingTop).toBeLessThan(2);
+    for (const marker of ["同类技术比较", "应用现状"]) {
+      const paragraphs = page
+        .locator('.preview-detail-page[data-section-key="details"]')
+        .filter({ hasText: `${marker}末段。` })
+        .locator(".preview-rich-text > p");
+      const paragraphStyles = await paragraphs.evaluateAll((nodes) =>
+        nodes.map((node) => {
+          const style = getComputedStyle(node);
+          return {
+            marginTop: style.marginTop,
+            marginBottom: style.marginBottom,
+            textIndent: style.textIndent,
+            lineHeight: style.lineHeight,
+            textAlign: style.textAlign,
+          };
+        }),
+      );
+      expect(paragraphStyles).toHaveLength(2);
+      expect(paragraphStyles[0].textAlign).toBe("justify");
+      expect(paragraphStyles[1].textAlign).toBe("right");
+
+      const chineseFontFamilies = await page
+        .locator('.preview-detail-page[data-section-key="details"]')
+        .filter({ hasText: `${marker}末段。` })
+        .evaluate((section, paragraphMarker) => {
+          const paragraphs = [
+            ...section.querySelectorAll(".preview-rich-text > p"),
+          ];
+          const preceding = paragraphs.find((node) =>
+            node.textContent.includes(`${paragraphMarker}前文段。`),
+          );
+          const final = paragraphs.find((node) =>
+            node.textContent.includes(`${paragraphMarker}末段。`),
+          );
+          return {
+            preceding: getComputedStyle(preceding.querySelector("span"))
+              .fontFamily,
+            final: getComputedStyle(final.querySelector("span")).fontFamily,
+          };
+        }, marker);
+      expect(chineseFontFamilies.preceding).toContain("SimSun");
+      expect(chineseFontFamilies.final).toBe("Arial");
+    }
+    const socialFontFamilies = await page
+      .locator('.preview-detail-page[data-section-key="details"]')
+      .filter({ hasText: "社会效益末段。" })
+      .evaluate((section) => {
+        const paragraphs = [
+          ...section.querySelectorAll(".preview-rich-text > p"),
+        ];
+        const preceding = paragraphs.find((node) =>
+          node.textContent.includes("社会效益前文段。"),
+        );
+        const final = paragraphs.find((node) =>
+          node.textContent.includes("社会效益末段。"),
+        );
+        return {
+          preceding: getComputedStyle(preceding.querySelector("span"))
+            .fontFamily,
+          final: getComputedStyle(final.querySelector("span")).fontFamily,
+        };
+      });
+    expect(socialFontFamilies.preceding).toContain("SimSun");
+    expect(socialFontFamilies.final).toBe("Arial");
+    const richTablePage = page
+      .locator('.preview-detail-page[data-section-key="details"]')
+      .filter({ hasText: "紧凑表头" });
+    await expect(richTablePage).toContainText("表 1 国内外技术对比情况表");
+    await expect(richTablePage).toContainText("表格之后的正文必须完整显示。");
+    await expect(
+      richTablePage.locator(
+        ".preview-section-table > tbody > tr:first-child > th",
+      ),
+    ).not.toContainText("（续）");
+    await expect(page.getByText("表格之后的正文必须完整显示。")).toBeVisible();
+    const detailPageOverflowAudit = await page
+      .locator('.preview-detail-page[data-section-key="details"]')
+      .evaluateAll((pages) =>
+        pages.map((previewPage) => {
+          const body = previewPage.querySelector(".preview-body-text");
+          const footer = previewPage.querySelector(":scope > footer");
+          return {
+            bodyFits: body.scrollHeight <= body.clientHeight + 1,
+            clearsFooter:
+              body.getBoundingClientRect().bottom + 8 <=
+              footer.getBoundingClientRect().top,
+          };
+        }),
+      );
+    expect(detailPageOverflowAudit.every(({ bodyFits }) => bodyFits)).toBe(
+      true,
+    );
+    expect(
+      detailPageOverflowAudit.every(({ clearsFooter }) => clearsFooter),
+    ).toBe(true);
+    await richTablePage.screenshot({
+      path: "test-results/progress-detail-rich-table.png",
+      style: ".preview-toolbar { visibility: hidden !important; }",
+    });
+    const personTableFontAudit = await page
+      .locator(".preview-person-page table")
+      .evaluate((table) => {
+        const textElements = [...table.querySelectorAll("th, td, th *, td *")]
+          .filter(
+            (element) =>
+              element.textContent?.trim() &&
+              !element.closest(".preview-cell-rich"),
+          )
+          .map((element) => ({
+            tag: element.tagName,
+            className: element.className,
+            text: element.textContent.trim().slice(0, 24),
+            pixels: Number.parseFloat(getComputedStyle(element).fontSize),
+          }));
+        return {
+          minimum: Math.min(...textElements.map(({ pixels }) => pixels)),
+          undersized: textElements.filter(({ pixels }) => pixels < 16),
+        };
+      });
+    expect(personTableFontAudit.minimum).toBe(16);
+    expect(personTableFontAudit.undersized).toEqual([]);
+
+    for (const [marker, expected] of [
+      ["项目简介保留填写格式。", ["7.5px", "Arial", "center"]],
+      ["详细内容保留填写格式。", ["9px", "KaiTi", "left"]],
+      ["经济效益保留填写格式。", ["10.5px", "FangSong", "center"]],
+      ["个人技术贡献保留填写格式。", ["7.5px", "Arial", "right"]],
+      ["完成单位贡献保留填写格式。", ["10.5px", "KaiTi", "center"]],
+    ]) {
+      const styles = await page
+        .getByText(marker, { exact: true })
+        .evaluate((span) => ({
+          fontSize: getComputedStyle(span).fontSize,
+          fontFamily: getComputedStyle(span).fontFamily,
+          textAlign: getComputedStyle(span.closest("p")).textAlign,
+        }));
+      expect(styles).toEqual({
+        fontSize: expected[0],
+        fontFamily: expected[1],
+        textAlign: expected[2],
+      });
+    }
+    await expect(
+      page.getByText("项目简介保留填写格式。", { exact: true }),
+    ).toHaveCSS("color", "rgb(192, 0, 0)");
+    await expect(
+      page.getByText("详细内容保留填写格式。", { exact: true }),
+    ).toHaveCSS("color", "rgb(0, 112, 192)");
+
+    let exportPayload;
+    await page.route("**/api/pdf-export", async (route) => {
+      exportPayload = route.request().postDataJSON();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/pdf",
+        body: "%PDF-1.4\n%%EOF",
+      });
+    });
+    await page.getByRole("button", { name: "导出 PDF", exact: true }).click();
+    await expect.poll(() => exportPayload).toBeTruthy();
+    const exportedHtml = exportPayload.parts
+      .filter((part) => part.type === "html")
+      .map((part) => part.html)
+      .join("");
+    expect(exportedHtml).toContain("preview-progress-document");
+  } finally {
+    if (applicationId) {
+      await page.request.delete(`${baseUrl}/api/applications/${applicationId}`);
+    }
+  }
+});
+
+test("invention person and unit template fields use Song typeface at 12pt", async ({
+  page,
+}) => {
+  const suffix = `${Date.now()}${Math.floor(Math.random() * 1000)}`;
+  const username = `inventionfont${suffix}`;
+  const title = `技术发明奖固定字段验收-${suffix}`;
+  let applicationId;
+
+  const registration = await page.request.post(`${baseUrl}/api/auth/register`, {
+    data: {
+      username,
+      email: `${username}@example.test`,
+      displayName: "技术发明奖字体验收用户",
+      password: `InventionFont-${suffix}`,
+    },
+  });
+  expect(registration.ok(), await registration.text()).toBe(true);
+
+  try {
+    const created = await page.request.post(`${baseUrl}/api/applications`, {
+      data: {
+        title,
+        year: 2026,
+        awardType: "节能减排技术发明奖",
+        awardLevel: "二等奖",
+      },
+    });
+    const createBody = await created.json();
+    expect(created.ok(), JSON.stringify(createBody)).toBe(true);
+    applicationId = createBody.application.id;
+
+    const seeded = await page.request.put(
+      `${baseUrl}/api/applications/${applicationId}`,
+      {
+        data: {
+          data: completeProjectData(title, {
+            awardType: "节能减排技术发明奖",
+            awardLevel: "二等奖",
+            people: [completePerson("发明奖完成人")],
+            units: [completeUnit("发明奖完成单位")],
+          }),
+        },
+      },
+    );
+    expect(seeded.ok(), await seeded.text()).toBe(true);
+
+    await page.goto(baseUrl);
+    await page.getByRole("button", { name: title, exact: true }).click();
+    await page.getByRole("button", { name: "预览当前申报书" }).click();
+    await expect(page.locator(".preview-pages")).toHaveClass(
+      /preview-pages--invention/,
+    );
+    for (const [pageSelector, labels] of [
+      [".preview-person-page", ["姓 名", "性别", "排名"]],
+      [".preview-unit-page", ["单位名称", "所在地", "联系人"]],
+    ]) {
+      const fixedFields = page.locator(pageSelector).locator("th");
+      for (const label of labels) {
+        const cell = fixedFields.filter({ hasText: label }).first();
+        await expect(cell).toHaveCSS("font-size", "16px");
+        expect(
+          await cell.evaluate(
+            (element) => getComputedStyle(element).fontFamily,
+          ),
+        ).toContain("SimSun");
+      }
+    }
+
+    for (const selector of [
+      ".preview-person-page .preview-declaration-row td",
+      ".preview-person-page .preview-declaration-row td p",
+      ".preview-unit-page .preview-stamp-block",
+      ".preview-unit-page .preview-stamp-block > div",
+    ]) {
+      const fixedField = page.locator(selector).first();
+      await expect(fixedField).toHaveCSS("font-size", "16px");
+      expect(
+        await fixedField.evaluate(
+          (element) => getComputedStyle(element).fontFamily,
+        ),
+      ).toContain("SimSun");
+    }
+
+    const exportContextAudit = await page.evaluate(() => {
+      const wrapper = document.createElement("div");
+      wrapper.className = "pdf-export-document";
+      for (const selector of [".preview-person-page", ".preview-unit-page"]) {
+        const clone = document.querySelector(selector).cloneNode(true);
+        clone.classList.add("preview-invention-document");
+        wrapper.append(clone);
+      }
+      document.body.append(wrapper);
+      const selectors = [
+        ".preview-declaration-row td",
+        ".preview-declaration-row td p",
+        ".preview-stamp-block",
+        ".preview-stamp-block > div",
+      ];
+      const styles = selectors.map((selector) => {
+        const computed = getComputedStyle(wrapper.querySelector(selector));
+        return {
+          fontSize: computed.fontSize,
+          fontFamily: computed.fontFamily,
+        };
+      });
+      wrapper.remove();
+      return styles;
+    });
+    expect(exportContextAudit.every(({ fontSize }) => fontSize === "16px")).toBe(
+      true,
+    );
+    expect(
+      exportContextAudit.every(({ fontFamily }) =>
+        fontFamily.includes("SimSun"),
+      ),
+    ).toBe(true);
+
+    let exportPayload;
+    await page.route("**/api/pdf-export", async (route) => {
+      exportPayload = route.request().postDataJSON();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/pdf",
+        body: "%PDF-1.4\n%%EOF",
+      });
+    });
+    await page.getByRole("button", { name: "导出 PDF", exact: true }).click();
+    await expect.poll(() => exportPayload).toBeTruthy();
+    const exportedHtml = exportPayload.parts
+      .filter((part) => part.type === "html")
+      .map((part) => part.html)
+      .join("");
+    expect(exportedHtml).toContain("preview-invention-document");
+    expect(exportedHtml).toContain("preview-person-page");
+    expect(exportedHtml).toContain("preview-unit-page");
+  } finally {
+    if (applicationId) {
+      await page.request.delete(`${baseUrl}/api/applications/${applicationId}`);
+    }
+  }
+});
 
 function crc32(buffer) {
   let crc = 0xffffffff;
@@ -61,9 +804,11 @@ async function withTrailingBlankWordPage(buffer) {
   const zip = await JSZip.loadAsync(buffer);
   const documentPart = zip.file("word/document.xml");
   const xml = await documentPart.async("string");
-  const pageBreak =
-    '<w:p><w:r><w:br w:type="page"/></w:r></w:p><w:p></w:p>';
-  const next = xml.replace(/<w:sectPr(?:\s|>)/, (match) => `${pageBreak}${match}`);
+  const pageBreak = '<w:p><w:r><w:br w:type="page"/></w:r></w:p><w:p></w:p>';
+  const next = xml.replace(
+    /<w:sectPr(?:\s|>)/,
+    (match) => `${pageBreak}${match}`,
+  );
   zip.file("word/document.xml", next);
   return zip.generateAsync({ type: "nodebuffer" });
 }
@@ -71,7 +816,7 @@ async function withTrailingBlankWordPage(buffer) {
 test("rich media, entity pages and the complete PDF export stay intact", async ({
   page,
 }) => {
-  test.setTimeout(120_000);
+  test.setTimeout(180_000);
   const suffix = `${Date.now()}${Math.floor(Math.random() * 1000)}`;
   const username = `formtest${suffix}`;
   const title = `预览导出完整性验收-${suffix}`;
@@ -241,9 +986,7 @@ test("rich media, entity pages and the complete PDF export stay intact", async (
     );
 
     const expertRecommendationWord = await withTrailingBlankWordPage(
-      await fs.readFile(
-        "节能奖填报材料/科技进步奖/九、专家推荐意见.docx",
-      ),
+      await fs.readFile("节能奖填报材料/科技进步奖/九、专家推荐意见.docx"),
     );
     const expertRecommendationUpload = await page.request.post(
       `${baseUrl}/api/applications/${applicationId}/files`,
@@ -266,8 +1009,10 @@ test("rich media, entity pages and the complete PDF export stay intact", async (
 
     const signedDocument = new jsPDF();
     signedDocument.text("Signed declaration page 1", 20, 20);
-    signedDocument.addPage();
-    signedDocument.text("Signed declaration page 2", 20, 20);
+    for (let pageNumber = 2; pageNumber <= 51; pageNumber += 1) {
+      signedDocument.addPage();
+      signedDocument.text(`Signed declaration page ${pageNumber}`, 20, 20);
+    }
     const authenticityUpload = await page.request.post(
       `${baseUrl}/api/applications/${applicationId}/files`,
       {
@@ -300,10 +1045,9 @@ test("rich media, entity pages and the complete PDF export stay intact", async (
         },
       },
     );
-    expect(
-      confidentialityUpload.ok(),
-      await confidentialityUpload.text(),
-    ).toBe(true);
+    expect(confidentialityUpload.ok(), await confidentialityUpload.text()).toBe(
+      true,
+    );
 
     const integrityDocument = new jsPDF();
     integrityDocument.text("Integrity page 1", 20, 20);
@@ -373,9 +1117,27 @@ test("rich media, entity pages and the complete PDF export stay intact", async (
     }
 
     const basicPage = page.locator(".preview-basic-page");
+    const dateRowLayout = await basicPage
+      .locator("tbody tr:last-child")
+      .evaluate((row) => ({
+        height: row.getBoundingClientRect().height,
+        valuesStayOnOneLine: [
+          ...row.querySelectorAll(".preview-date-range-value"),
+        ].every(
+          (value) =>
+            value.getClientRects().length === 1 &&
+            value.scrollWidth <= value.clientWidth,
+        ),
+      }));
+    expect(dateRowLayout.height).toBeLessThanOrEqual(40);
+    expect(dateRowLayout.valuesStayOnOneLine).toBe(true);
     const basicTableFitsPage = await basicPage.evaluate((element) => {
-      const tableBox = element.querySelector(":scope > table").getBoundingClientRect();
-      const footerBox = element.querySelector(":scope > footer").getBoundingClientRect();
+      const tableBox = element
+        .querySelector(":scope > table")
+        .getBoundingClientRect();
+      const footerBox = element
+        .querySelector(":scope > footer")
+        .getBoundingClientRect();
       return tableBox.bottom + 12 < footerBox.top;
     });
     expect(basicTableFitsPage).toBe(true);
@@ -392,7 +1154,7 @@ test("rich media, entity pages and the complete PDF export stay intact", async (
             .getBoundingClientRect();
           return tableBox.bottom + 12 < footerBox.top;
         }),
-    );
+      );
     expect(personPagesClearFooter).toBe(true);
 
     const detailPage = page.locator(".preview-detail-page").first();
@@ -404,20 +1166,22 @@ test("rich media, entity pages and the complete PDF export stay intact", async (
     ).toHaveText(/^1．立项背景/);
 
     const submittedPages = page.locator(".preview-submitted-page");
-    await expect(submittedPages).toHaveCount(15);
+    await expect(submittedPages).toHaveCount(64);
     await expect(
       submittedPages.filter({ has: page.locator("img") }),
-    ).toHaveCount(13);
+    ).toHaveCount(62);
     for (const [sectionKey, expectedPages] of [
       ["unitRecommendation", 2],
       ["expertRecommendation", 1],
       ["attachments", 7],
-      ["authenticity", 2],
+      ["authenticity", 51],
       ["confidentiality", 2],
       ["integrity", 1],
     ]) {
       await expect(
-        page.locator(`.preview-submitted-page[data-section-key="${sectionKey}"]`),
+        page.locator(
+          `.preview-submitted-page[data-section-key="${sectionKey}"]`,
+        ),
       ).toHaveCount(expectedPages);
     }
     await expect(page.getByText("以本章上传 Word 为准。")).toHaveCount(0);
@@ -431,12 +1195,20 @@ test("rich media, entity pages and the complete PDF export stay intact", async (
     await recommendationWordPage.screenshot({
       path: "test-results/application-preview-submitted-word.png",
     });
-    for (const image of await submittedPages.locator("img").all()) {
-      await expect(image).toBeVisible();
-      await expect
-        .poll(() => image.evaluate((element) => element.naturalWidth))
-        .toBeGreaterThan(0);
-    }
+    await expect
+      .poll(() =>
+        submittedPages
+          .locator("img")
+          .evaluateAll((images) =>
+            images.every(
+              (image) =>
+                image.complete &&
+                image.naturalWidth > 0 &&
+                image.getBoundingClientRect().width > 0,
+            ),
+          ),
+      )
+      .toBe(true);
     const ipPage = page.locator(".preview-ip-page").first();
     await expect(ipPage.getByRole("heading", { level: 3 })).toHaveText(
       "五、申请、获得知识产权情况表",
@@ -491,7 +1263,9 @@ test("rich media, entity pages and the complete PDF export stay intact", async (
         ),
       )
       .toEqual(
-        Array.from({ length: previewPageCount }, (_, index) => String(index + 1)),
+        Array.from({ length: previewPageCount }, (_, index) =>
+          String(index + 1),
+        ),
       );
     for (let index = 0; index < Math.min(previewPageCount, 5); index += 1) {
       await previewPages.nth(index).screenshot({
@@ -531,19 +1305,112 @@ test("rich media, entity pages and the complete PDF export stay intact", async (
     );
     expect(overflowingPages).toEqual([]);
 
+    let completeExportPayload;
+    page.on("request", (request) => {
+      if (
+        request.method() === "POST" &&
+        new URL(request.url()).pathname === "/api/pdf-export" &&
+        !completeExportPayload
+      ) {
+        completeExportPayload = request.postDataJSON();
+      }
+    });
+    const exportStartedAt = Date.now();
     const downloadPromise = page.waitForEvent("download");
-    await page.getByRole("button", { name: "导出系统生成 PDF" }).click();
+    await page.getByRole("button", { name: "导出 PDF", exact: true }).click();
     const download = await downloadPromise;
     const stream = await download.createReadStream();
     const chunks = [];
     for await (const chunk of stream) chunks.push(chunk);
     const pdf = Buffer.concat(chunks);
-    const exportedPageCount =
-      pdf.toString("latin1").match(/\/Type \/Page\b/g)?.length || 0;
-
+    expect(Date.now() - exportStartedAt).toBeLessThan(30_000);
     expect(download.suggestedFilename()).toMatch(/\.pdf$/i);
-    expect(pdf.length).toBeGreaterThan(100_000);
-    expect(exportedPageCount).toBe(previewPageCount);
+    expect(
+      completeExportPayload.parts.filter((part) => part.type === "pdf"),
+    ).toHaveLength(3);
+    expect(
+      completeExportPayload.parts
+        .filter((part) => part.type === "html")
+        .map((part) => part.html)
+        .join(""),
+    ).not.toContain("data-source-pdf-id");
+
+    const pdfPath = path.join(os.tmpdir(), `ceca-export-${applicationId}.pdf`);
+    await fs.writeFile(pdfPath, pdf);
+    try {
+      const { stdout: pdfInfo } = await execFileAsync("pdfinfo", [pdfPath]);
+      const exportedPageCount = Number(
+        pdfInfo.match(/^Pages:\s+(\d+)/m)?.[1] || 0,
+      );
+      expect(exportedPageCount).toBe(previewPageCount);
+      const { stdout } = await execFileAsync("pdftotext", [pdfPath, "-"]);
+      const textPages = stdout.split("\f");
+      const introductionPage = textPages.findIndex((text) =>
+        text.includes("项目简介"),
+      );
+      expect(introductionPage).toBeGreaterThan(-1);
+      expect(textPages[introductionPage + 1]).toMatch(/项目简介|项目详细内容/);
+    } finally {
+      await fs.unlink(pdfPath).catch(() => {});
+    }
+
+    const independentExportHtml = [];
+    await page.route(
+      "**/api/pdf-export",
+      async (route) => {
+        const payload = route.request().postDataJSON();
+        independentExportHtml.push(
+          payload.html ||
+            payload.parts
+              .filter((part) => part.type === "html")
+              .map((part) => part.html)
+              .join(""),
+        );
+        await route.fulfill({
+          status: 200,
+          contentType: "application/pdf",
+          body: "%PDF-1.4\n%%EOF",
+        });
+      },
+      { times: 4 },
+    );
+    const independentExports = [
+      {
+        button: "首页",
+        pageMarker: /(?:class="| )preview-basic-page(?: |")/g,
+        pageCount: 1,
+      },
+      {
+        button: "完成人",
+        pageMarker: /(?:class="| )preview-person-page(?: |")/g,
+        pageCount: 2,
+      },
+      {
+        button: "完成单位",
+        pageMarker: /(?:class="| )preview-unit-page(?: |")/g,
+        pageCount: 2,
+      },
+      {
+        button: "申报推荐单位意见",
+        pageMarker: /data-section-key="unitRecommendation"/g,
+        pageCount: 2,
+      },
+    ];
+    for (const [index, exportCase] of independentExports.entries()) {
+      const button = page
+        .getByLabel("独立盖章导出")
+        .getByRole("button", { name: exportCase.button, exact: true });
+      await button.click();
+      await expect.poll(() => independentExportHtml.length).toBe(index + 1);
+      await expect(button).toBeEnabled();
+      const exportedHtml = independentExportHtml[index];
+      expect(
+        exportedHtml.match(/(?:class="| )preview-page(?: |")/g) || [],
+      ).toHaveLength(exportCase.pageCount);
+      expect(exportedHtml.match(exportCase.pageMarker) || []).toHaveLength(
+        exportCase.pageCount,
+      );
+    }
     expect(errors).toEqual([]);
   } finally {
     if (applicationId) {

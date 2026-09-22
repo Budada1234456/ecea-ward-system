@@ -8,6 +8,7 @@ const testUserPatterns = [
   "threefixes%",
   "reorder%",
   "awardprofiles%",
+  "fonttest%",
 ];
 const testUserPredicate = testUserPatterns
   .map(() => "username LIKE ?")

@@ -2,9 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   AWARD_TYPES,
+  getAwardLevelRule,
   getAwardProfile,
   getAwardSections,
   getSubmissionRequirements,
+  isValidAwardLevel,
 } from "../src/award-profiles.js";
 
 test("achievement applications use a candidate-specific material structure", () => {
@@ -12,9 +14,8 @@ test("achievement applications use a candidate-specific material structure", () 
 
   assert.equal(profile.mode, "individual");
   assert.equal(profile.subjectLabel, "候选人姓名");
-  assert.equal(profile.fileLimits.achievement_other, 20);
-  assert.equal(profile.fileLimits.achievement_publications, 5);
-  assert.equal(profile.requiredAttachmentGroups.length, 5);
+  assert.deepEqual(profile.fileLimits, {});
+  assert.equal(profile.requiredAttachmentGroups.length, 0);
   assert.deepEqual(
     getAwardSections(profile.value).map(({ key }) => key),
     [
@@ -67,8 +68,33 @@ test("project awards share a skeleton but keep distinct guidance and limits", ()
   assert.equal(invention.submissionFields.length, 6);
   assert.equal(progress.minimumApplicationYears, 1);
   assert.equal(invention.minimumApplicationYears, 2);
-  assert.equal(progress.maxPeople, 15);
-  assert.equal(invention.maxPeople, 10);
+  assert.deepEqual(
+    progress.awardLevels.map(({ value, maxPeople, maxUnits }) => ({
+      value,
+      maxPeople,
+      maxUnits,
+    })),
+    [
+      { value: "一等奖", maxPeople: 15, maxUnits: 10 },
+      { value: "二等奖", maxPeople: 10, maxUnits: 7 },
+      { value: "三等奖", maxPeople: null, maxUnits: null },
+    ],
+  );
+  assert.deepEqual(
+    invention.awardLevels.map(({ value, maxPeople, maxUnits }) => ({
+      value,
+      maxPeople,
+      maxUnits,
+    })),
+    [
+      { value: "一等奖", maxPeople: 10, maxUnits: null },
+      { value: "二等奖", maxPeople: 6, maxUnits: null },
+      { value: "三等奖", maxPeople: null, maxUnits: null },
+    ],
+  );
+  assert.equal(getAwardLevelRule(AWARD_TYPES.ACHIEVEMENT).value, "不分等级");
+  assert.equal(getAwardLevelRule(AWARD_TYPES.PROGRESS, "二等奖").maxUnits, 7);
+  assert.equal(isValidAwardLevel(AWARD_TYPES.PROGRESS, "三等奖"), true);
   assert.equal(getAwardSections(progress.value).length, 13);
   assert.equal(
     getAwardSections(invention.value)[12].templateFile,
@@ -89,6 +115,20 @@ test("chapters five through seven use system fields for every award", () => {
         uploadMode,
       })),
       [5, 6, 7].map((number) => ({ number, uploadMode: "form" })),
+    );
+  }
+});
+
+test("project recommendation chapters accept Word or PDF documents", () => {
+  for (const awardType of [AWARD_TYPES.PROGRESS, AWARD_TYPES.INVENTION]) {
+    assert.deepEqual(
+      getAwardSections(awardType)
+        .slice(7, 9)
+        .map(({ key, uploadMode }) => ({ key, uploadMode })),
+      [
+        { key: "unitRecommendation", uploadMode: "document" },
+        { key: "expertRecommendation", uploadMode: "document" },
+      ],
     );
   }
 });

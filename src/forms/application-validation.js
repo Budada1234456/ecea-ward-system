@@ -1,4 +1,9 @@
-import { getAwardProfile, getAwardSections } from "../award-profiles.js";
+import {
+  getAwardLevelRule,
+  getAwardProfile,
+  getAwardSections,
+  isValidAwardLevel,
+} from "../award-profiles.js";
 import { tableFields } from "../schema/table-fields.js";
 
 export const LONG_TEXT_LIMITS = Object.freeze({
@@ -17,6 +22,7 @@ export const LONG_TEXT_LIMITS = Object.freeze({
 const PROJECT_BASIC_FIELDS = [
   ["year", "申报年度"],
   ["awardType", "奖种"],
+  ["awardLevel", "申报等级"],
   ["projectName", "项目名称（中文）"],
   ["projectNameEn", "项目名称（英文）"],
   ["people", "主要完成人"],
@@ -33,6 +39,7 @@ const PROJECT_BASIC_FIELDS = [
 const ACHIEVEMENT_BASIC_FIELDS = [
   ["year", "申报年度"],
   ["awardType", "奖种"],
+  ["awardLevel", "申报等级"],
   ["projectName", "候选人姓名（中文）"],
   ["candidate.birthDate", "出生年月"],
   ["candidate.workUnit", "候选人工作单位"],
@@ -173,30 +180,7 @@ function attachmentErrors({ data, files, profile, sectionKey }) {
   }
 
   if (sectionKey !== "attachments") return [];
-  if (profile.requiredAttachmentGroups.length) {
-    return profile.requiredAttachmentGroups
-      .filter(({ categories }) =>
-        categories.every((category) => !types.has(category)),
-      )
-      .map(({ categories, label }) => ({
-        sectionKey,
-        key: categories[0],
-        message: `请上传${label}`,
-      }));
-  }
-
-  const hasSupportingMaterial = profile.attachmentMaterials.some(([category]) =>
-    types.has(category),
-  );
-  return hasSupportingMaterial
-    ? []
-    : [
-        {
-          sectionKey,
-          key: "supportingMaterial",
-          message: "请上传项目证明材料",
-        },
-      ];
+  return [];
 }
 
 function sectionTextFields(profile, sectionKey) {
@@ -261,7 +245,38 @@ export function validateSection({
         sectionKey,
       ),
     );
+    if (
+      hasValue(data.awardLevel) &&
+      !isValidAwardLevel(profile.value, data.awardLevel)
+    ) {
+      errors.push({
+        sectionKey,
+        key: "awardLevel",
+        message: "请选择有效的申报等级",
+      });
+    }
     if (profile.mode === "project") {
+      const levelRule = getAwardLevelRule(profile.value, data.awardLevel);
+      if (
+        Number.isFinite(levelRule.maxPeople) &&
+        (data.people || []).length > levelRule.maxPeople
+      ) {
+        errors.push({
+          sectionKey: "people",
+          key: "people",
+          message: `${levelRule.label}主要完成人不得超过 ${levelRule.maxPeople} 人`,
+        });
+      }
+      if (
+        Number.isFinite(levelRule.maxUnits) &&
+        (data.units || []).length > levelRule.maxUnits
+      ) {
+        errors.push({
+          sectionKey: "units",
+          key: "units",
+          message: `${levelRule.label}主要完成单位不得超过 ${levelRule.maxUnits} 个`,
+        });
+      }
       for (const [key, label, limit] of PROJECT_BASIC_LIMITS) {
         const count = characterCount(valueAt(data, key));
         if (count > limit) {

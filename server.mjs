@@ -17,14 +17,21 @@ import {
   timingSafeEqual,
 } from "node:crypto";
 import { extractProjectSourceFields } from "./lib/pdf-fields.mjs";
+import { mergePreviewPdfParts, renderPreviewPdf } from "./lib/pdf-export.mjs";
 import { createWordImportRouter } from "./routes/word-import.mjs";
 import { sanitizeApplicationRichTextData } from "./src/editor/rich-text-node.mjs";
 import { validateApplication } from "./src/forms/application-validation.js";
 import {
+  PDF_EXPORT_SINGLE_PAGE_LIMIT,
+  PDF_EXPORT_TOTAL_HTML_LIMIT,
+} from "./src/pdf-export-parts.js";
+import {
   AWARD_TYPES,
   awardProfiles,
+  getAwardLevelRule,
   getAwardProfile,
   getSubmissionRequirements,
+  isValidAwardLevel,
 } from "./src/award-profiles.js";
 
 const execFileAsync = promisify(execFile);
@@ -38,7 +45,9 @@ const hostArgument = process.argv.find((argument) =>
 );
 const port = Number(portArgument?.slice(7) || process.env.PORT || 4174);
 const host = hostArgument?.slice(7) || process.env.HOST || "127.0.0.1";
-const root = path.dirname(fileURLToPath(import.meta.url));
+const serverSourcePath = fileURLToPath(import.meta.url);
+const backendStartedAt = new Date();
+const root = path.dirname(serverSourcePath);
 const dataDir = path.join(root, "data");
 const allowInsecurePasswordReset =
   process.env.ALLOW_INSECURE_PASSWORD_RESET === "true";
@@ -281,7 +290,13 @@ function authRateLimit(req, res, next) {
 app.use("/api/auth", (req, res, next) =>
   req.method === "POST" ? authRateLimit(req, res, next) : next(),
 );
-app.use(express.json({ limit: "5mb" }));
+app.use(
+  express.json({
+    limit: "15mb",
+    type: (req) =>
+      req.path !== "/api/pdf-export" && Boolean(req.is("application/json")),
+  }),
+);
 
 const now = () => new Date().toISOString();
 const hashToken = (value) => createHash("sha256").update(value).digest("hex");
@@ -559,6 +574,158 @@ app.use(
   }),
 );
 
+app.use("/api/pdf-export", express.json({ limit: "100mb" }));
+
+app.post("/api/pdf-export", async (req, res) => {
+  const html = String(req.body?.html || "");
+  const applicationId = Number(req.body?.applicationId);
+  const requestedParts = Array.isArray(req.body?.parts) ? req.body.parts : null;
+  const styles = String(req.body?.styles || "");
+  const fileName = String(req.body?.fileName || "申报书.pdf")
+    .replace(/[\r\n<>:"/\\|?*\x00-\x1f]/g, "_")
+    .slice(0, 180);
+  const totalHtmlLength = requestedParts
+    ? requestedParts.reduce(
+        (total, part) =>
+          total + (part?.type === "html" ? String(part.html || "").length : 0),
+        0,
+      )
+    : html.length;
+  if (
+    (!requestedParts?.length && !html) ||
+    requestedParts?.length > 200 ||
+    totalHtmlLength > PDF_EXPORT_TOTAL_HTML_LIMIT
+  ) {
+    return res
+      .status(422)
+      .json({ ok: false, message: "PDF 导出内容为空或过大" });
+  }
+  if (
+    requestedParts?.some(
+      (part) =>
+        part?.type === "html" &&
+        String(part.html || "").length > PDF_EXPORT_SINGLE_PAGE_LIMIT,
+    )
+  ) {
+    return res.status(422).json({
+      ok: false,
+      message: "PDF 导出单个页面分段过大，请压缩图片后重试",
+    });
+  }
+  let parts = requestedParts;
+  if (parts) {
+    if (
+      !Number.isInteger(applicationId) ||
+      !ownedApplication(applicationId, req.user.id)
+    ) {
+      return res.status(404).json({ ok: false, message: "申报项目不存在" });
+    }
+    const pdfFiles = new Map();
+    let sourcePdfBytes = 0;
+    for (const part of parts.filter((candidate) => candidate?.type === "pdf")) {
+      const fileId = Number(part.fileId);
+      if (pdfFiles.has(fileId)) {
+        return res.status(422).json({ ok: false, message: "PDF 导出分段重复" });
+      }
+      const row = db
+        .prepare(
+          "SELECT * FROM application_files WHERE id = ? AND application_id = ?",
+        )
+        .get(fileId, applicationId);
+      if (
+        !row?.stored_path ||
+        !fs.existsSync(row.stored_path) ||
+        path.extname(row.file_name).toLowerCase() !== ".pdf"
+      ) {
+        return res.status(422).json({
+          ok: false,
+          message: "PDF 导出包含无效或无权访问的原始文件",
+        });
+      }
+      sourcePdfBytes += Number(row.file_size || 0);
+      if (sourcePdfBytes > 300 * 1024 * 1024) {
+        return res.status(422).json({
+          ok: false,
+          message: "PDF 导出文件总大小超过 300MB",
+        });
+      }
+      pdfFiles.set(fileId, row.stored_path);
+    }
+    parts = parts.map((part) => {
+      if (part?.type === "html" && String(part.html || "")) {
+        return { type: "html", html: String(part.html) };
+      }
+      const fileId = Number(part?.fileId);
+      if (part?.type === "pdf" && pdfFiles.has(fileId)) {
+        return { type: "pdf", path: pdfFiles.get(fileId) };
+      }
+      return null;
+    });
+    if (parts.some((part) => !part)) {
+      return res.status(422).json({ ok: false, message: "PDF 导出分段无效" });
+    }
+  } else {
+    parts = [{ type: "html", html }];
+  }
+  const forwardedProto = String(req.headers["x-forwarded-proto"] || "")
+    .split(",")[0]
+    .trim();
+  const protocol = forwardedProto || req.protocol;
+  const requestOrigin = req.get("origin");
+  const serverOrigin = `${protocol}://${req.get("host")}`;
+  let baseUrl;
+  try {
+    const serverUrl = new URL(serverOrigin);
+    const candidate = new URL(requestOrigin || serverOrigin);
+    baseUrl = serverUrl.origin;
+    if (
+      ["http:", "https:"].includes(candidate.protocol) &&
+      candidate.hostname === serverUrl.hostname
+    ) {
+      baseUrl = candidate.origin;
+    }
+  } catch {
+    return res.status(400).json({ ok: false, message: "PDF 导出地址无效" });
+  }
+  try {
+    const sessionToken = parseCookies(req.headers.cookie).award_session;
+    const renderedParts = [];
+    for (const part of parts) {
+      if (part.type === "pdf") {
+        renderedParts.push({
+          pdf: await fsPromises.readFile(part.path),
+          addPageNumbers: true,
+        });
+        continue;
+      }
+      renderedParts.push({
+        pdf: await renderPreviewPdf({
+          html: part.html,
+          styles,
+          baseUrl,
+          sessionToken,
+        }),
+        addPageNumbers: false,
+      });
+    }
+    const pdf = await mergePreviewPdfParts(renderedParts);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename*=UTF-8''${encodeURIComponent(fileName.endsWith(".pdf") ? fileName : `${fileName}.pdf`)}`,
+    );
+    const buffer = Buffer.from(pdf);
+    res.setHeader("Content-Length", String(buffer.length));
+    res.send(buffer);
+  } catch (error) {
+    console.error("PDF export failed", error);
+    res.status(500).json({
+      ok: false,
+      message: `PDF 生成失败：${error.message || "服务器内部错误"}`,
+    });
+  }
+});
+
 function parseData(value) {
   try {
     return JSON.parse(value || "{}");
@@ -567,10 +734,28 @@ function parseData(value) {
   }
 }
 
+function normalizeStoredApplicationData(
+  row,
+  sourceData = parseData(row.data_json),
+) {
+  const profile = getAwardProfile(row.award_type || sourceData.awardType);
+  return {
+    ...sourceData,
+    awardType: profile.value,
+    awardLevel: getAwardLevelRule(profile.value, sourceData.awardLevel).value,
+    applicationMode: profile.mode,
+    profileCode: profile.code,
+    schemaVersion: 2,
+  };
+}
+
 function applicationFromRow(row) {
   if (!row) return null;
   const { data_json: dataJson, ...meta } = row;
-  return { ...meta, data: parseData(dataJson) };
+  return {
+    ...meta,
+    data: normalizeStoredApplicationData(row, parseData(dataJson)),
+  };
 }
 
 function calculateProgress(data) {
@@ -1184,13 +1369,14 @@ async function pdfPageCount(filePath) {
 function isSectionSubmission(row) {
   return (
     row?.file_type?.startsWith("section_word:") ||
+    row?.file_type?.startsWith("section_document:") ||
     row?.file_type?.startsWith("section_signed:")
   );
 }
 
 function isPreviewableSubmission(row) {
-  if (isSectionSubmission(row)) return true;
   const extension = path.extname(row?.file_name || "").toLowerCase();
+  if (isSectionSubmission(row)) return extension !== ".doc";
   return (
     !["source_pdf"].includes(row?.file_type) &&
     !row?.file_type?.startsWith("content_image:") &&
@@ -1306,6 +1492,7 @@ if (count === 0) {
   const seed = {
     year: "2026",
     awardType: "节能减排科技进步奖",
+    awardLevel: getAwardLevelRule("节能减排科技进步奖").value,
     projectName: title,
   };
   const result = db
@@ -1358,6 +1545,9 @@ app.post("/api/applications", (req, res) => {
   const requestedAwardType = String(req.body.awardType || AWARD_TYPES.PROGRESS);
   const profile = getAwardProfile(requestedAwardType);
   const awardType = profile.value;
+  const requestedAwardLevel = String(
+    req.body.awardLevel || getAwardLevelRule(awardType).value,
+  );
   const year = Number(req.body.year || new Date().getFullYear());
   const applicationChannel = String(req.body.applicationChannel || "自由申报");
   const applicantUnit = String(req.body.applicantUnit || "").trim();
@@ -1367,6 +1557,8 @@ app.post("/api/applications", (req, res) => {
       : "form";
   if (!awardProfiles.some(({ value }) => value === requestedAwardType))
     return res.status(422).json({ ok: false, message: "请选择有效的奖项类别" });
+  if (!isValidAwardLevel(awardType, requestedAwardLevel))
+    return res.status(422).json({ ok: false, message: "请选择有效的申报等级" });
   if (!title)
     return res.status(422).json({
       ok: false,
@@ -1378,6 +1570,7 @@ app.post("/api/applications", (req, res) => {
     profileCode: profile.code,
     year: String(year),
     awardType,
+    awardLevel: requestedAwardLevel,
     applicationMode: profile.mode,
     applicationChannel,
     applicantUnit,
@@ -1423,12 +1616,17 @@ app.put("/api/applications/:id", (req, res) => {
   const row = ownedApplication(id, req.user.id);
   if (!row)
     return res.status(404).json({ ok: false, message: "申报项目不存在" });
+  const storedData = normalizeStoredApplicationData(row);
   const data = sanitizeApplicationRichTextData({
-    ...parseData(row.data_json),
+    ...storedData,
     ...(req.body.data || {}),
   });
   const profile = getAwardProfile(row.award_type);
   data.awardType = profile.value;
+  data.awardLevel = getAwardLevelRule(
+    profile.value,
+    storedData.awardLevel,
+  ).value;
   data.applicationMode = profile.mode;
   data.profileCode = profile.code;
   data.schemaVersion = 2;
@@ -1467,7 +1665,7 @@ app.post("/api/applications/:id/duplicate", (req, res) => {
   const row = ownedApplication(id, req.user.id);
   if (!row)
     return res.status(404).json({ ok: false, message: "申报项目不存在" });
-  const data = parseData(row.data_json);
+  const data = normalizeStoredApplicationData(row);
   data.projectName = `${row.title}（副本）`;
   const timestamp = now();
   const result = db
@@ -1501,7 +1699,7 @@ app.post("/api/applications/:id/submit", (req, res) => {
   const row = ownedApplication(id, req.user.id);
   if (!row)
     return res.status(404).json({ ok: false, message: "申报项目不存在" });
-  const data = parseData(row.data_json);
+  const data = normalizeStoredApplicationData(row);
   const profile = getAwardProfile(row.award_type);
   const files = db
     .prepare(
@@ -1528,10 +1726,6 @@ app.post("/api/applications/:id/submit", (req, res) => {
       missing.push("代表性知识产权不得超过 10 项");
   }
   if (profile.mode === "project") {
-    if ((data.people || []).length > profile.maxPeople)
-      missing.push(`主要完成人不得超过 ${profile.maxPeople} 人`);
-    if (profile.maxUnits && (data.units || []).length > profile.maxUnits)
-      missing.push(`主要完成单位不得超过 ${profile.maxUnits} 个`);
     if (
       !hasMinimumApplicationDuration(
         data.applicationUnits,
@@ -1599,12 +1793,16 @@ app.post(
     const profile = getAwardProfile(exists.award_type);
     const isContentImage = category.startsWith("content_image:");
     const isSectionWord = category.startsWith("section_word:");
+    const isSectionDocument = category.startsWith("section_document:");
     const isSignedSection = category.startsWith("section_signed:");
     const validSectionWord = new RegExp(
       `^section_word:${profile.code}:[a-zA-Z]+$`,
     ).test(category);
     const validSignedSection = new RegExp(
       `^section_signed:${profile.code}:(authenticity|confidentiality|integrity)$`,
+    ).test(category);
+    const validSectionDocument = new RegExp(
+      `^section_document:${profile.code}:(unitRecommendation|expertRecommendation|peopleCooperation)$`,
     ).test(category);
     const allowedCategories = new Set([
       ...profile.recommendationMaterials.map(([value]) => value),
@@ -1614,6 +1812,7 @@ app.post(
       !isContentImage &&
       !allowedCategories.has(category) &&
       !validSectionWord &&
+      !validSectionDocument &&
       !validSignedSection
     ) {
       await fsPromises.unlink(req.file.path).catch(() => {});
@@ -1629,12 +1828,21 @@ app.post(
         .json({ ok: false, message: "正文中只能插入 JPG 或 PNG 图片" });
     }
     const extension = path.extname(fileName).toLowerCase();
-    if (isSectionWord && extension !== ".docx") {
+    if (isSectionWord && ![".doc", ".docx"].includes(extension)) {
       await fsPromises.unlink(req.file.path).catch(() => {});
       return res.status(422).json({
         ok: false,
-        message:
-          "章节文件仅支持 DOCX；旧版 .doc 请在 Word 中另存为 DOCX 后上传",
+        message: "章节文件仅支持 DOC、DOCX",
+      });
+    }
+    if (
+      isSectionDocument &&
+      ![".doc", ".docx", ".pdf"].includes(extension)
+    ) {
+      await fsPromises.unlink(req.file.path).catch(() => {});
+      return res.status(422).json({
+        ok: false,
+        message: "章节回传文件仅支持 DOC、DOCX、PDF",
       });
     }
     if (
@@ -1649,6 +1857,7 @@ app.post(
     }
     if (
       !isSectionWord &&
+      !isSectionDocument &&
       !isSignedSection &&
       !isContentImage &&
       ![".pdf", ".jpg", ".jpeg", ".png"].includes(extension)
@@ -1685,19 +1894,21 @@ app.post(
     );
     await persistUploadedFile(req.file.path, storedPath);
     let pageCount = extension === ".pdf" ? await pdfPageCount(storedPath) : 1;
-    const shouldLimitPages =
-      profile.mode === "project" &&
-      !isContentImage &&
-      !isSectionWord &&
-      !isSignedSection &&
-      category !== "source_pdf";
+    const attachmentCategories = profile.attachmentMaterials.map(
+      ([value]) => value,
+    );
+    const shouldLimitPages = attachmentCategories.includes(category);
     if (shouldLimitPages) {
+      const placeholders = attachmentCategories.map(() => "?").join(", ");
       const currentPages = Number(
         db
           .prepare(
-            "SELECT COALESCE(SUM(page_count), 0) AS total FROM application_files WHERE application_id = ? AND file_type != 'source_pdf' AND file_type NOT LIKE 'content_image:%'",
+            `SELECT COALESCE(SUM(page_count), 0) AS total
+             FROM application_files
+             WHERE application_id = ? AND file_type IN (${placeholders})
+               AND file_type != ?`,
           )
-          .get(applicationId).total || 0,
+          .get(applicationId, ...attachmentCategories, category).total || 0,
       );
       if (currentPages + pageCount > 40) {
         await fsPromises.unlink(storedPath).catch(() => {});
@@ -1725,7 +1936,11 @@ app.post(
         timestamp,
       );
     const fileId = Number(result.lastInsertRowid);
-    if (isSectionWord || isSignedSection) {
+    if (
+      (isSectionWord && extension !== ".doc") ||
+      (isSectionDocument && extension !== ".doc") ||
+      isSignedSection
+    ) {
       try {
         const previewPages = await ensureSectionPreview({
           id: fileId,
@@ -1749,6 +1964,38 @@ app.post(
           ok: false,
           message: error.message || "无法生成章节文件预览",
         });
+      }
+    }
+    if (!isContentImage) {
+      const replaceableTypes = isSectionSubmission({ file_type: category })
+        ? ["section_word", "section_document", "section_signed"].map(
+            (prefix) =>
+              `${prefix}:${profile.code}:${category.split(":").at(-1)}`,
+          )
+        : [category];
+      const placeholders = replaceableTypes.map(() => "?").join(", ");
+      const supersededRows = db
+        .prepare(
+          `SELECT * FROM application_files
+           WHERE application_id = ? AND id != ?
+             AND file_type IN (${placeholders})`,
+        )
+        .all(applicationId, fileId, ...replaceableTypes);
+      if (supersededRows.length) {
+        db.prepare(
+          `DELETE FROM application_files
+           WHERE application_id = ? AND id != ?
+             AND file_type IN (${placeholders})`,
+        ).run(applicationId, fileId, ...replaceableTypes);
+        await Promise.allSettled(
+          supersededRows.map(async (row) => {
+            await fsPromises.rm(sectionPreviewDirectory(row), {
+              recursive: true,
+              force: true,
+            });
+            await fsPromises.unlink(row.stored_path).catch(() => {});
+          }),
+        );
       }
     }
     writeAudit(applicationId, "file_upload", `上传附件 ${fileName}`);
@@ -2247,23 +2494,33 @@ app.get("/api/health", (_req, res) => {
       "SELECT COUNT(*) AS total FROM applications WHERE archived_at IS NULL",
     )
     .get().total;
-  res.json({ ok: true, database: "sqlite", applications });
+  const backendSourceModifiedAt = fs.statSync(serverSourcePath).mtime;
+  res.json({
+    ok: true,
+    database: "sqlite",
+    applications,
+    backendStartedAt: backendStartedAt.toISOString(),
+    backendSourceModifiedAt: backendSourceModifiedAt.toISOString(),
+    restartRequired:
+      backendSourceModifiedAt.getTime() > backendStartedAt.getTime(),
+  });
+});
+
+const materialsDirectory = path.join(root, "节能奖填报材料");
+app.use(
+  "/materials",
+  express.static(materialsDirectory, {
+    setHeaders(res, filePath) {
+      res.attachment(path.basename(filePath));
+      res.setHeader("Cache-Control", "no-store");
+    },
+  }),
+);
+app.use("/materials", (_req, res) => {
+  res.status(404).json({ ok: false, message: "申报模板或参考资料不存在" });
 });
 
 if (process.argv.includes("--serve")) {
-  const materialsDirectory = path.join(root, "节能奖填报材料");
-  app.use(
-    "/materials",
-    express.static(materialsDirectory, {
-      setHeaders(res, filePath) {
-        res.attachment(path.basename(filePath));
-        res.setHeader("Cache-Control", "no-store");
-      },
-    }),
-  );
-  app.use("/materials", (_req, res) => {
-    res.status(404).json({ ok: false, message: "申报模板或参考资料不存在" });
-  });
   app.use(express.static(path.join(root, "dist")));
   app.use((_req, res) => res.sendFile(path.join(root, "dist", "index.html")));
 }
