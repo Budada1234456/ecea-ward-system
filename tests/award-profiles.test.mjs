@@ -92,13 +92,14 @@ test("project awards share a skeleton but keep distinct guidance and limits", ()
       { value: "三等奖", maxPeople: null, maxUnits: null },
     ],
   );
-  assert.equal(getAwardLevelRule(AWARD_TYPES.ACHIEVEMENT).value, "不分等级");
+  assert.equal(getAwardLevelRule(AWARD_TYPES.ACHIEVEMENT).value, "一等奖");
+  assert.equal(isValidAwardLevel(AWARD_TYPES.ACHIEVEMENT, "三等奖"), true);
   assert.equal(getAwardLevelRule(AWARD_TYPES.PROGRESS, "二等奖").maxUnits, 7);
   assert.equal(isValidAwardLevel(AWARD_TYPES.PROGRESS, "三等奖"), true);
   assert.equal(getAwardSections(progress.value).length, 13);
   assert.equal(
     getAwardSections(invention.value)[12].templateFile,
-    "十三、诚信承诺书.docx",
+    "十三、诚信承诺书.doc",
   );
 });
 
@@ -106,15 +107,18 @@ test("unknown award values fall back to the progress profile", () => {
   assert.equal(getAwardProfile("历史奖项").value, AWARD_TYPES.PROGRESS);
 });
 
-test("chapters five through seven use system fields for every award", () => {
+test("chapters five through seven follow award upload modes", () => {
   for (const awardType of Object.values(AWARD_TYPES)) {
     const sections = getAwardSections(awardType);
+    const uploadMode = getAwardProfile(awardType).mode === "project"
+      ? "form"
+      : "word";
     assert.deepEqual(
       sections.slice(4, 7).map(({ number, uploadMode }) => ({
         number,
         uploadMode,
       })),
-      [5, 6, 7].map((number) => ({ number, uploadMode: "form" })),
+      [5, 6, 7].map((number) => ({ number, uploadMode })),
     );
   }
 });
