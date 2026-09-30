@@ -1795,6 +1795,7 @@ app.post(
     const isSectionWord = category.startsWith("section_word:");
     const isSectionDocument = category.startsWith("section_document:");
     const isSignedSection = category.startsWith("section_signed:");
+    const isSealReplacement = category.startsWith("seal_replacement:");
     const validSectionWord = new RegExp(
       `^section_word:${profile.code}:[a-zA-Z]+$`,
     ).test(category);
@@ -1803,6 +1804,9 @@ app.post(
     ).test(category);
     const validSectionDocument = new RegExp(
       `^section_document:${profile.code}:(unitRecommendation|expertRecommendation|peopleCooperation)$`,
+    ).test(category);
+    const validSealReplacement = new RegExp(
+      `^seal_replacement:${profile.code}:(home|person-[0-9]+|unit-[0-9]+)$`,
     ).test(category);
     const allowedCategories = new Set([
       ...profile.recommendationMaterials.map(([value]) => value),
@@ -1813,7 +1817,8 @@ app.post(
       !allowedCategories.has(category) &&
       !validSectionWord &&
       !validSectionDocument &&
-      !validSignedSection
+      !validSignedSection &&
+      !validSealReplacement
     ) {
       await fsPromises.unlink(req.file.path).catch(() => {});
       return res.status(422).json({ ok: false, message: "附件类别无效" });
@@ -1835,10 +1840,7 @@ app.post(
         message: "章节文件仅支持 DOC、DOCX",
       });
     }
-    if (
-      isSectionDocument &&
-      ![".doc", ".docx", ".pdf"].includes(extension)
-    ) {
+    if (isSectionDocument && ![".doc", ".docx", ".pdf"].includes(extension)) {
       await fsPromises.unlink(req.file.path).catch(() => {});
       return res.status(422).json({
         ok: false,
@@ -1853,6 +1855,13 @@ app.post(
       return res.status(422).json({
         ok: false,
         message: "签字盖章文件仅支持 PDF、JPG、PNG",
+      });
+    }
+    if (isSealReplacement && extension !== ".pdf") {
+      await fsPromises.unlink(req.file.path).catch(() => {});
+      return res.status(422).json({
+        ok: false,
+        message: "签章页替换只支持 PDF 文件",
       });
     }
     if (
@@ -1894,6 +1903,13 @@ app.post(
     );
     await persistUploadedFile(req.file.path, storedPath);
     let pageCount = extension === ".pdf" ? await pdfPageCount(storedPath) : 1;
+    if (isSealReplacement && pageCount !== 1) {
+      await fsPromises.unlink(storedPath).catch(() => {});
+      return res.status(422).json({
+        ok: false,
+        message: "签章页替换必须上传单页 PDF 文件",
+      });
+    }
     const attachmentCategories = profile.attachmentMaterials.map(
       ([value]) => value,
     );

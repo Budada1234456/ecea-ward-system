@@ -3,6 +3,7 @@ import { Plus, X } from "lucide-react";
 import { tableFields } from "../schema/table-fields.js";
 import { ConfirmDialog } from "./ConfirmDialog.jsx";
 import { createDefaultTableRecord } from "./data-contract.js";
+import { parseDateRange, formatDateRange } from "./date-range.mjs";
 
 function valueFor(record, field) {
   if (record?.[field.key] !== undefined) return record[field.key];
@@ -35,6 +36,22 @@ function FieldControl({
     value: value ?? "",
   };
 
+  if (field.type === "dateRange") {
+    const range = parseDateRange(value);
+    return (
+      <div className="date-range-control">
+        {range.legacy && <small>原填写：{range.legacy}（重新选择后替换）</small>}
+        <input {...commonProps} type={range.type} value={range.start}
+          aria-label={`${field.label}开始时间`} max={range.end || undefined}
+          onChange={(event) => onChange(formatDateRange(event.target.value, range.end))} />
+        <span>至</span>
+        <input {...commonProps} ref={undefined} type={range.type} value={range.end}
+          aria-label={`${field.label}结束时间`} min={range.start || undefined}
+          onChange={(event) => onChange(formatDateRange(range.start, event.target.value))} />
+      </div>
+    );
+  }
+
   if (Array.isArray(field.options)) {
     return (
       <select
@@ -42,6 +59,7 @@ function FieldControl({
         onChange={(event) => onChange(event.target.value)}
       >
         <option value="">请选择</option>
+        {value && !field.options.includes(value) && <option value={value}>{value}（原填写）</option>}
         {field.options.map((option) => (
           <option value={option} key={option}>
             {option}
@@ -49,6 +67,14 @@ function FieldControl({
         ))}
       </select>
     );
+  }
+
+  if (field.type === "date" && value && !/^\d{4}-\d{2}-\d{2}$/.test(String(value))) {
+    return <div className="date-range-control">
+      <small>原填写：{value}（重新选择后替换）</small>
+      <input {...commonProps} type="date" value=""
+        onChange={(event) => onChange(event.target.value)} />
+    </div>;
   }
 
   const constrainedValueIsValid =

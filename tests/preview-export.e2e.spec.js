@@ -81,7 +81,7 @@ test("achievement tables match page one and rich content is not clipped", async 
     expect(imageResponse.ok(), JSON.stringify(imageBody)).toBe(true);
     const imageUrl = `/api/applications/${applicationId}/files/${imageBody.file.id}/download?inline=1`;
     const denseRows = Array.from(
-      { length: 8 },
+      { length: 24 },
       (_, index) =>
         `<tr><td><p style="margin: 12px 0; text-indent: 2em; line-height: 2">技术指标 ${index + 1}</p></td><td>成果转化和推广应用情况说明 ${index + 1}</td><td>达到行业先进水平</td></tr>`,
     ).join("");
@@ -197,12 +197,18 @@ test("achievement tables match page one and rich content is not clipped", async 
     await expect(transformationPages.last()).toContainText(
       "科技成果转化分页结束标记",
     );
-    const richTablePage = transformationPages.filter({
+    const richTablePages = transformationPages.filter({
       has: page.locator(".preview-rich-text table"),
     });
-    await expect(richTablePage).toContainText("表 1 科技成果转化情况表");
-    await expect(richTablePage).toContainText("表后正文应与表格连续排版。");
-    const richTableLayout = await richTablePage
+    expect(await richTablePages.count()).toBeGreaterThan(1);
+    await expect(richTablePages.first()).toContainText("表 1 科技成果转化情况表");
+    await expect(transformationPages.last()).toContainText("表后正文应与表格连续排版。");
+    const tableRows = await richTablePages.locator(".preview-rich-text table tbody tr").allTextContents();
+    expect(tableRows).toHaveLength(24);
+    for (let index = 0; index < 24; index += 1) {
+      expect(tableRows[index]).toContain(`技术指标 ${index + 1}`);
+    }
+    const richTableLayout = await richTablePages.first()
       .locator(".preview-rich-text table")
       .evaluate((table) => {
         const container = table.closest(".preview-rich-text");
@@ -259,7 +265,7 @@ test("achievement tables match page one and rich content is not clipped", async 
         path: "test-results/achievement-honors-font.png",
         style: ".preview-toolbar { visibility: hidden !important; }",
       });
-    await richTablePage.screenshot({
+    await richTablePages.first().screenshot({
       path: "test-results/achievement-transformation-page.png",
       style: ".preview-toolbar { visibility: hidden !important; }",
     });
@@ -813,6 +819,21 @@ async function withTrailingBlankWordPage(buffer) {
   return zip.generateAsync({ type: "nodebuffer" });
 }
 
+async function recommendationWordFixture(buffer) {
+  const zip = await JSZip.loadAsync(buffer);
+  const documentPart = zip.file("word/document.xml");
+  const xml = await documentPart.async("string");
+  const body = '<w:p><w:r><w:t>申报、推荐单位意见测试页</w:t></w:r></w:p>';
+  zip.file(
+    "word/document.xml",
+    xml.replace(
+      /(<w:body>)[\s\S]*?(<w:sectPr(?:\s|>))/,
+      (_match, bodyStart, sectionStart) => `${bodyStart}${body}${sectionStart}`,
+    ),
+  );
+  return zip.generateAsync({ type: "nodebuffer" });
+}
+
 test("rich media, entity pages and the complete PDF export stay intact", async ({
   page,
 }) => {
@@ -964,9 +985,10 @@ test("rich media, entity pages and the complete PDF export stay intact", async (
       expect(upload.ok(), await upload.text()).toBe(true);
     }
 
-    const recommendationWord = await fs.readFile(
-      "节能奖填报材料/科技进步奖/八、申报、推荐单位意见.docx",
+    const expertTemplate = await fs.readFile(
+      "节能奖填报材料/科技进步奖/九、专家推荐意见.docx",
     );
+    const recommendationWord = await recommendationWordFixture(expertTemplate);
     const recommendationUpload = await page.request.post(
       `${baseUrl}/api/applications/${applicationId}/files`,
       {
@@ -985,9 +1007,7 @@ test("rich media, entity pages and the complete PDF export stay intact", async (
       true,
     );
 
-    const expertRecommendationWord = await withTrailingBlankWordPage(
-      await fs.readFile("节能奖填报材料/科技进步奖/九、专家推荐意见.docx"),
-    );
+    const expertRecommendationWord = await withTrailingBlankWordPage(expertTemplate);
     const expertRecommendationUpload = await page.request.post(
       `${baseUrl}/api/applications/${applicationId}/files`,
       {

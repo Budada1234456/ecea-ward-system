@@ -5,6 +5,7 @@ import {
   isValidAwardLevel,
 } from "../award-profiles.js";
 import { tableFields } from "../schema/table-fields.js";
+import { parseDateRange } from "./date-range.mjs";
 
 export const LONG_TEXT_LIMITS = Object.freeze({
   introduction: 800,
@@ -126,6 +127,19 @@ function recordErrors(data, group, sectionKey) {
       }
     });
     fields.forEach((field) => {
+      if (field.type === "dateRange" && hasValue(record?.[field.key])) {
+        const range = parseDateRange(record[field.key]);
+        if (
+          !range.legacy &&
+          (!range.start || !range.end || range.start > range.end)
+        ) {
+          errors.push({
+            sectionKey,
+            key: `${group}.${index}.${field.key}`,
+            message: `第 ${index + 1} 条记录的${field.label}请选择完整起止时间，结束时间不得早于开始时间`,
+          });
+        }
+      }
       if (!field.maxLength) return;
       const count = characterCount(record?.[field.key]);
       if (count > field.maxLength) {
@@ -190,7 +204,6 @@ function sectionTextFields(profile, sectionKey) {
   if (sectionKey === "details")
     return [
       ...(profile.detailFields || []),
-      ["comparison", "与当前国内外同类技术的比较"],
       ["application", "应用情况"],
       ["economic", "各栏目的计算依据"],
       ["social", "社会效益"],
@@ -213,11 +226,7 @@ function sectionTextFields(profile, sectionKey) {
 function requiredTextFields(profile, sectionKey) {
   if (sectionKey === "introduction") return [["introduction", "项目简介"]];
   if (sectionKey === "details")
-    return [
-      ...(profile.detailFields || []),
-      ["comparison", "与当前国内外同类技术的比较"],
-      ["application", "应用情况"],
-    ];
+    return [...(profile.detailFields || []), ["application", "应用情况"]];
   if (sectionKey === "comparison")
     return [["comparison", profile.comparisonLabel || "同类技术比较"]];
   if (sectionKey === "application") return [["application", "应用情况"]];
@@ -292,6 +301,23 @@ export function validateSection({
 
   const requiredFields = requiredTextFields(profile, sectionKey);
   errors.push(...requiredFieldErrors(data, requiredFields, sectionKey));
+  if (
+    sectionKey === "details" &&
+    profile.mode === "project" &&
+    (!Array.isArray(data.comparisonRecords) ||
+      data.comparisonRecords.length < 7 ||
+      data.comparisonRecords.some((record) =>
+        ["project", "domestic", "foreign", "advantage"].every(
+          (key) => !hasValue(record?.[key]),
+        ),
+      ))
+  ) {
+    errors.push({
+      sectionKey,
+      key: "comparisonRecords",
+      message: "请完整填写国内外同类技术比较表",
+    });
+  }
   errors.push(
     ...limitedFieldErrors(
       data,
@@ -302,6 +328,8 @@ export function validateSection({
 
   const group = SECTION_RECORD_GROUPS[sectionKey];
   if (group) errors.push(...recordErrors(data, group, sectionKey));
+  if (sectionKey === "units")
+    errors.push(...recordErrors(data, "cooperationRecords", sectionKey));
 
   if (sectionKey === "units") {
     (data.units || []).forEach((unit, index) => {

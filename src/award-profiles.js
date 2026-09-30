@@ -5,19 +5,19 @@ export const AWARD_TYPES = Object.freeze({
 });
 
 const projectSections = [
-  ["basic", "项目基本情况", "一、项目基本情况.docx"],
-  ["introduction", "项目简介", "二、项目简介.docx"],
-  ["details", "项目详细内容", "三、项目详细内容.docx"],
-  ["awards", "本项目曾获奖励情况", "四、本项目曾获奖励情况.docx"],
-  ["ip", "申请、获得知识产权情况表", "五、申请、获得知识产权情况表.docx"],
-  ["people", "主要完成人情况表", "六、主要完成人情况表.docx"],
-  ["units", "主要完成单位情况表", "七、主要完成单位情况表.docx"],
-  ["unitRecommendation", "申报、推荐单位意见", "八、申报、推荐单位意见.docx"],
-  ["expertRecommendation", "专家推荐意见", "九、专家推荐意见.docx"],
-  ["attachments", "附件目录", "十、附件目录.docx"],
-  ["authenticity", "真实性承诺书", "十一、真实性承诺书.docx"],
-  ["confidentiality", "不涉密承诺函", "十二、不涉密承诺函.docx"],
-  ["integrity", "诚信承诺书", "十三、诚信承诺书.docx"],
+  ["basic", "项目基本情况", "一、项目基本情况.doc"],
+  ["introduction", "项目简介", "二、项目简介.doc"],
+  ["details", "项目详细内容", "三、项目详细内容.doc"],
+  ["awards", "本项目曾获奖励情况", "四、本项目曾获奖励情况.doc"],
+  ["ip", "申请、获得知识产权情况表", "五、申请、获得知识产权情况表.doc"],
+  ["people", "主要完成人情况表", "六、主要完成人情况表.doc"],
+  ["units", "主要完成单位情况表", "七、主要完成单位情况表.doc"],
+  ["unitRecommendation", "申报、推荐单位意见", "八、申报、推荐单位意见.doc"],
+  ["expertRecommendation", "专家推荐意见", "九、专家推荐意见.doc"],
+  ["attachments", "附件目录", "十、附件目录.doc"],
+  ["authenticity", "真实性承诺书", "十一、真实性承诺书.doc"],
+  ["confidentiality", "不涉密承诺函", "十二、不涉密承诺函.doc"],
+  ["integrity", "诚信承诺书", "十三、诚信承诺书.doc"],
 ];
 
 const progressSections = projectSections;
@@ -166,15 +166,12 @@ const profiles = {
     subjectLabel: "候选人姓名",
     summary: "奖励长期活跃在节能减排科技前沿并作出重大原创贡献的个人。",
     conditions: "候选人申报年末不超过 60 周岁，须为主要发明成果第一完成人。",
-    awardLevels: [
-      {
-        value: "不分等级",
-        label: "不分等级",
-        description: "面向个人申报，每年授奖人数不超过 20 人。",
-        maxPeople: 1,
-        maxUnits: 0,
-      },
-    ],
+    awardLevels: ["一等奖", "二等奖", "三等奖"].map((level) => ({
+      value: level,
+      label: level,
+      maxPeople: 1,
+      maxUnits: 0,
+    })),
     sections: achievementSections,
     minimumApplicationYears: null,
     detailContentLabel: "候选人代表性科技贡献",
@@ -364,7 +361,7 @@ export function getAwardSections(value) {
     templateHref: `/materials/${encodeURIComponent(profile.templateFolder)}/${encodeURIComponent(templateFile)}`,
     allowedFieldKeys: chapterFields[key] || [],
     uploadMode:
-      index >= 4 && index <= 6
+      profile.mode === "project" && (index <= 6 || index === 9)
         ? "form"
         : profile.mode === "project" &&
             ["unitRecommendation", "expertRecommendation"].includes(key)

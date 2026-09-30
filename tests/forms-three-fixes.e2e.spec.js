@@ -74,14 +74,16 @@ test("field guidance and pinned table columns work at desktop and narrow widths"
     ).toBeVisible();
 
     await page.getByRole("button", { name: /知识产权情况/ }).click();
-    await page.getByRole("button", { name: "删除第1条记录" }).click();
+    await page.getByRole("region", { name: "知识产权证明目录" })
+      .getByRole("button", { name: "删除第1条记录" }).click();
     const confirmation = page.getByRole("alertdialog", { name: "确认删除" });
     await expect(confirmation).toContainText("待确认删除的知识产权");
     await confirmation.getByRole("button", { name: "取消" }).click();
     const ipName = page.locator(".records-collection textarea").first();
     await expect(ipName).toHaveValue("待确认删除的知识产权");
 
-    await page.getByRole("button", { name: "删除第1条记录" }).click();
+    await page.getByRole("region", { name: "知识产权证明目录" })
+      .getByRole("button", { name: "删除第1条记录" }).click();
     await confirmation.getByRole("button", { name: "确认删除" }).click();
     await expect(ipName).toHaveCount(0);
 
@@ -143,16 +145,15 @@ test("field guidance and pinned table columns work at desktop and narrow widths"
     await expect.poll(() => nextValidationMessage).toContain("本页尚未完成");
     await expect(page.getByRole("heading", { name: "项目简介" })).toBeVisible();
 
-    let previewValidationMessage = "";
+    await page.getByRole("button", { name: "预览当前申报书" }).click();
+    await expect(page.getByText("申报书预览", { exact: true })).toBeVisible();
+    let exportValidationMessage = "";
     page.once("dialog", async (dialog) => {
-      previewValidationMessage = dialog.message();
+      exportValidationMessage = dialog.message();
       await dialog.accept();
     });
-    await page.getByRole("button", { name: "预览当前申报书" }).click();
-    await expect
-      .poll(() => previewValidationMessage)
-      .toContain("生成预览前请完善");
-    await expect(page.getByText("申报书预览", { exact: true })).toHaveCount(0);
+    await page.getByRole("button", { name: "导出 PDF", exact: true }).click();
+    await expect.poll(() => exportValidationMessage).toContain("导出完整 PDF 前请完善");
   } finally {
     if (applicationId)
       await page.request.delete(`${baseUrl}/api/applications/${applicationId}`);

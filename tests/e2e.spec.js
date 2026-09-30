@@ -154,7 +154,7 @@ test("project center, attachment workflow and PDF export", async ({
     await expect(page.getByRole("heading", { name: "附件目录" })).toBeVisible();
     await expect(page.getByText("最终签章合并版已保留")).toBeVisible();
     await expect(
-      page.getByRole("link", { name: "导出最终版 PDF" }),
+      page.getByRole("link", { name: "下载已上传 PDF" }),
     ).toBeVisible();
     await page
       .locator('.attachment-row-wrap input[type="file"]')
@@ -172,16 +172,15 @@ test("project center, attachment workflow and PDF export", async ({
     await page.getByRole("button", { name: "提交形式审查" }).click();
     await expect.poll(() => validationMessage).toContain("提交前请完善");
 
-    let previewValidationMessage = "";
+    await page.getByRole("button", { name: "预览当前申报书" }).click();
+    await expect(page.getByText("申报书预览", { exact: true })).toBeVisible();
+    let exportValidationMessage = "";
     page.once("dialog", async (browserDialog) => {
-      previewValidationMessage = browserDialog.message();
+      exportValidationMessage = browserDialog.message();
       await browserDialog.accept();
     });
-    await page.getByRole("button", { name: "预览当前申报书" }).click();
-    await expect
-      .poll(() => previewValidationMessage)
-      .toContain("生成预览前请完善");
-    await expect(page.getByText("申报书预览", { exact: true })).toHaveCount(0);
+    await page.getByRole("button", { name: "导出 PDF", exact: true }).click();
+    await expect.poll(() => exportValidationMessage).toContain("导出完整 PDF 前请完善");
   } finally {
     if (applicationId) {
       const filesResponse = await request.get(

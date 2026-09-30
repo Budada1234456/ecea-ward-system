@@ -1,11 +1,150 @@
 import { expect, test } from "@playwright/test";
 import JSZip from "jszip";
-import { DOMParser } from "@xmldom/xmldom";
 import { jsPDF } from "jspdf";
-import path from "node:path";
 import { completeProjectData } from "./application-fixtures.mjs";
+import { awardProfiles, getAwardSections } from "../src/award-profiles.js";
 
 const baseUrl = process.env.TEST_BASE_URL || "http://127.0.0.1:4174";
+
+test("all award chapter templates download and incomplete drafts preview without full export", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  for (const fileName of [
+    "附件1.中国节能协会创新奖奖励办法（2026修订版）-1.pdf",
+    "附件2.中国节能协会创新奖申报书.doc",
+    "附件3.中国节能协会创新奖申报书填写说明-1.pdf",
+  ]) {
+    const response = await page.request.get(
+      `${baseUrl}/materials/${encodeURIComponent(fileName)}`,
+    );
+    expect(response.ok(), fileName).toBe(true);
+    expect((await response.body()).length).toBeGreaterThan(1_000);
+  }
+  const suffix = `${Date.now()}${Math.floor(Math.random() * 1000)}`;
+  const username = `formtestpreview${suffix}`;
+  const registration = await page.request.post(`${baseUrl}/api/auth/register`, {
+    data: {
+      username,
+      email: `${username}@example.test`,
+      displayName: "草稿预览验收用户",
+      password: `Preview-${suffix}`,
+    },
+  });
+  expect(registration.ok(), await registration.text()).toBe(true);
+
+  for (const profile of awardProfiles) {
+    for (const section of getAwardSections(profile.value)) {
+      const response = await page.request.get(
+        `${baseUrl}${section.templateHref}`,
+      );
+      expect(
+        response.ok(),
+        `${profile.templateFolder} ${section.templateFile}`,
+      ).toBe(true);
+      expect((await response.body()).subarray(0, 8).toString("hex")).toBe(
+        "d0cf11e0a1b11ae1",
+      );
+    }
+
+    const creation = await page.request.post(`${baseUrl}/api/applications`, {
+      data: {
+        awardType: profile.value,
+        title: `${profile.templateFolder}草稿预览-${suffix}`,
+        applicantUnit: "中国节能测试单位",
+        year: 2026,
+        workflowMode: "form",
+      },
+    });
+    expect(creation.ok(), await creation.text()).toBe(true);
+    const applicationId = (await creation.json()).application.id;
+    await page.goto(`${baseUrl}/#/applications/${applicationId}`);
+    const fullTemplateHref = await page
+      .getByRole("link", { name: "申报书模板" })
+      .getAttribute("href");
+    const fullTemplateResponse = await page.request.get(
+      `${baseUrl}${fullTemplateHref}`,
+    );
+    expect(
+      fullTemplateResponse.ok(),
+      `${profile.templateFolder}完整申报书`,
+    ).toBe(true);
+    expect(
+      (await fullTemplateResponse.body()).subarray(0, 8).toString("hex"),
+    ).toBe("d0cf11e0a1b11ae1");
+    await page.getByRole("button", { name: "生成预览" }).click();
+    await expect(page.getByText("申报书预览", { exact: true })).toBeVisible();
+    const exportButton = page.getByRole("button", {
+      name: "导出 PDF",
+      exact: true,
+    });
+    await expect(exportButton).toBeEnabled();
+    let validationMessage = "";
+    page.once("dialog", async (dialog) => {
+      validationMessage = dialog.message();
+      await dialog.accept();
+    });
+    await exportButton.click();
+    expect(validationMessage).toContain("导出完整 PDF 前请完善");
+    await page.request.delete(`${baseUrl}/api/applications/${applicationId}`);
+  }
+});
+
+test("long basic fields stay within the first page for all awards", async ({
+  page,
+}) => {
+  const suffix = Date.now();
+  const username = `formtestlayout${suffix}`;
+  const registration = await page.request.post(`${baseUrl}/api/auth/register`, {
+    data: {
+      username,
+      email: `${username}@example.test`,
+      displayName: "预览分页测试",
+      password: `Layout-${suffix}`,
+    },
+  });
+  expect(registration.ok(), await registration.text()).toBe(true);
+  for (const profile of awardProfiles) {
+    const creation = await page.request.post(`${baseUrl}/api/applications`, {
+      data: {
+        awardType: profile.value,
+        title: `${profile.templateFolder}分页测试-${suffix}`,
+        year: 2026,
+        workflowMode: "form",
+      },
+    });
+    expect(creation.ok(), await creation.text()).toBe(true);
+    const id = (await creation.json()).application.id;
+    const seed = await page.request.put(`${baseUrl}/api/applications/${id}`, {
+      data: {
+        data: completeProjectData(`${profile.templateFolder}分页测试`, {
+          awardType: profile.value,
+          plans: "国家节能专项计划和示范工程项目编号 2026-ABC；".repeat(18),
+          candidate: {
+            workUnit: "中国节能测试单位",
+            mailingAddress: "北京市节能研究院技术创新中心".repeat(18),
+          },
+        }),
+      },
+    });
+    expect(seed.ok(), await seed.text()).toBe(true);
+    await page.goto(`${baseUrl}/#/applications/${id}`);
+    await page.getByRole("button", { name: "生成预览" }).click();
+    const fit = await page
+      .locator(".preview-basic-page")
+      .evaluate((article) => {
+        const table = article
+          .querySelector(":scope > table")
+          .getBoundingClientRect();
+        const footer = article
+          .querySelector(":scope > footer")
+          .getBoundingClientRect();
+        return table.bottom <= footer.top - 2;
+      });
+    expect(fit, `${profile.templateFolder}基本情况表格进入页脚`).toBe(true);
+    await page.request.delete(`${baseUrl}/api/applications/${id}`);
+  }
+});
 
 async function introductionDocx(content) {
   const zip = new JSZip();
@@ -82,19 +221,19 @@ test("split chapter templates download, import and persist independently", async
   );
 
   const firstTemplate = page.locator(".section-template-bar");
-  await expect(firstTemplate).toContainText("一、项目基本情况.docx");
+  await expect(firstTemplate).toContainText("一、项目基本情况.doc");
   const templateHref = await firstTemplate
     .getByRole("link", { name: "下载本章模板" })
     .getAttribute("href");
   const downloadPromise = page.waitForEvent("download");
   await firstTemplate.getByRole("link", { name: "下载本章模板" }).click();
   const templateDownload = await downloadPromise;
-  expect(templateDownload.suggestedFilename()).toBe("一、项目基本情况.docx");
+  expect(templateDownload.suggestedFilename()).toBe("一、项目基本情况.doc");
   expect(await templateDownload.createReadStream()).toBeTruthy();
   const templateResponse = await page.request.get(`${baseUrl}${templateHref}`);
   expect(templateResponse.ok()).toBe(true);
   expect(templateResponse.headers()["content-type"]).toContain(
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/msword",
   );
   expect(templateResponse.headers()["content-disposition"]).toContain(
     "attachment",
@@ -102,20 +241,7 @@ test("split chapter templates download, import and persist independently", async
   expect(templateResponse.headers()["cache-control"]).toBe("no-store");
   const templateBody = await templateResponse.body();
   expect(templateBody.length).toBeGreaterThan(1_000);
-  expect(templateBody.subarray(0, 4).toString("hex")).toBe("504b0304");
-  const templateZip = await JSZip.loadAsync(templateBody);
-  const documentXml = await templateZip
-    .file("word/document.xml")
-    .async("string");
-  const xmlErrors = [];
-  new DOMParser({
-    errorHandler: {
-      warning: () => {},
-      error: (message) => xmlErrors.push(message),
-      fatalError: (message) => xmlErrors.push(message),
-    },
-  }).parseFromString(documentXml, "application/xml");
-  expect(xmlErrors).toEqual([]);
+  expect(templateBody.subarray(0, 8).toString("hex")).toBe("d0cf11e0a1b11ae1");
   const missingTemplateResponse = await page.request.get(
     `${baseUrl}/materials/not-found.docx`,
   );
@@ -126,40 +252,23 @@ test("split chapter templates download, import and persist independently", async
 
   await chapterNav.nth(1).click();
   await expect(page.locator(".section-template-bar")).toContainText(
-    "二、项目简介.docx",
+    "二、项目简介.doc",
   );
-  await page.getByRole("button", { name: "上传本章 Word" }).click();
-  await page.locator('.import-dialog input[type="file"]').setInputFiles({
-    name: "二、项目简介.docx",
-    mimeType:
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    buffer: await introductionDocx("这是分章 Word 自动识别验收内容。"),
-  });
-  await expect(page.locator(".recognition-item")).toContainText("项目简介");
-  await page.getByRole("button", { name: /应用并保存/ }).click();
-  await expect(page.getByText("候选字段已应用")).toBeVisible();
-  await page.getByRole("button", { name: "完成", exact: true }).click();
-  await expect(page.locator(".section-word-status")).toContainText(
-    "二、项目简介.docx",
-  );
-
+  await expect(page.getByText("本章内容在系统中填写")).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: /上传.*本章 Word/ }),
+  ).toHaveCount(0);
+  await page
+    .locator(".rich-editor")
+    .first()
+    .locator(".tiptap")
+    .fill("这是系统在线填写的项目简介。");
+  await page.getByRole("button", { name: "保存草稿", exact: true }).click();
   const saved = await page.request.get(
     `${baseUrl}/api/applications/${application.id}`,
   );
-  const savedApplication = (await saved.json()).application;
-  expect(savedApplication.data.introduction).toContain(
-    "这是分章 Word 自动识别验收内容。",
-  );
-  const files = await page.request.get(
-    `${baseUrl}/api/applications/${application.id}/files`,
-  );
-  expect((await files.json()).list).toEqual(
-    expect.arrayContaining([
-      expect.objectContaining({
-        file_type: "section_word:progress:introduction",
-        file_name: "二、项目简介.docx",
-      }),
-    ]),
+  expect((await saved.json()).application.data.introduction).toContain(
+    "这是系统在线填写的项目简介。",
   );
 
   await chapterNav.nth(4).click();
@@ -213,6 +322,14 @@ test("split chapter templates download, import and persist independently", async
     ).toBeVisible();
   }
 
+  await chapterNav.nth(9).click();
+  await expect(page.getByRole("heading", { name: "附件目录" })).toBeVisible();
+  await expect(page.getByText("本章内容在系统中填写")).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: /上传.*本章 Word/ }),
+  ).toHaveCount(0);
+  await expect(page.getByText("上传附件").first()).toBeVisible();
+
   await page.screenshot({
     path: "test-results/chapter-template-desktop.png",
     fullPage: true,
@@ -222,20 +339,20 @@ test("split chapter templates download, import and persist independently", async
   await expect(page.getByRole("heading", { name: "诚信承诺书" })).toBeVisible();
   await expect(page.getByText("模板填写要求")).toBeVisible();
   await expect(page.locator(".section-template-bar")).toContainText(
-    "十三、诚信承诺书.docx",
+    "十三、诚信承诺书.doc",
   );
   await expect(
     page.getByRole("button", { name: "上传签章文件" }),
   ).toBeVisible();
-  await page
-    .locator('.section-template-bar input[type="file"]')
-    .setInputFiles(
-      path.resolve(
-        "节能奖填报材料/附件3.中国节能协会创新奖申报书填写说明-1.pdf",
-      ),
-    );
+  const signedPdf = new jsPDF();
+  signedPdf.text("Signed chapter", 20, 20);
+  await page.locator('.section-template-bar input[type="file"]').setInputFiles({
+    name: "signed-chapter.pdf",
+    mimeType: "application/pdf",
+    buffer: Buffer.from(signedPdf.output("arraybuffer")),
+  });
   await expect(page.locator(".section-word-status")).toContainText(
-    "附件3.中国节能协会创新奖申报书填写说明-1.pdf",
+    "signed-chapter.pdf",
   );
 
   await page.setViewportSize({ width: 390, height: 844 });
@@ -300,7 +417,7 @@ test("invention intellectual-property chapter matches the shared project templat
   const templateLink = page.getByRole("link", { name: "下载本章模板" });
   await expect(templateLink).toHaveAttribute(
     "href",
-    /%E6%8A%80%E6%9C%AF%E5%8F%91%E6%98%8E%E5%A5%96.*%E4%BA%94%E3%80%81%E7%94%B3%E8%AF%B7%E3%80%81%E8%8E%B7%E5%BE%97%E7%9F%A5%E8%AF%86%E4%BA%A7%E6%9D%83%E6%83%85%E5%86%B5%E8%A1%A8\.docx/,
+    /%E6%8A%80%E6%9C%AF%E5%8F%91%E6%98%8E%E5%A5%96.*%E4%BA%94%E3%80%81%E7%94%B3%E8%AF%B7%E3%80%81%E8%8E%B7%E5%BE%97%E7%9F%A5%E8%AF%86%E4%BA%A7%E6%9D%83%E6%83%85%E5%86%B5%E8%A1%A8\.doc/,
   );
 
   await directoryRows.nth(1).getByRole("button", { name: "添加文件" }).click();

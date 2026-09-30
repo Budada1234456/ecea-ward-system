@@ -96,12 +96,6 @@ const officialAwardUrl =
 
 const referenceDocuments = [
   {
-    title: "2026 年度中国节能协会创新奖申报工作通知",
-    description: "奖项设置、核心条件、材料要求、时间安排、提交地址和联系方式。",
-    href: "/materials/中国节能协会关于开展2026年度”中国节能协会创新奖“申报工作的通知-1.PDF",
-    type: "申报通知",
-  },
-  {
     title: "中国节能协会创新奖奖励办法（2026 修订版）",
     description:
       "申报范围、奖项条件、奖励等级、评审程序、异议处理和科研诚信要求。",
@@ -110,9 +104,26 @@ const referenceDocuments = [
   },
   {
     title: "中国节能协会创新奖申报书",
-    description:
-      "协会统一格式的 Word 申报书模板，纸质版与电子版内容须完全一致。",
+    description: "协会统一格式的完整 Word 申报书模板。",
     href: "/materials/附件2.中国节能协会创新奖申报书.doc",
+    type: "申报模板",
+  },
+  {
+    title: "科技成就奖申报书",
+    description: "科技成就奖完整 Word 申报书原件。",
+    href: `/materials/${encodeURIComponent("科技成就奖")}/${encodeURIComponent("附件2.中国节能协会创新奖科技成就奖申报书.doc")}`,
+    type: "申报模板",
+  },
+  {
+    title: "科技进步奖申报书",
+    description: "科技进步奖完整 Word 申报书原件。",
+    href: `/materials/${encodeURIComponent("科技进步奖")}/${encodeURIComponent("附件2.中国节能协会创新奖科技进步奖申报书.doc")}`,
+    type: "申报模板",
+  },
+  {
+    title: "技术发明奖申报书",
+    description: "技术发明奖完整 Word 申报书原件。",
+    href: `/materials/${encodeURIComponent("技术发明奖")}/${encodeURIComponent("附件2.中国节能协会创新奖技术发明奖申报书.doc")}`,
     type: "申报模板",
   },
   {
@@ -166,7 +177,7 @@ function createEmptyData(meta = {}) {
     awardType: profile.value,
     awardLevel: getAwardLevelRule(profile.value, meta.awardLevel).value,
     applicationMode: profile.mode,
-    applicationChannel: "自由申报",
+    applicationChannel: meta.applicationChannel || "",
     projectName: meta.title || "",
     projectNameEn: "",
     candidate: {
@@ -217,6 +228,7 @@ function createEmptyData(meta = {}) {
     technicalContent: "",
     innovations: "",
     comparison: "",
+    comparisonRecords: [],
     application: "",
     economic: "",
     social: "",
@@ -620,6 +632,9 @@ function AchievementBasicForm({ data, setField, applicationId }) {
             value={data.year}
             onChange={(event) => setField("year", event.target.value)}
           >
+            <option value="" disabled>
+              请选择
+            </option>
             <option>2026</option>
             <option>2025</option>
           </select>
@@ -707,11 +722,14 @@ function AchievementBasicForm({ data, setField, applicationId }) {
         <Field label="申报渠道" required>
           <select
             className="control"
-            value={data.applicationChannel || "自由申报"}
+            value={data.applicationChannel}
             onChange={(event) =>
               setField("applicationChannel", event.target.value)
             }
           >
+            <option value="" disabled>
+              请选择
+            </option>
             {applicationChannels.map((channel) => (
               <option key={channel}>{channel}</option>
             ))}
@@ -857,6 +875,9 @@ function BasicForm({ data, setField, disciplineRecords, applicationId }) {
             value={data.year}
             onChange={(e) => setField("year", e.target.value)}
           >
+            <option value="" disabled>
+              请选择
+            </option>
             <option>2026</option>
             <option>2025</option>
           </select>
@@ -933,9 +954,12 @@ function BasicForm({ data, setField, disciplineRecords, applicationId }) {
         <Field label="申报渠道" required>
           <select
             className="control"
-            value={data.applicationChannel || "自由申报"}
+            value={data.applicationChannel}
             onChange={(e) => setField("applicationChannel", e.target.value)}
           >
+            <option value="" disabled>
+              请选择
+            </option>
             {applicationChannels.map((channel) => (
               <option key={channel}>{channel}</option>
             ))}
@@ -987,6 +1011,9 @@ function BasicForm({ data, setField, disciplineRecords, applicationId }) {
             value={data.industry}
             onChange={(e) => setField("industry", e.target.value)}
           >
+            <option value="" disabled>
+              请选择
+            </option>
             {industryOptions.slice(0, 16).map(([key, label]) => (
               <option key={key} value={key}>
                 {key} · {label}
@@ -1067,6 +1094,7 @@ function LongTextSection({
   applicationId,
   prefixes = {},
   supplements = {},
+  insertAfter,
 }) {
   return (
     <section className="form-section">
@@ -1107,10 +1135,82 @@ function LongTextSection({
               </div>
             </Field>
             {supplements[field.key]}
+            {insertAfter?.[field.key]}
           </React.Fragment>
         ))}
       </div>
     </section>
+  );
+}
+
+const comparisonRows = [
+  "技术参数 1",
+  "技术参数 2",
+  "节能量 / 减排量",
+  "资源利用率",
+  "单位成本",
+  "市场应用规模",
+  "其他",
+];
+
+function ComparisonTableSection({ records, onChange }) {
+  const values = comparisonRows.map((dimension, index) => ({
+    dimension,
+    ...(records?.[index] || {}),
+  }));
+  const update = (index, key, value) => {
+    const next = values.map((row, rowIndex) =>
+      rowIndex === index ? { ...row, [key]: value } : row,
+    );
+    onChange(next);
+  };
+  return (
+    <div className="comparison-editor">
+      <div className="comparison-editor-heading">
+        <span className="section-index">04</span>
+        <div>
+          <h3>4．与当前国内外同类技术的比较</h3>
+          <p>不超过两页，从以下子目录列表对比本项目与国内外同类先进技术。</p>
+        </div>
+      </div>
+      <div className="comparison-subsections" aria-label="比较维度说明">
+        <span>主要技术参数</span>
+        <span>节能减排效益：节能量、减排量、资源利用率</span>
+        <span>市场竞争力：成本、效率、稳定性、适用范围</span>
+      </div>
+      <div className="comparison-table-wrap">
+        <table className="comparison-editor-table">
+          <thead>
+            <tr>
+              <th>对比维度</th>
+              <th>本项目</th>
+              <th>国内同类先进技术</th>
+              <th>国外同类先进技术</th>
+              <th>核心优势 / 差异</th>
+            </tr>
+          </thead>
+          <tbody>
+            {values.map((row, index) => (
+              <tr key={row.dimension}>
+                <th>{row.dimension}</th>
+                {["project", "domestic", "foreign", "advantage"].map((key) => (
+                  <td key={key}>
+                    <textarea
+                      value={row[key] || ""}
+                      aria-label={`${row.dimension}-${key}`}
+                      onChange={(event) =>
+                        update(index, key, event.target.value)
+                      }
+                      rows={2}
+                    />
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }
 
@@ -1204,7 +1304,12 @@ const achievementRecordFields = Object.freeze({
     { key: "name", label: "授权项目名称", required: true, minWidth: 220 },
     { key: "country", label: "国（区）别", minWidth: 110 },
     { key: "authorizationNumber", label: "授权号", minWidth: 150 },
-    { key: "authorizationDate", label: "授权日期", minWidth: 130 },
+    {
+      key: "authorizationDate",
+      label: "授权日期",
+      type: "date",
+      minWidth: 150,
+    },
     { key: "certificateNumber", label: "证书编号", minWidth: 140 },
     { key: "owner", label: "权利人", minWidth: 150 },
     { key: "inventorRank", label: "发明人排名", minWidth: 110 },
@@ -1216,8 +1321,13 @@ const achievementRecordFields = Object.freeze({
     { key: "funding", label: "研发经费（万元）", minWidth: 130 },
     { key: "source", label: "项目来源", minWidth: 150 },
     { key: "projectNumber", label: "项目编号", minWidth: 140 },
-    { key: "period", label: "研发起止时间", minWidth: 160 },
-    { key: "status", label: "状态（在研 / 已验收）", minWidth: 150 },
+    { key: "period", label: "研发起止时间", type: "dateRange", minWidth: 180 },
+    {
+      key: "status",
+      label: "状态（在研 / 已验收）",
+      options: ["在研", "已验收"],
+      minWidth: 150,
+    },
     { key: "leader", label: "负责人", minWidth: 120 },
     { key: "personalRank", label: "本人在项目成果中排序", minWidth: 150 },
     { key: "evidenceNumber", label: "证明材料编号", minWidth: 140 },
@@ -1291,7 +1401,7 @@ function ApplicationUnitsTable({ records, onChange }) {
 const technicalEvaluationFields = [
   { key: "fileName", label: "文件名称", required: true, minWidth: 220 },
   { key: "issuer", label: "出具单位", minWidth: 190 },
-  { key: "issuedAt", label: "出具时间", minWidth: 150 },
+  { key: "issuedAt", label: "出具时间", type: "date", minWidth: 150 },
   { key: "fileNumber", label: "文件编号", minWidth: 180 },
 ];
 
@@ -1353,12 +1463,33 @@ function serializeTechnicalEvaluation(records) {
 }
 
 function TechnicalEvaluationTable({ value, onChange }) {
+  const initialRows = (content) => {
+    const rows = technicalEvaluationRows(content);
+    return [
+      ...rows,
+      ...Array.from({ length: Math.max(0, 4 - rows.length) }, () => ({})),
+    ];
+  };
+  // Keep blank rows locally: serialization intentionally omits empty records.
+  const [records, setRecords] = useState(() => initialRows(value));
+  const lastValue = useRef(value);
+  useEffect(() => {
+    if (value !== lastValue.current) {
+      lastValue.current = value;
+      setRecords(initialRows(value));
+    }
+  }, [value]);
   return (
     <StructuredTable
       fields={technicalEvaluationFields}
-      title="技术评价证明及行业审批文件"
-      value={technicalEvaluationRows(value)}
-      onChange={(records) => onChange(serializeTechnicalEvaluation(records))}
+      title="技术评价证明及行业审批文件目录"
+      value={records}
+      onChange={(nextRecords) => {
+        setRecords(nextRecords);
+        const serialized = serializeTechnicalEvaluation(nextRecords);
+        lastValue.current = serialized;
+        onChange(serialized);
+      }}
       addLabel="添加文件"
       emptyLabel="暂无技术评价证明或行业审批文件"
       className="technical-evaluation-collection"
@@ -1701,7 +1832,7 @@ function AttachmentSection({
             href={`/api/applications/${applicationId}/files/${sourceFile.id}/download`}
           >
             <Download size={15} />
-            导出最终版 PDF
+            下载已上传 PDF
           </a>
         </div>
       )}
@@ -2009,7 +2140,7 @@ function CooperationRecordsSection({
     <section className="form-section cooperation-section">
       <div className="section-heading">
         <div>
-          <span className="section-index">06-A</span>
+          <span className="section-index">07-A</span>
           <h2>完成人合作关系说明</h2>
         </div>
       </div>
@@ -2585,6 +2716,47 @@ function PreviewTextPage({ title, body, pageNumber, sectionKey }) {
   );
 }
 
+function PreviewComparisonPage({ records, pageNumber }) {
+  const values = comparisonRows.map((dimension, index) => ({
+    dimension,
+    ...(records?.[index] || {}),
+  }));
+  return (
+    <article
+      className="preview-page preview-form-page preview-comparison-page"
+      data-section-key="details"
+    >
+      <h3>三、项目详细内容</h3>
+      <div className="preview-comparison-title">
+        <span>4．与当前国内外同类技术的比较</span>
+      </div>
+      <table aria-label="4．与当前国内外同类技术的比较">
+        <thead>
+          <tr>
+            <th>对比维度</th>
+            <th>本项目</th>
+            <th>国内同类先进技术</th>
+            <th>国外同类先进技术</th>
+            <th>核心优势 / 差异</th>
+          </tr>
+        </thead>
+        <tbody>
+          {values.map((row) => (
+            <tr key={row.dimension}>
+              <th>{row.dimension}</th>
+              <td>{row.project || ""}</td>
+              <td>{row.domestic || ""}</td>
+              <td>{row.foreign || ""}</td>
+              <td>{row.advantage || ""}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <footer>{pageNumber}</footer>
+    </article>
+  );
+}
+
 function PreviewTablePage({
   title,
   group,
@@ -2862,17 +3034,16 @@ function PreviewEconomicPage({ data, pageNumber }) {
               </th>
             ))}
           </tr>
-          {[
-            ...records,
-            ...Array(Math.max(0, 3 - records.length)).fill({}),
-          ].map((record, index) => (
-            <tr key={record.id || index}>
-              <td>{record.year || ""}</td>
-              {amountFields.map((field) => (
-                <td key={field.key}>{record[field.key]}</td>
-              ))}
-            </tr>
-          ))}
+          {[...records, ...Array(Math.max(0, 3 - records.length)).fill({})].map(
+            (record, index) => (
+              <tr key={record.id || index}>
+                <td>{record.year || ""}</td>
+                {amountFields.map((field) => (
+                  <td key={field.key}>{record[field.key]}</td>
+                ))}
+              </tr>
+            ),
+          )}
           <tr>
             <th colSpan="1">累计</th>
             {amountFields.map((field) => (
@@ -2911,6 +3082,7 @@ function PreviewPersonPage({ person, index, pageNumber }) {
     <article
       className="preview-page preview-form-page preview-entity-page preview-person-page"
       data-section-key="people"
+      data-person-index={index}
     >
       <h3>六、主要完成人情况表</h3>
       <table aria-label={`第 ${index + 1} 完成人情况表`}>
@@ -3038,7 +3210,6 @@ function PreviewPersonPage({ person, index, pageNumber }) {
           </tr>
         </tbody>
       </table>
-      <footer>{pageNumber}</footer>
     </article>
   );
 }
@@ -3099,6 +3270,7 @@ function PreviewUnitPage({ unit, index, pageNumber }) {
     <article
       className="preview-page preview-form-page preview-entity-page preview-unit-page"
       data-section-key="units"
+      data-unit-index={index}
     >
       <h3>七、主要完成单位情况表</h3>
       <table aria-label={`第 ${index + 1} 完成单位情况表`}>
@@ -3244,7 +3416,48 @@ function splitPreviewContent(content, maxLength = 1250, options = {}) {
     nodes = [];
     length = 0;
   };
+  const splitTableNode = (table) => {
+    const rows = [...table.querySelectorAll("tbody > tr")];
+    if (!rows.length || nodeWeight(table) <= effectiveMaxLength) return null;
+    const parts = [];
+    let current = table.cloneNode(true);
+    const currentBody = current.querySelector("tbody");
+    if (!currentBody) return null;
+    currentBody.replaceChildren();
+    let currentLength = 0;
+    rows.forEach((row) => {
+      const rowLength = nodeWeight(row);
+      if (
+        current.querySelector("tbody").children.length &&
+        currentLength + rowLength > effectiveMaxLength
+      ) {
+        parts.push(current.outerHTML);
+        current = table.cloneNode(true);
+        current.querySelector("tbody").replaceChildren();
+        currentLength = 0;
+      }
+      current.querySelector("tbody").append(row.cloneNode(true));
+      currentLength += rowLength;
+    });
+    if (current.querySelector("tbody")?.children.length)
+      parts.push(current.outerHTML);
+    return parts;
+  };
   for (const node of [...documentNode.body.children]) {
+    const tableParts = node.matches("table") ? splitTableNode(node) : null;
+    if (tableParts) {
+      const precedingNode = nodes.at(-1);
+      if (precedingNode?.matches("p, h2, h3")) {
+        nodes.pop();
+        flush();
+        chunks.push(`${precedingNode.outerHTML}${tableParts[0]}`);
+      } else {
+        flush();
+        chunks.push(tableParts[0]);
+      }
+      chunks.push(...tableParts.slice(1));
+      continue;
+    }
     const nodeLength = nodeWeight(node);
     if (nodes.length && length + nodeLength > effectiveMaxLength) {
       const precedingNode = nodes.at(-1);
@@ -3356,11 +3569,6 @@ function buildPreviewSections(sourceData) {
       data[key],
       "details",
     ]),
-    [
-      "三、项目详细内容（4．与当前国内外同类技术的比较）",
-      data.comparison,
-      "details",
-    ],
     ["三、项目详细内容（5．应用情况）", data.application, "details"],
   ];
   for (const [title, content = "", sectionKey] of textSections) {
@@ -3377,6 +3585,16 @@ function buildPreviewSections(sourceData) {
       });
     });
   }
+  pages.splice(
+    pages.findIndex((page) => page.title === "三、项目详细内容（5．应用情况）"),
+    0,
+    {
+      kind: "comparison",
+      title: "三、项目详细内容（4．与当前国内外同类技术的比较）",
+      records: data.comparisonRecords || [],
+      sectionKey: "details",
+    },
+  );
   pages.push({
     kind: "economic",
     title: "三、项目详细内容（6．经济效益）",
@@ -3438,6 +3656,14 @@ function buildPreviewSections(sourceData) {
       index,
     }),
   );
+  data.units.forEach((unit, index) =>
+    pages.push({
+      kind: "unit",
+      title: `第 ${index + 1} 完成单位`,
+      unit,
+      index,
+    }),
+  );
   const cooperationChunks = data.cooperationRecords?.length
     ? Array.from(
         { length: Math.ceil(data.cooperationRecords.length / 10) },
@@ -3451,18 +3677,46 @@ function buildPreviewSections(sourceData) {
       title: "完成人合作关系情况汇总表",
       records,
       continued: index > 0,
-      sectionKey: "people",
-    }),
-  );
-  data.units.forEach((unit, index) =>
-    pages.push({
-      kind: "unit",
-      title: `第 ${index + 1} 完成单位`,
-      unit,
-      index,
+      sectionKey: "units",
     }),
   );
   return pages;
+}
+
+function basicPreviewContent(data) {
+  const profile = getAwardProfile(data.awardType);
+  const firstPage = { ...data, candidate: { ...data.candidate } };
+  const continuations = [];
+  const fields =
+    profile.code === "achievement"
+      ? [
+          ["candidate.workUnit", "工作单位", 100],
+          ["candidate.specialty", "专业、专长", 100],
+          ["candidate.mailingAddress", "通讯地址", 100],
+          ["applicantUnit", "推荐单位", 100],
+        ]
+      : [
+          ["plans", "具体计划、基金名称和编号", 160],
+          ["applicantUnit", "第一申报单位", 100],
+        ];
+  fields.forEach(([key, label, limit]) => {
+    const [parent, child] = key.includes(".") ? key.split(".") : [null, key];
+    const value = String(
+      parent ? firstPage[parent]?.[child] || "" : firstPage[child] || "",
+    );
+    if (value.length <= limit) return;
+    if (parent) firstPage[parent][child] = value.slice(0, limit);
+    else firstPage[child] = value.slice(0, limit);
+    splitPreviewContent(value.slice(limit), 900).forEach((body, index) => {
+      continuations.push({
+        kind: "text",
+        title: `一、基本情况（${label}续${index ? ` ${index + 1}` : ""}）`,
+        body,
+        sectionKey: "basic",
+      });
+    });
+  });
+  return { firstPage, continuations };
 }
 
 function PreviewSubmittedPage({ page }) {
@@ -3560,6 +3814,8 @@ function PreviewDialog({
   disciplineRecords,
   sectionExportRequest,
   onSectionExported,
+  signedMode = false,
+  draftMode = false,
 }) {
   const pagesRef = useRef(null);
   const previewProfile = getAwardProfile(data.awardType);
@@ -3569,6 +3825,7 @@ function PreviewDialog({
   const [submittedPagesStatus, setSubmittedPagesStatus] = useState("loading");
   const [submittedPagesError, setSubmittedPagesError] = useState("");
   const [wordRenderResults, setWordRenderResults] = useState({});
+  const [sealReplacementPages, setSealReplacementPages] = useState([]);
   useEffect(() => {
     let cancelled = false;
     const loadSubmittedPages = async () => {
@@ -3602,6 +3859,40 @@ function PreviewDialog({
       });
       const latestApplicationFiles = [...latestFilesByType.values()];
       try {
+        const replacementFiles = draftMode
+          ? []
+          : latestApplicationFiles.filter((file) =>
+              new RegExp(
+                `^seal_replacement:${profile.code}:(home|person-[0-9]+|unit-[0-9]+)$`,
+              ).test(file.file_type),
+            );
+        const replacementPages = (
+          await Promise.all(
+            replacementFiles.map(async (file) => {
+              const response = await apiFetch(
+                `/api/applications/${applicationId}/files/${file.id}/preview`,
+              );
+              const payload = await response.json();
+              if (!response.ok || !payload.ok)
+                throw new Error(`签章版：${payload.message || "签章页预览失败"}`);
+              const target = file.file_type.split(":").at(-1);
+              return payload.pages.map((previewPage) => ({
+                kind: "submitted",
+                id: `seal-${file.id}-${previewPage.page}`,
+                sourceFileId: file.id,
+                title: "签章版申报书",
+                sectionKey: "sealReplacement",
+                sealTarget: target,
+                fileName: payload.fileName || file.file_name,
+                filePage: previewPage.page,
+                filePageCount: payload.pageCount,
+                format: previewPage.format || "image",
+                url: previewPage.url,
+              }));
+            }),
+          )
+        ).flat();
+        if (!cancelled) setSealReplacementPages(replacementPages);
         const sectionPages = await Promise.all(
           sections.map(async (section) => {
             const directTypes = new Set([
@@ -3678,7 +3969,7 @@ function PreviewDialog({
     return () => {
       cancelled = true;
     };
-  }, [applicationFiles, applicationId, data.awardType]);
+  }, [applicationFiles, applicationId, data.awardType, draftMode]);
   const handleWordRendered = React.useCallback((documentId, result) => {
     setWordRenderResults((current) => ({
       ...current,
@@ -3708,7 +3999,27 @@ function PreviewDialog({
     }
   }, [submittedPages, submittedPagesStatus, wordRenderResults]);
   const previewPages = useMemo(() => {
-    const generatedPages = buildPreviewSections(data);
+    const generatedPages = [
+      ...basicPreviewContent(data).continuations,
+      ...buildPreviewSections(data),
+    ];
+    const replacementByTarget = new Map(
+      ["person", "unit"].flatMap((prefix) =>
+        sealReplacementPages
+          .filter((page) => page.sealTarget.startsWith(`${prefix}-`))
+          .map((page) => [page.sealTarget, page]),
+      ),
+    );
+    const replacedGeneratedPages = generatedPages.flatMap((page) => {
+      const target =
+        page.kind === "person"
+          ? `person-${page.index}`
+          : page.kind === "unit"
+            ? `unit-${page.index}`
+            : null;
+      const replacement = target ? replacementByTarget.get(target) : null;
+      return replacement ? [replacement] : [page];
+    });
     const cooperationDocuments = submittedPages.filter(
       (page) => page.sectionKey === "peopleCooperation",
     );
@@ -3719,17 +4030,25 @@ function PreviewDialog({
       (page) => page.kind === "cooperation",
     );
     if (cooperationIndex < 0)
-      return [...generatedPages, ...cooperationDocuments, ...laterDocuments];
+      return [
+        ...replacedGeneratedPages,
+        ...cooperationDocuments,
+        ...laterDocuments,
+      ];
     return [
-      ...generatedPages.slice(0, cooperationIndex),
+      ...replacedGeneratedPages.slice(0, cooperationIndex),
       ...cooperationDocuments.map((page) => ({
         ...page,
         sectionKey: "people",
       })),
-      ...generatedPages.slice(cooperationIndex),
+      ...replacedGeneratedPages.slice(cooperationIndex),
       ...laterDocuments,
     ];
-  }, [data, submittedPages]);
+  }, [data, sealReplacementPages, submittedPages]);
+  const basicPageData = useMemo(
+    () => basicPreviewContent(data).firstPage,
+    [data],
+  );
   const renderedWordPageCount = submittedPages
     .filter((page) => page.format === "word")
     .reduce(
@@ -3740,7 +4059,10 @@ function PreviewDialog({
     previewPages.length +
     1 +
     renderedWordPageCount -
-    submittedPages.filter((page) => page.format === "word").length;
+    previewPages.filter((page) => page.format === "word").length;
+  const signedHomePage = sealReplacementPages.find(
+    (page) => page.sealTarget === "home",
+  );
   useEffect(() => {
     if (submittedPagesStatus !== "ready" || !pagesRef.current) return;
     const pages = [...pagesRef.current.querySelectorAll(".preview-page")];
@@ -3847,7 +4169,13 @@ function PreviewDialog({
     }
     setExporting(true);
     try {
-      const pages = [...pagesRef.current.querySelectorAll(selector)];
+      const pages =
+        typeof selector === "number"
+          ? [...pagesRef.current.querySelectorAll(".preview-page")].slice(
+              selector - 1,
+              selector,
+            )
+          : [...pagesRef.current.querySelectorAll(selector)];
       if (!pages.length) {
         window.alert(`当前暂无可导出的${label}内容`);
         return;
@@ -3885,8 +4213,21 @@ function PreviewDialog({
       setExporting(false);
     }
   };
-  const exportPdf = () =>
+  const exportPdf = () => {
+    const errors = validateApplication({
+      data,
+      awardType: data.awardType,
+      files: applicationFiles,
+    });
+    if (errors.length) {
+      const messages = errors.slice(0, 8).map(({ message }) => `- ${message}`);
+      if (errors.length > messages.length)
+        messages.push(`- 另有 ${errors.length - messages.length} 项待完善`);
+      window.alert(`导出完整 PDF 前请完善以下内容：\n${messages.join("\n")}`);
+      return;
+    }
     exportSelectedPdf("申报书", ".preview-page", "申报书");
+  };
   useEffect(() => {
     if (
       !sectionExportRequest ||
@@ -3898,7 +4239,8 @@ function PreviewDialog({
     startedSectionExport.current = sectionExportRequest.id;
     exportSelectedPdf(
       sectionExportRequest.label,
-      `[data-section-key="${sectionExportRequest.sectionKey}"]`,
+      sectionExportRequest.selector ||
+        `[data-section-key="${sectionExportRequest.sectionKey}"]`,
       sectionExportRequest.label,
     ).finally(() => onSectionExported?.());
   }, [sectionExportRequest, submittedPagesStatus]);
@@ -3908,7 +4250,7 @@ function PreviewDialog({
         <div>
           <FileText size={20} />
           <span>
-            <b>申报书预览</b>
+            <b>{signedMode ? "签章版申报书预览" : "申报书预览"}</b>
             <small>共 {pageCount} 页 · A4 纵向</small>
           </span>
         </div>
@@ -3926,70 +4268,121 @@ function PreviewDialog({
             ) : (
               <Download size={17} />
             )}
-            {exporting ? "正在生成" : "导出 PDF"}
+            {exporting ? "正在生成" : signedMode ? "下载签章版申报书" : "导出 PDF"}
           </button>
-          <div className="seal-export-menu" aria-label="独立盖章导出">
-            <span>独立盖章导出</span>
-            <button
-              className="secondary-button"
-              disabled={exporting}
-              onClick={() =>
+          <select
+            className="control"
+            aria-label="按章节导出 PDF"
+            value=""
+            disabled={exporting || submittedPagesStatus !== "ready"}
+            onChange={(event) => {
+              const section = getAwardSections(data.awardType).find(
+                (item) => item.key === event.target.value,
+              );
+              if (section)
                 exportSelectedPdf(
-                  "首页",
-                  ":scope > .preview-page:first-child",
-                  "首页",
-                )
-              }
-            >
-              首页
-            </button>
-            <button
-              className="secondary-button"
-              disabled={exporting}
-              onClick={() =>
-                exportSelectedPdf(
-                  "完成人",
-                  ":scope > .preview-person-page",
-                  "完成人",
-                )
-              }
-            >
-              完成人
-            </button>
-            <button
-              className="secondary-button"
-              disabled={exporting}
-              onClick={() =>
-                exportSelectedPdf(
-                  "完成单位",
-                  ":scope > .preview-unit-page",
-                  "完成单位",
-                )
-              }
-            >
-              完成单位
-            </button>
-            <button
-              className="secondary-button"
-              disabled={exporting}
-              onClick={() =>
-                exportSelectedPdf(
-                  "申报推荐单位意见",
-                  '[data-section-key="unitRecommendation"]',
-                  "申报推荐单位意见",
-                )
-              }
-            >
-              申报推荐单位意见
-            </button>
-          </div>
+                  section.label,
+                  `[data-section-key="${section.key}"]`,
+                  section.label,
+                );
+            }}
+          >
+            <option value="">按章节导出 PDF</option>
+            {getAwardSections(data.awardType).map((section) => (
+              <option
+                key={section.key}
+                value={section.key}
+                disabled={
+                  section.number > 7 &&
+                  !previewPages.some((page) => page.sectionKey === section.key)
+                }
+              >
+                {section.number}、{section.label}
+              </option>
+            ))}
+          </select>
+          <select
+            className="control"
+            aria-label="按页导出 PDF"
+            value=""
+            disabled={exporting || submittedPagesStatus !== "ready"}
+            onChange={(event) => {
+              const index = Number(event.target.value);
+              if (index > 0)
+                exportSelectedPdf(`第 ${index} 页`, index, `第${index}页`);
+            }}
+          >
+            <option value="">按页导出 PDF</option>
+            {Array.from({ length: pageCount }, (_, index) => (
+              <option key={index} value={index + 1}>
+                第 {index + 1} 页
+              </option>
+            ))}
+          </select>
+          {previewProfile.mode === "project" && (
+            <div className="seal-export-menu" aria-label="独立盖章导出">
+              <span>独立盖章导出</span>
+              <button
+                className="secondary-button"
+                disabled={exporting}
+                onClick={() =>
+                  exportSelectedPdf(
+                    "首页",
+                    ":scope > .preview-page:first-child",
+                    "首页",
+                  )
+                }
+              >
+                首页
+              </button>
+              <button
+                className="secondary-button"
+                disabled={exporting}
+                onClick={() =>
+                  exportSelectedPdf(
+                    "完成人",
+                    ":scope > .preview-person-page",
+                    "完成人",
+                  )
+                }
+              >
+                完成人
+              </button>
+              <button
+                className="secondary-button"
+                disabled={exporting}
+                onClick={() =>
+                  exportSelectedPdf(
+                    "完成单位",
+                    ":scope > .preview-unit-page",
+                    "完成单位",
+                  )
+                }
+              >
+                完成单位
+              </button>
+              <button
+                className="secondary-button"
+                disabled={exporting}
+                onClick={() =>
+                  exportSelectedPdf(
+                    "申报推荐单位意见",
+                    '[data-section-key="unitRecommendation"]',
+                    "申报推荐单位意见",
+                  )
+                }
+              >
+                申报推荐单位意见
+              </button>
+            </div>
+          )}
           {sourceFile && (
             <a
               className="primary-button"
               href={`/api/applications/${applicationId}/files/${sourceFile.id}/download`}
             >
               <FileDown size={17} />
-              一键导出最终版 PDF
+              下载已上传 PDF
             </a>
           )}
         </div>
@@ -4041,10 +4434,15 @@ function PreviewDialog({
           className={`preview-pages preview-pages--${previewProfile.code}`}
           ref={pagesRef}
         >
-          {getAwardProfile(data.awardType).code === "achievement" ? (
-            <PreviewAchievementPageOne data={data} />
+          {signedHomePage ? (
+            <PreviewSubmittedPage page={signedHomePage} />
+          ) : getAwardProfile(data.awardType).code === "achievement" ? (
+            <PreviewAchievementPageOne data={basicPageData} />
           ) : (
-            <PreviewPageOne data={data} disciplineRecords={disciplineRecords} />
+            <PreviewPageOne
+              data={basicPageData}
+              disciplineRecords={disciplineRecords}
+            />
           )}
           {previewPages.map((page, index) => {
             const pageNumber = index + 2;
@@ -4080,6 +4478,15 @@ function PreviewDialog({
                 <PreviewEconomicPage
                   key={`${page.title}-${index}`}
                   data={page.data}
+                  pageNumber={pageNumber}
+                />
+              );
+            }
+            if (page.kind === "comparison") {
+              return (
+                <PreviewComparisonPage
+                  key={`comparison-${index}`}
+                  records={page.records}
                   pageNumber={pageNumber}
                 />
               );
@@ -4154,7 +4561,7 @@ function CreateApplicationDialog({ onClose, onCreated }) {
     awardType: "节能减排科技进步奖",
     awardLevel: getAwardLevelRule(initialProfile.value).value,
     year: "2026",
-    applicationChannel: "自由申报",
+    applicationChannel: "",
     applicantUnit: "",
     workflowMode: "form",
   });
@@ -4175,6 +4582,10 @@ function CreateApplicationDialog({ onClose, onCreated }) {
     }
     if (!form.applicantUnit.trim()) {
       setError("请填写申报或推荐单位");
+      return;
+    }
+    if (!form.applicationChannel) {
+      setError("请选择申报渠道");
       return;
     }
     setSaving(true);
@@ -4294,18 +4705,20 @@ function CreateApplicationDialog({ onClose, onCreated }) {
                     }
                   />
                   <b>{level.label}</b>
-                  <small>{level.description}</small>
+                  {level.description && <small>{level.description}</small>}
                 </label>
               ))}
             </div>
-            <p className="award-level-note">
-              <Info size={15} />
-              <span>
-                {selectedLevel.description}
-                {selectedAward.mode === "project" &&
-                  " 特等奖由评审组从拟授一等奖项目中提名，不单独接受申报。"}
-              </span>
-            </p>
+            {selectedAward.mode === "project" && (
+              <p className="award-level-note">
+                <Info size={15} />
+                <span>
+                  {selectedLevel.description}
+                  {selectedAward.mode === "project" &&
+                    " 特等奖由评审组从拟授一等奖项目中提名，不单独接受申报。"}
+                </span>
+              </p>
+            )}
           </fieldset>
           <label>
             <span>申报年度</span>
@@ -4328,6 +4741,9 @@ function CreateApplicationDialog({ onClose, onCreated }) {
                 setForm({ ...form, applicationChannel: event.target.value })
               }
             >
+              <option value="" disabled>
+                请选择
+              </option>
               {applicationChannels.map((channel) => (
                 <option key={channel}>{channel}</option>
               ))}
@@ -4448,10 +4864,10 @@ function AnnouncementCenter({ onNew }) {
           </div>
           <a
             className="secondary-button"
-            href={referenceDocuments[0].href}
+            href={officialAwardUrl}
             target="_blank"
           >
-            <FileDown size={16} /> 查看原文
+            <ExternalLink size={16} /> 协会官网
           </a>
         </div>
         <div className="notice-section">
@@ -4469,7 +4885,7 @@ function AnnouncementCenter({ onNew }) {
             ))}
           </div>
           <p className="plain-note">
-            科技成就奖不分等级；科技进步奖和技术发明奖设特等奖、一等奖、二等奖，特等奖为非常设奖项且不单独接受申报。
+            三个奖项均可申报一等奖、二等奖、三等奖。科技进步奖和技术发明奖的特等奖为非常设奖项，不单独接受申报。
           </p>
         </div>
         <div className="notice-section">
@@ -4569,7 +4985,7 @@ function FaqCenter() {
     ],
     [
       "可以申报哪些奖项？",
-      "设节能减排科技成就奖、节能减排科技进步奖、节能减排技术发明奖三个一级子奖项。科技成就奖为个人奖且不分等级；其余两项为项目奖。特等奖不单独申报。",
+      "设节能减排科技成就奖、节能减排科技进步奖、节能减排技术发明奖三个一级子奖项。科技成就奖为个人奖，其余两项为项目奖。三个奖项均可申报一等奖、二等奖、三等奖。特等奖不单独申报。",
     ],
     [
       "科技进步奖和技术发明奖对应用年限有什么要求？",
@@ -4640,14 +5056,17 @@ function ReferenceCenter() {
       <PortalPageTitle
         eyebrow="申报指南"
         title="参考资料"
-        description="下载当前项目配套的正式通知、办法、申报书和填写说明。"
+        description="下载奖励办法、申报书和填写说明。"
       />
       <section className="info-surface resource-surface">
         <div className="resource-head">
           <BookOpen size={22} />
           <span>
             <b>2026 年度申报材料包</b>
-            <small>共 4 份本地材料，打开后可直接查看或下载。</small>
+            <small>
+              共 {referenceDocuments.length}{" "}
+              份本地材料，打开后可直接查看或下载。
+            </small>
           </span>
         </div>
         <div className="resource-list">
@@ -4693,7 +5112,150 @@ function ReferenceCenter() {
   );
 }
 
-function Dashboard({ onOpen, user, onLogout }) {
+function SealReplacementDialog({
+  application,
+  data,
+  files,
+  onClose,
+  onDownload,
+}) {
+  const [uploading, setUploading] = useState("");
+  const [localFiles, setLocalFiles] = useState(files || []);
+  useEffect(() => setLocalFiles(files || []), [files]);
+  const profile = getAwardProfile(data.awardType);
+  const entries = [
+    { key: "home", label: "首页" },
+    ...(data.people || []).map((person, index) => ({
+      key: `person-${index}`,
+      label: `第${index + 1}完成人：${person.name || "未填写姓名"}`,
+    })),
+    ...(data.units || []).map((unit, index) => ({
+      key: `unit-${index}`,
+      label: `第${index + 1}完成单位：${unit.name || "未填写单位"}`,
+    })),
+  ];
+  const upload = async (entry, file) => {
+    if (!file) return;
+    if (!/\.pdf$/i.test(file.name)) {
+      window.alert("签章页替换只支持单页 PDF 文件");
+      return;
+    }
+    setUploading(entry.key);
+    const category = `seal_replacement:${profile.code}:${entry.key}`;
+    const body = new FormData();
+    body.append("file", file);
+    body.append("category", category);
+    try {
+      const response = await apiFetch(
+        `/api/applications/${application.id}/files`,
+        {
+          method: "POST",
+          body,
+        },
+      );
+      const payload = await response.json();
+      if (!response.ok || !payload.ok)
+        throw new Error(payload.message || "签章页上传失败");
+      setLocalFiles((current) => [
+        ...current.filter((item) => item.file_type !== category),
+        payload.file,
+      ]);
+    } catch (error) {
+      window.alert(error.message || "签章页上传失败");
+    } finally {
+      setUploading("");
+    }
+  };
+  return (
+    <div className="modal-layer">
+      <section
+        className="dialog seal-replacement-dialog"
+        role="dialog"
+        aria-label="签章页替换"
+      >
+        <div className="dialog-head">
+          <div>
+            <FileCheck2 size={20} />
+            <span>
+              <b>签章页替换</b>
+              <small>仅支持已完成全部申报内容的项目</small>
+            </span>
+          </div>
+          <button className="icon-button" aria-label="关闭" onClick={onClose}>
+            <X size={20} />
+          </button>
+        </div>
+        <div className="dialog-body">
+          <p className="section-note">
+            <Info size={16} />
+            下载已填写内容生成的单页底稿，签字盖章后上传对应 PDF 替换。
+          </p>
+          <div className="seal-replacement-list">
+            {entries.map((entry) => {
+              const category = `seal_replacement:${profile.code}:${entry.key}`;
+              const uploaded = localFiles.find(
+                (file) => file.file_type === category,
+              );
+              return (
+                <div className="seal-replacement-row" key={entry.key}>
+                  <span>
+                    <b>{entry.label}</b>
+                    <small>
+                      {uploaded
+                        ? `已上传：${uploaded.file_name}`
+                        : "尚未上传签章页"}
+                    </small>
+                  </span>
+                  <div>
+                    <button
+                      className="secondary-button"
+                      onClick={() => onDownload(entry)}
+                    >
+                      <Download size={15} />
+                      下载底稿
+                    </button>
+                    <label className="secondary-button">
+                      <Upload size={15} />
+                      {uploading === entry.key ? "上传中" : "上传签章 PDF"}
+                      <input
+                        hidden
+                        type="file"
+                        accept="application/pdf,.pdf"
+                        disabled={Boolean(uploading)}
+                        onChange={(event) => {
+                          upload(entry, event.target.files?.[0]);
+                          event.target.value = "";
+                        }}
+                      />
+                    </label>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function sealPageReadiness(application) {
+  const data = application.data || {};
+  const profile = getAwardProfile(application.award_type || data.awardType);
+  if (profile.mode !== "project")
+    return { ok: false, message: "签章页替换仅适用于项目奖" };
+  const errors = ["basic", "people", "units"].flatMap((sectionKey) =>
+    validateSection({ data, sectionKey, awardType: profile.value }),
+  );
+  return errors.length
+    ? {
+        ok: false,
+        message: `请先完善项目首页、完成人和完成单位：${errors[0].message}`,
+      }
+    : { ok: true };
+}
+
+function Dashboard({ onOpen, onSeal, onSignedBook, user, onLogout }) {
   const [applications, setApplications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
@@ -4890,8 +5452,9 @@ function Dashboard({ onOpen, user, onLogout }) {
                         <th>序号</th>
                         <th>项目名称</th>
                         <th>奖项类别</th>
-                        <th>年度</th>
+                        <th>签章页替换</th>
                         <th>填报进度</th>
+                        <th>签章版申报书</th>
                         <th>当前状态</th>
                         <th>最近更新</th>
                         <th>操作</th>
@@ -4900,14 +5463,14 @@ function Dashboard({ onOpen, user, onLogout }) {
                     <tbody>
                       {loading ? (
                         <tr>
-                          <td colSpan="8" className="table-empty">
+                          <td colSpan="9" className="table-empty">
                             <LoaderCircle className="spin" size={23} />
                             正在加载项目…
                           </td>
                         </tr>
                       ) : applications.length === 0 ? (
                         <tr>
-                          <td colSpan="8" className="table-empty">
+                          <td colSpan="9" className="table-empty">
                             <FileText size={28} />
                             暂无符合条件的申报项目
                           </td>
@@ -4931,7 +5494,16 @@ function Dashboard({ onOpen, user, onLogout }) {
                                 </small>
                               </td>
                               <td>{item.award_type}</td>
-                              <td>{item.year}</td>
+                              <td>
+                                <button
+                                  className="seal-entry-button"
+                                  title="项目首页、完成人和完成单位填写完整后可进行签章页替换"
+                                  onClick={() => onSeal(item)}
+                                >
+                                  <FileCheck2 size={15} />
+                                  签章页替换
+                                </button>
+                              </td>
                               <td>
                                 <div className="table-progress">
                                   <span>
@@ -4939,6 +5511,16 @@ function Dashboard({ onOpen, user, onLogout }) {
                                   </span>
                                   <b>{item.progress}%</b>
                                 </div>
+                              </td>
+                              <td>
+                                <button
+                                  className="seal-book-button"
+                                  title="预览并下载已替换签章页的整本申报书"
+                                  onClick={() => onSignedBook(item)}
+                                >
+                                  <FileDown size={15} />
+                                  签章版申报书
+                                </button>
                               </td>
                               <td>
                                 <span className={`status-badge ${state[1]}`}>
@@ -5052,7 +5634,9 @@ function EditorApp({ application, onHome }) {
   const [saveState, setSaveState] = useState("saved");
   const [savedAt, setSavedAt] = useState("");
   const [wordImportSection, setWordImportSection] = useState(null);
-  const [showPreview, setShowPreview] = useState(false);
+  const [showPreview, setShowPreview] = useState(
+    Boolean(application.openSignedBook),
+  );
   const [sectionExportRequest, setSectionExportRequest] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sourceFile, setSourceFile] = useState(null);
@@ -5240,7 +5824,12 @@ function EditorApp({ application, onHome }) {
         data.background,
         data.technicalContent,
         data.innovations,
-        data.comparison,
+        ...(data.comparisonRecords || []).flatMap((record) => [
+          record.project,
+          record.domestic,
+          record.foreign,
+          record.advantage,
+        ]),
         data.application,
       ].every(hasContent),
       awards: hasRecord(data.awardRecords, "awardRecords"),
@@ -5299,12 +5888,6 @@ function EditorApp({ application, onHome }) {
       window.alert(error.message);
       return;
     }
-    const errors = validateApplication({
-      data,
-      awardType: awardProfile.value,
-      files: currentFiles,
-    });
-    if (showValidationErrors(errors, "生成预览前请完善以下内容")) return;
     setShowPreview(true);
   };
   const continueFromSection = () => {
@@ -5561,71 +6144,75 @@ function EditorApp({ application, onHome }) {
       );
     if (active === "details")
       return (
-        <LongTextSection
-          number={3}
-          title="项目详细内容"
-          description="严格按模板 1 至 7 项顺序填写；国内外同类技术比较不超过两页。"
-          fields={[
-            ...awardProfile.detailFields.map(([key, label]) => ({
-              key,
-              label,
-              required: true,
-              max: LONG_TEXT_LIMITS[key],
-              hint:
-                {
-                  background: "限 800 字。",
-                  technicalContent:
-                    "纸面不敷可另增页；系统阐述技术原理、研发过程、核心工艺/方法/算法、技术实现路径和关键配套措施。",
-                  innovations:
-                    "逐条列明核心创新点，明确创新类型、具体内容及与现有技术的本质区别，突出节能减排领域独特价值；限 800 字。",
-                }[key] || "",
-            })),
-            {
-              key: "comparison",
-              label: "4．与当前国内外同类技术的比较（不超过两页）",
-              required: true,
-              hint: "从主要技术参数、节能减排效益、市场竞争力三个维度，对比国内外同类先进技术并明确本项目技术水平定位。",
-            },
-            {
-              key: "application",
-              label: "5．应用情况",
-              required: true,
-              max: LONG_TEXT_LIMITS.application,
-              hint: "填写项目应用时间、应用单位数量和范围、实际运行效果、用户反馈、推广前景及已开展的推广措施；限 800 字。",
-            },
-            {
-              key: "economic",
-              label: "6．经济效益：各栏目的计算依据",
-              max: LONG_TEXT_LIMITS.economic,
-              hint: "标准、软科学类项目可不填；金额单位为万元人民币，创收外汇为美元；计算依据限 300 字。",
-            },
-            {
-              key: "social",
-              label: "7．社会效益",
-              max: LONG_TEXT_LIMITS.social,
-              hint: "填写节能减排、环境保护、资源节约、产业升级、就业带动、公共安全、行业标准完善等社会效益；限 300 字。",
-            },
-          ]}
-          data={data}
-          setField={setField}
-          applicationId={application.id}
-          prefixes={{
-            economic: (
-              <Field label="经济效益数据">
-                <EconomicCollection
-                  summary={data.economicSummary}
-                  records={data.economicRecords || []}
-                  onSummaryChange={(value) =>
-                    setField("economicSummary", value)
-                  }
-                  onRecordsChange={(value) =>
-                    setField("economicRecords", value)
-                  }
+        <>
+          <LongTextSection
+            number={3}
+            title="项目详细内容"
+            description="严格按模板 1 至 7 项顺序填写；国内外同类技术比较不超过两页。"
+            fields={[
+              ...awardProfile.detailFields.map(([key, label]) => ({
+                key,
+                label,
+                required: true,
+                max: LONG_TEXT_LIMITS[key],
+                hint:
+                  {
+                    background: "限 800 字。",
+                    technicalContent:
+                      "纸面不敷可另增页；系统阐述技术原理、研发过程、核心工艺/方法/算法、技术实现路径和关键配套措施。",
+                    innovations:
+                      "逐条列明核心创新点，明确创新类型、具体内容及与现有技术的本质区别，突出节能减排领域独特价值；限 800 字。",
+                  }[key] || "",
+              })),
+              {
+                key: "application",
+                label: "5．应用情况",
+                required: true,
+                max: LONG_TEXT_LIMITS.application,
+                hint: "填写项目应用时间、应用单位数量和范围、实际运行效果、用户反馈、推广前景及已开展的推广措施；限 800 字。",
+              },
+              {
+                key: "economic",
+                label: "6．经济效益：各栏目的计算依据",
+                max: LONG_TEXT_LIMITS.economic,
+                hint: "标准、软科学类项目可不填；金额单位为万元人民币，创收外汇为美元；计算依据限 300 字。",
+              },
+              {
+                key: "social",
+                label: "7．社会效益",
+                max: LONG_TEXT_LIMITS.social,
+                hint: "填写节能减排、环境保护、资源节约、产业升级、就业带动、公共安全、行业标准完善等社会效益；限 300 字。",
+              },
+            ]}
+            data={data}
+            setField={setField}
+            applicationId={application.id}
+            prefixes={{
+              economic: (
+                <Field label="经济效益数据">
+                  <EconomicCollection
+                    summary={data.economicSummary}
+                    records={data.economicRecords || []}
+                    onSummaryChange={(value) =>
+                      setField("economicSummary", value)
+                    }
+                    onRecordsChange={(value) =>
+                      setField("economicRecords", value)
+                    }
+                  />
+                </Field>
+              ),
+            }}
+            insertAfter={{
+              innovations: (
+                <ComparisonTableSection
+                  records={data.comparisonRecords}
+                  onChange={(value) => setField("comparisonRecords", value)}
                 />
-              </Field>
-            ),
-          }}
-        />
+              ),
+            }}
+          />
+        </>
       );
     if (active === "awards")
       return (
@@ -5663,6 +6250,37 @@ function EditorApp({ application, onHome }) {
               ) : null
             }
           />
+        </>
+      );
+    if (active === "units")
+      return (
+        <>
+          <EntityEditor
+            entityType="units"
+            number={7}
+            value={data.units}
+            onChange={(value) => setField("units", value)}
+            renderCustomField={({ field, record, index, update }) =>
+              field.key === "contribution" ? (
+                <div className="person-contribution unit-contribution">
+                  <div className="person-contribution-label">
+                    对本项目技术创新和应用的贡献
+                  </div>
+                  <RichTextEditor
+                    value={record.contribution}
+                    onChange={(value) => update("contribution", value)}
+                    applicationId={application.id}
+                    fieldKey={`unit-${record.id || index}-contribution`}
+                    label={`${record.name || `第 ${index + 1} 完成单位`}对本项目技术创新和应用的贡献`}
+                  />
+                  <CharacterCount
+                    value={record.contribution}
+                    max={LONG_TEXT_LIMITS.unitContribution}
+                  />
+                </div>
+              ) : null
+            }
+          />
           <CooperationRecordsSection
             records={data.cooperationRecords || []}
             onChange={(value) => setField("cooperationRecords", value)}
@@ -5677,35 +6295,6 @@ function EditorApp({ application, onHome }) {
             }
           />
         </>
-      );
-    if (active === "units")
-      return (
-        <EntityEditor
-          entityType="units"
-          number={7}
-          value={data.units}
-          onChange={(value) => setField("units", value)}
-          renderCustomField={({ field, record, index, update }) =>
-            field.key === "contribution" ? (
-              <div className="person-contribution unit-contribution">
-                <div className="person-contribution-label">
-                  对本项目技术创新和应用的贡献
-                </div>
-                <RichTextEditor
-                  value={record.contribution}
-                  onChange={(value) => update("contribution", value)}
-                  applicationId={application.id}
-                  fieldKey={`unit-${record.id || index}-contribution`}
-                  label={`${record.name || `第 ${index + 1} 完成单位`}对本项目技术创新和应用的贡献`}
-                />
-                <CharacterCount
-                  value={record.contribution}
-                  max={LONG_TEXT_LIMITS.unitContribution}
-                />
-              </div>
-            ) : null
-          }
-        />
       );
     if (active === "attachments")
       return (
@@ -5730,7 +6319,14 @@ function EditorApp({ application, onHome }) {
         disciplineRecords={disciplineRecords}
         sectionExportRequest={sectionExportRequest}
         onSectionExported={() => setSectionExportRequest(null)}
-        onClose={() => setShowPreview(false)}
+        onClose={() => {
+          if (application.openSignedBook) {
+            onHome();
+            return;
+          }
+          setShowPreview(false);
+        }}
+        signedMode={Boolean(application.openSignedBook)}
       />
     );
   return (
@@ -5790,7 +6386,7 @@ function EditorApp({ application, onHome }) {
               href={`/api/applications/${application.id}/files/${sourceFile.id}/download`}
             >
               <FileDown size={17} />
-              导出最终版
+              下载已上传 PDF
             </a>
           )}
           <button
@@ -5868,7 +6464,7 @@ function EditorApp({ application, onHome }) {
           <div className="reference-links">
             <p>参考材料</p>
             <a
-              href="/materials/附件2.中国节能协会创新奖申报书.doc"
+              href={`/materials/${encodeURIComponent(awardProfile.templateFolder)}/${encodeURIComponent(`附件2.中国节能协会创新奖${awardProfile.templateFolder}申报书.doc`)}`}
               target="_blank"
             >
               <BookOpen size={16} />
@@ -5922,7 +6518,7 @@ function EditorApp({ application, onHome }) {
           />
           {currentContent()}
           <div className="bottom-actions">
-            {currentSection.number <= 7 && (
+            {
               <button
                 className="secondary-button"
                 type="button"
@@ -5939,7 +6535,7 @@ function EditorApp({ application, onHome }) {
                 <FileDown size={17} />
                 导出本章 PDF
               </button>
-            )}
+            }
             <button className="secondary-button" onClick={openPreview}>
               <Eye size={17} />
               预览当前申报书
@@ -5973,6 +6569,9 @@ function EditorApp({ application, onHome }) {
 function App() {
   const [user, setUser] = useState(undefined);
   const [currentApplication, setCurrentApplication] = useState(null);
+  const [sealApplication, setSealApplication] = useState(null);
+  const [sealFiles, setSealFiles] = useState([]);
+  const [sealDraftRequest, setSealDraftRequest] = useState(null);
   const [route, setRoute] = useState(window.location.hash || "#/home");
   useEffect(() => {
     fetch("/api/auth/me")
@@ -6005,12 +6604,66 @@ function App() {
       });
   }, [route, user]);
   const openApplication = (application) => {
+    setSealApplication(null);
     setCurrentApplication(application);
     window.location.hash = `/applications/${application.id}`;
+  };
+  const openSeal = async (summary) => {
+    const response = await apiFetch(`/api/applications/${summary.id}`);
+    const payload = await response.json();
+    if (!payload.ok) return;
+    const readiness = sealPageReadiness(payload.application);
+    if (!readiness.ok) {
+      window.alert(readiness.message);
+      return;
+    }
+    const filesResponse = await apiFetch(`/api/applications/${summary.id}/files`);
+    const filesPayload = await filesResponse.json();
+    if (!filesResponse.ok || !filesPayload.ok) {
+      window.alert(filesPayload.message || "签章文件加载失败");
+      return;
+    }
+    setSealFiles(filesPayload.list || []);
+    setSealApplication(payload.application);
+  };
+  const openSignedBook = async (summary) => {
+    const response = await apiFetch(`/api/applications/${summary.id}`);
+    const payload = await response.json();
+    if (!response.ok || !payload.ok) {
+      window.alert(payload.message || "无法打开签章版申报书");
+      return;
+    }
+    const profile = getAwardProfile(
+      payload.application.award_type || payload.application.data?.awardType,
+    );
+    if (profile.mode !== "project") {
+      window.alert("签章版申报书仅适用于项目奖申报材料");
+      return;
+    }
+    const filesResponse = await apiFetch(
+      `/api/applications/${summary.id}/files`,
+    );
+    const filesPayload = await filesResponse.json();
+    const hasSealPages = (filesPayload.list || []).some((file) =>
+      new RegExp(
+        `^seal_replacement:${profile.code}:(home|person-[0-9]+|unit-[0-9]+)$`,
+      ).test(file.file_type),
+    );
+    if (!hasSealPages) {
+      window.alert("请先完成签章页替换并上传签章 PDF");
+      return;
+    }
+    setSealApplication(null);
+    setCurrentApplication({
+      ...payload.application,
+      openSignedBook: true,
+    });
+    window.location.hash = `/applications/${summary.id}`;
   };
   const logout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
     setCurrentApplication(null);
+    setSealApplication(null);
     setUser(null);
     window.location.hash = "/login";
   };
@@ -6036,11 +6689,58 @@ function App() {
       application={currentApplication}
       onHome={() => {
         setCurrentApplication(null);
+        setSealApplication(null);
         window.location.hash = "/home";
       }}
     />
   ) : (
-    <Dashboard onOpen={openApplication} user={user} onLogout={logout} />
+    <>
+      <Dashboard
+        onOpen={openApplication}
+        onSeal={openSeal}
+        onSignedBook={openSignedBook}
+        user={user}
+        onLogout={logout}
+      />
+      {sealApplication && (
+        <SealReplacementDialog
+          application={sealApplication}
+          data={{ ...sealApplication.data, awardType: sealApplication.award_type }}
+          files={sealFiles}
+          onClose={() => {
+            setSealApplication(null);
+            setSealDraftRequest(null);
+          }}
+          onDownload={(entry) => {
+            const selector = entry.key === "home"
+              ? ":scope > .preview-page:first-child"
+              : entry.key.startsWith("person-")
+                ? `[data-person-index="${entry.key.slice(7)}"]`
+                : `[data-unit-index="${entry.key.slice(5)}"]`;
+            setSealDraftRequest({
+              id: Date.now(),
+              sectionKey: entry.key,
+              label: entry.label,
+              selector,
+            });
+          }}
+        />
+      )}
+      {sealApplication && sealDraftRequest && (
+        <div className="seal-draft-renderer" aria-hidden="true">
+          <PreviewDialog
+            data={{ ...sealApplication.data, awardType: sealApplication.award_type }}
+            applicationId={sealApplication.id}
+            applicationFiles={sealFiles}
+            disciplineRecords={awardDisciplines}
+            sectionExportRequest={sealDraftRequest}
+            onSectionExported={() => setSealDraftRequest(null)}
+            onClose={() => setSealDraftRequest(null)}
+            draftMode
+          />
+        </div>
+      )}
+    </>
   );
 }
 

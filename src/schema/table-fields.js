@@ -220,6 +220,7 @@ const baseTableFields = {
       minWidth: 180,
     }),
     textField("period", "合作时间", {
+      type: "dateRange",
       group: "cooperationRecords",
       width: "170px",
       minWidth: 170,
@@ -253,6 +254,7 @@ const baseTableFields = {
       minWidth: 200,
     }),
     textField("period", "起止时间", {
+      type: "dateRange",
       group: "researchRecords",
       width: "170px",
       minWidth: 170,
@@ -276,6 +278,7 @@ const baseTableFields = {
       minWidth: 260,
     }),
     textField("period", "参与时间", {
+      type: "dateRange",
       group: "engineeringRecords",
       width: "170px",
       minWidth: 170,
@@ -334,6 +337,7 @@ const baseTableFields = {
     textField("highestDegree", "最高学位", { group: "people" }),
     multilineField("awards", "曾获奖励", { group: "people", required: true }),
     textField("projectPeriod", "参加本项目起止时间", {
+      type: "dateRange",
       group: "people",
       required: true,
     }),
