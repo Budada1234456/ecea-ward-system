@@ -657,7 +657,18 @@ app.post("/api/pdf-export", async (req, res) => {
       }
       const fileId = Number(part?.fileId);
       if (part?.type === "pdf" && pdfFiles.has(fileId)) {
-        return { type: "pdf", path: pdfFiles.get(fileId) };
+        const row = db
+          .prepare(
+            "SELECT file_type FROM application_files WHERE id = ? AND application_id = ?",
+          )
+          .get(fileId, applicationId);
+        return {
+          type: "pdf",
+          path: pdfFiles.get(fileId),
+          addPageNumbers: !String(row?.file_type || "").startsWith(
+            "seal_replacement:",
+          ),
+        };
       }
       return null;
     });
@@ -694,7 +705,7 @@ app.post("/api/pdf-export", async (req, res) => {
       if (part.type === "pdf") {
         renderedParts.push({
           pdf: await fsPromises.readFile(part.path),
-          addPageNumbers: true,
+          addPageNumbers: part.addPageNumbers !== false,
         });
         continue;
       }

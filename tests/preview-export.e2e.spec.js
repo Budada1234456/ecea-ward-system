@@ -162,6 +162,7 @@ test("achievement tables match page one and rich content is not clipped", async 
       /preview-pages--achievement/,
     );
 
+
     const tableFonts = await page.evaluate(() => {
       const basic = document.querySelector(
         ".preview-achievement-basic > table td",

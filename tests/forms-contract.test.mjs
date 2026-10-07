@@ -170,3 +170,33 @@ test("incomplete confirmed disciplines are downgraded to pending", () => {
   assert.equal(missingPath.status, DISCIPLINE_STATUS.PENDING);
   assert.equal(truncatedPath.status, DISCIPLINE_STATUS.PENDING);
 });
+
+
+test("achievement resume preserves legacy content and structured month records", () => {
+  const legacy = normalizeApplicationData({ resume: "<p>旧简历</p>" });
+  assert.equal(legacy.resumeRecords[0].content, "<p>旧简历</p>");
+  assert.equal(legacy.resumeRecords[0].startMonth, "");
+  const rows = [{ id: "r1", startMonth: "2000-09", endMonth: "2004-06", content: "大学专业" }];
+  const normalized = normalizeApplicationData({ resumeRecords: rows, candidate: { postalCode: "100001", homePostalCode: "200001" } });
+  assert.deepEqual(normalized.resumeRecords, rows);
+  assert.equal(normalized.candidate.postalCode, "100001");
+  assert.equal(normalized.candidate.homePostalCode, "200001");
+  assert.deepEqual(normalizeApplicationData({ resume: "旧简历", resumeRecords: [] }).resumeRecords, []);
+});
+
+test("achievement template fields survive normalization", () => {
+  const normalized = normalizeApplicationData({
+    awardType: "节能减排科技成就奖",
+    awardRecords: [{ name: "荣誉", totalPeople: "5", personalRank: "2" }],
+    paperRecords: [{ basicInformation: "论文", contribution: "贡献" }],
+    ipRecords: [{ name: "专利", certificateNumber: "C-1", owner: "单位" }],
+    researchRecords: [{ name: "项目", funding: "10", leader: "张三" }],
+    engineeringRecords: [{ name: "工程", client: "甲方", economicBenefit: "20" }],
+  });
+  assert.equal(normalized.awardRecords[0].totalPeople, "5");
+  assert.equal(normalized.awardRecords[0].personalRank, "2");
+  assert.equal(normalized.paperRecords[0].contribution, "贡献");
+  assert.equal(normalized.ipRecords[0].certificateNumber, "C-1");
+  assert.equal(normalized.researchRecords[0].funding, "10");
+  assert.equal(normalized.engineeringRecords[0].client, "甲方");
+});

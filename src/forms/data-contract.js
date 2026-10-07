@@ -222,6 +222,49 @@ export function normalizeApplicationData(value) {
       ? source.candidate
       : {}),
   };
+  if (source.awardType === "节能减排科技成就奖") {
+    // Achievement awards use a template-specific set of columns that is
+    // intentionally broader than the shared legacy schema. Keep those
+    // fields when loading/saving older normalized records.
+    for (const group of [
+      "awardRecords",
+      "paperRecords",
+      "ipRecords",
+      "researchRecords",
+      "engineeringRecords",
+    ]) {
+      const sourceRecords = Array.isArray(source[group]) ? source[group] : [];
+      normalized[group] = normalized[group].map((record, index) => ({
+        ...(sourceRecords[index] || {}),
+        ...record,
+      }));
+    }
+    normalized.paperRecords = normalized.paperRecords.map((record) => ({
+      ...record,
+      basicInformation: record.basicInformation ?? [
+        record.title,
+        record.publicationYear,
+        record.authorRank,
+        record.authors,
+        record.publisher,
+      ].filter((value) => value !== undefined && value !== null && value !== "").join("；"),
+    }));
+    normalized.engineeringRecords = normalized.engineeringRecords.map((record) => ({
+      ...record,
+      participation: record.participation ?? [record.role, record.contribution].filter(Boolean).join("；"),
+    }));
+  }
+  // Preserve historical free-text resumes in the new two-column editor.
+  normalized.resumeRecords = Array.isArray(source.resumeRecords)
+    ? source.resumeRecords.map((row, index) => ({
+        id: row?.id || `resume-legacy-${index + 1}`,
+        startMonth: String(row?.startMonth || ""),
+        endMonth: String(row?.endMonth || ""),
+        content: String(row?.content || ""),
+      }))
+    : source.resume
+      ? [{ id: "resume-legacy-1", startMonth: "", endMonth: "", content: String(source.resume) }]
+      : [];
   return normalized;
 }
 

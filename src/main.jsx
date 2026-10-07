@@ -198,6 +198,7 @@ function createEmptyData(meta = {}) {
       specialty: "",
       mailingAddress: "",
       postalCode: "",
+      homePostalCode: "",
       officePhone: "",
       mobilePhone: "",
       homePhone: "",
@@ -206,6 +207,7 @@ function createEmptyData(meta = {}) {
       homeAddress: "",
       socialPositions: "",
       academicPositions: "",
+      photo: "",
     },
     people: [],
     peopleCooperation: "",
@@ -235,6 +237,7 @@ function createEmptyData(meta = {}) {
     transformation: "",
     workSummary: "",
     resume: "",
+    resumeRecords: [],
     awardRecords: [],
     ipRecords: [],
     paperRecords: [],
@@ -602,11 +605,52 @@ function AwardTypeLock({ profile, awardLevel }) {
   );
 }
 
+function AchievementResumeEditor({ records, onChange }) {
+  const update = (index, key, value) => onChange(records.map((row, i) =>
+    i === index ? { ...row, [key]: value } : row));
+  return (
+    <div className="achievement-resume-editor">
+      <table>
+        <thead><tr><th>起止年月</th><th>在何单位（学校）任何职（读何专业）</th><th>操作</th></tr></thead>
+        <tbody>{records.map((row, index) => (
+          <tr key={row.id || index}>
+            <td><label>起始年月<input className="control" type="month" aria-label={`第${index + 1}条起始年月`}
+              value={row.startMonth} onChange={(e) => update(index, "startMonth", e.target.value)} /></label>
+              <label>结束年月<input className="control" type="month" aria-label={`第${index + 1}条结束年月`}
+              min={row.startMonth || undefined} value={row.endMonth}
+              onChange={(e) => update(index, "endMonth", e.target.value)} /></label></td>
+            <td><textarea className="control" aria-label={`第${index + 1}条单位及职务或专业`}
+              value={isHtmlContent(row.content) ? richTextToPlain(row.content) : row.content}
+              onChange={(e) => update(index, "content", e.target.value)} /></td>
+            <td><button type="button" className="secondary-button" onClick={() =>
+              onChange(records.filter((_, i) => i !== index))}>删除</button></td>
+          </tr>
+        ))}</tbody>
+      </table>
+      <button type="button" className="secondary-button" onClick={() => onChange([
+        ...records, { id: `resume-${Date.now()}-${Math.random().toString(36).slice(2)}`, startMonth: "", endMonth: "", content: "" },
+      ])}><Plus size={16} />添加简历条目</button>
+    </div>
+  );
+}
+
 function AchievementBasicForm({ data, setField, applicationId }) {
   const profile = getAwardProfile(data.awardType);
   const candidate = data.candidate || {};
   const setCandidate = (key, value) =>
     setField("candidate", { ...candidate, [key]: value });
+  const handlePhoto = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!/^image\/(jpe?g|png|webp)$/i.test(file.type)) {
+      window.alert("本人照片仅支持 JPG、PNG 或 WebP 图片");
+      event.target.value = "";
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => setCandidate("photo", String(reader.result || ""));
+    reader.readAsDataURL(file);
+  };
   return (
     <section className="form-section">
       <div className="section-heading">
@@ -639,16 +683,10 @@ function AchievementBasicForm({ data, setField, applicationId }) {
             <option>2025</option>
           </select>
         </Field>
-        <Field label="候选人姓名（中文）" required>
+        <Field label="人选姓名" required>
           <TextInput
             value={data.projectName}
             onChange={(value) => setField("projectName", value)}
-          />
-        </Field>
-        <Field label="候选人姓名（英文）">
-          <TextInput
-            value={data.projectNameEn}
-            onChange={(value) => setField("projectNameEn", value)}
           />
         </Field>
         <Field label="性别">
@@ -657,7 +695,7 @@ function AchievementBasicForm({ data, setField, applicationId }) {
             onChange={(value) => setCandidate("gender", value)}
           />
         </Field>
-        <Field label="出生年月" required>
+        <Field label="出生日期" required>
           <TextInput
             type="date"
             value={candidate.birthDate}
@@ -670,16 +708,22 @@ function AchievementBasicForm({ data, setField, applicationId }) {
             onChange={(value) => setCandidate("ethnicity", value)}
           />
         </Field>
-        <Field label="政治面貌">
+        <Field label="党派">
           <TextInput
             value={candidate.politicalAffiliation}
             onChange={(value) => setCandidate("politicalAffiliation", value)}
           />
         </Field>
-        <Field label="工作单位" required>
+        <Field label="工作单位全称" required>
           <TextInput
             value={candidate.workUnit}
             onChange={(value) => setCandidate("workUnit", value)}
+          />
+        </Field>
+        <Field label="推荐单位" required>
+          <TextInput
+            value={data.applicantUnit || ""}
+            onChange={(value) => setField("applicantUnit", value)}
           />
         </Field>
         <Field label="行政职务">
@@ -700,7 +744,7 @@ function AchievementBasicForm({ data, setField, applicationId }) {
             onChange={(value) => setCandidate("education", value)}
           />
         </Field>
-        <Field label="最高学位">
+        <Field label="学位">
           <TextInput
             value={candidate.highestDegree}
             onChange={(value) => setCandidate("highestDegree", value)}
@@ -713,39 +757,25 @@ function AchievementBasicForm({ data, setField, applicationId }) {
             onChange={(value) => setCandidate("graduationDate", value)}
           />
         </Field>
-        <Field label="推荐单位" required>
-          <TextInput
-            value={data.applicantUnit}
-            onChange={(value) => setField("applicantUnit", value)}
-          />
-        </Field>
-        <Field label="申报渠道" required>
-          <select
-            className="control"
-            value={data.applicationChannel}
-            onChange={(event) =>
-              setField("applicationChannel", event.target.value)
-            }
-          >
-            <option value="" disabled>
-              请选择
-            </option>
-            {applicationChannels.map((channel) => (
-              <option key={channel}>{channel}</option>
-            ))}
-          </select>
-        </Field>
-        <Field label="单位地址及邮编">
+        <Field label="单位地址">
           <TextInput
             value={candidate.mailingAddress}
             onChange={(value) => setCandidate("mailingAddress", value)}
           />
         </Field>
-        <Field label="家庭住址及邮编">
+        <Field label="单位邮编">
+          <TextInput value={candidate.postalCode || ""} maxLength={6}
+            onChange={(value) => setCandidate("postalCode", value)} />
+        </Field>
+        <Field label="家庭住址">
           <TextInput
             value={candidate.homeAddress}
             onChange={(value) => setCandidate("homeAddress", value)}
           />
+        </Field>
+        <Field label="家庭邮编">
+          <TextInput value={candidate.homePostalCode || ""} maxLength={6}
+            onChange={(value) => setCandidate("homePostalCode", value)} />
         </Field>
         <div className="field-row field-row--triple">
           <div className="field-label">联系信息</div>
@@ -779,6 +809,12 @@ function AchievementBasicForm({ data, setField, applicationId }) {
             value={candidate.homePhone}
             onChange={(value) => setCandidate("homePhone", value)}
           />
+        </Field>
+        <Field label="本人照片" hint="建议上传近期证件照，支持 JPG、PNG、WebP。">
+          <div className="achievement-photo-upload">
+            {candidate.photo ? <img src={candidate.photo} alt="本人照片预览" /> : <span>未上传</span>}
+            <input className="control" type="file" accept="image/jpeg,image/png,image/webp" onChange={handlePhoto} />
+          </div>
         </Field>
         <Field label="社会职务">
           <textarea
@@ -816,15 +852,10 @@ function AchievementBasicForm({ data, setField, applicationId }) {
         </Field>
         <Field
           label="本人简历（从高校填起）"
-          hint="按起止年月、单位（学校）、职务（专业）顺序填写。"
+          hint="逐条选择起止年月，填写在何单位（学校）任何职（读何专业）。"
         >
-          <RichTextEditor
-            value={data.resume || ""}
-            onChange={(value) => setField("resume", value)}
-            fieldKey="resume"
-            label="本人简历"
-            applicationId={applicationId}
-          />
+          <AchievementResumeEditor records={data.resumeRecords || []}
+            onChange={(records) => setField("resumeRecords", records)} />
         </Field>
       </div>
     </section>
@@ -1228,6 +1259,7 @@ function RecordsSection({
   showIndex = false,
   directoryLabel,
   tableTitle,
+  description,
 }) {
   const group = customGroup || (type === "ip" ? "ipRecords" : "awardRecords");
   const table = (
@@ -1259,6 +1291,7 @@ function RecordsSection({
           <h2>{title}</h2>
         </div>
       </div>
+      {description && <p className="records-section-note">{description}</p>}
       {directoryLabel ? (
         <div className="ip-directory-grid">
           <DirectoryRow label={directoryLabel}>{table}</DirectoryRow>
@@ -1284,7 +1317,7 @@ const achievementRecordFields = Object.freeze({
   ],
   publications: [
     {
-      key: "title",
+      key: "basicInformation",
       label:
         "基本信息（名称 + 年份 + 本人排名 + 主要合作者 + 发表刊物 / 出版社）",
       required: true,
@@ -1300,51 +1333,41 @@ const achievementRecordFields = Object.freeze({
     },
   ],
   achievementIp: [
-    { key: "type", label: "知识产权类别", minWidth: 140 },
-    { key: "name", label: "授权项目名称", required: true, minWidth: 220 },
-    { key: "country", label: "国（区）别", minWidth: 110 },
-    { key: "authorizationNumber", label: "授权号", minWidth: 150 },
-    {
-      key: "authorizationDate",
-      label: "授权日期",
-      type: "date",
-      minWidth: 150,
-    },
-    { key: "certificateNumber", label: "证书编号", minWidth: 140 },
-    { key: "owner", label: "权利人", minWidth: 150 },
-    { key: "inventorRank", label: "发明人排名", minWidth: 110 },
-    { key: "correspondingAchievement", label: "对应标志性成果", minWidth: 180 },
-    { key: "evidenceNumber", label: "证明材料编号", minWidth: 140 },
+    { key: "type", label: "知识产权类别", minWidth: 110 },
+    { key: "name", label: "授权项目名称", required: true, minWidth: 130 },
+    { key: "country", label: "国（区）别", minWidth: 70 },
+    { key: "authorizationNumber", label: "授权号", minWidth: 90 },
+    { key: "authorizationDate", label: "授权日期", type: "date", minWidth: 85 },
+    { key: "certificateNumber", label: "证书编号", minWidth: 85 },
+    { key: "owner", label: "权利人", minWidth: 90 },
+    { key: "inventorRank", label: "发明人排名", minWidth: 70 },
+    { key: "correspondingAchievement", label: "对应标志性成果", minWidth: 90 },
+    { key: "evidenceNumber", label: "证明材料编号", minWidth: 95 },
   ],
   research: [
-    { key: "name", label: "项目名称", required: true, minWidth: 210 },
-    { key: "funding", label: "研发经费（万元）", minWidth: 130 },
-    { key: "source", label: "项目来源", minWidth: 150 },
-    { key: "projectNumber", label: "项目编号", minWidth: 140 },
-    { key: "period", label: "研发起止时间", type: "dateRange", minWidth: 180 },
-    {
-      key: "status",
-      label: "状态（在研 / 已验收）",
-      options: ["在研", "已验收"],
-      minWidth: 150,
-    },
-    { key: "leader", label: "负责人", minWidth: 120 },
-    { key: "personalRank", label: "本人在项目成果中排序", minWidth: 150 },
-    { key: "evidenceNumber", label: "证明材料编号", minWidth: 140 },
+    { key: "name", label: "项目名称", required: true, minWidth: 110 },
+    { key: "funding", label: "研发经费（万元）", minWidth: 85 },
+    { key: "source", label: "项目来源", minWidth: 80 },
+    { key: "projectNumber", label: "项目编号", minWidth: 75 },
+    { key: "period", label: "研发起止时间", type: "dateRange", minWidth: 90 },
+    { key: "status", label: "状态（在研/已验收）", options: ["在研", "已验收"], minWidth: 95 },
+    { key: "leader", label: "负责人", minWidth: 75 },
+    { key: "personalRank", label: "本人在项目成果中排序", minWidth: 95 },
+    { key: "evidenceNumber", label: "证明材料编号", minWidth: 100 },
   ],
   engineering: [
-    { key: "name", label: "项目名称", required: true, minWidth: 230 },
-    { key: "client", label: "项目委托单位", minWidth: 210 },
+    { key: "name", label: "项目名称", required: true, minWidth: 120 },
+    { key: "client", label: "项目委托单位", minWidth: 110 },
     {
       key: "participation",
       label: "本人参与情况（核心职责 / 贡献）",
       multiline: true,
-      minWidth: 280,
+      minWidth: 150,
     },
     {
       key: "economicBenefit",
       label: "项目产生的经济效益（万元）",
-      minWidth: 180,
+      minWidth: 110,
     },
   ],
 });
@@ -2411,13 +2434,36 @@ function ImportDialog({ applicationId, onClose, onApply }) {
   );
 }
 
+function formatPreviewDate(value) {
+  const text = String(value || "").trim();
+  return text
+    ? text
+        .replace(/-(\d{2})-(\d{2})$/, " 年 $1 月 $2 日")
+        .replace(/^(\d{4})/, "$1")
+    : "年　　月　　日";
+}
+
+function PreviewAchievementCover({ data }) {
+  const candidate = data.candidate || {};
+  const coverValue = (value) => String(value || "").trim() || "　　　";
+  return (
+    <article className="preview-page preview-cover-page preview-achievement-cover" data-section-key="cover">
+      <div className="preview-cover-inner">
+        <h1>中国节能协会创新奖</h1>
+        <h2>科技成就奖申报书</h2>
+        <p>（{data.year || "　　"} 年度）</p>
+        <dl>
+          <div><dt>候选人姓名</dt><dd>{coverValue(data.projectName)}</dd></div>
+          <div><dt>工作单位</dt><dd>{coverValue(candidate.workUnit)}</dd></div>
+          <div><dt>推荐单位</dt><dd>{coverValue(data.applicantUnit)}</dd></div>
+        </dl>
+        <footer>中国节能协会制</footer>
+      </div>
+    </article>
+  );
+}
+
 function PreviewPageOne({ data, disciplineRecords }) {
-  const formatDate = (value) =>
-    value
-      ? value
-          .replace(/-(\d{2})-(\d{2})$/, " 年 $1 月 $2 日")
-          .replace(/^(\d{4})/, "$1")
-      : "年　　月　　日";
   return (
     <article
       className="preview-page preview-basic-page"
@@ -2564,13 +2610,13 @@ function PreviewPageOne({ data, disciplineRecords }) {
             <td colSpan="3">
               <div className="preview-date-range-value">
                 <span>起始：</span>
-                <span>{formatDate(data.startDate)}</span>
+                <span>{formatPreviewDate(data.startDate)}</span>
               </div>
             </td>
             <td colSpan="2">
               <div className="preview-date-range-value">
                 <span>完成：</span>
-                <span>{formatDate(data.endDate)}</span>
+                <span>{formatPreviewDate(data.endDate)}</span>
               </div>
             </td>
           </tr>
@@ -2588,90 +2634,113 @@ function PreviewAchievementPageOne({ data }) {
       className="preview-page preview-basic-page preview-achievement-basic"
       data-section-key="basic"
     >
-      <header>
-        <h1>中国节能协会创新奖</h1>
-        <h2>科技成就奖申报书</h2>
-        <p>（{data.year} 年度）</p>
-      </header>
-      <h3>一、候选人基本情况</h3>
-      <table aria-label="候选人基本情况">
+      <h3>一、基本情况</h3>
+      <table aria-label="基本情况">
+        <colgroup>
+          <col style={{ width: "12%" }} />
+          <col style={{ width: "13%" }} />
+          <col style={{ width: "12%" }} />
+          <col style={{ width: "15%" }} />
+          <col style={{ width: "12%" }} />
+          <col style={{ width: "15%" }} />
+          <col style={{ width: "10.5%" }} />
+          <col style={{ width: "10.5%" }} />
+        </colgroup>
         <tbody>
           <tr>
-            <th>姓 名</th>
-            <td>{data.projectName}</td>
-            <th>英文姓名</th>
-            <td>{data.projectNameEn}</td>
+            <th>姓 名</th><td>{data.projectName}</td>
+            <th>性 别</th><td>{candidate.gender}</td>
+            <th>民 族</th><td>{candidate.ethnicity}</td>
+            <td rowSpan="6" colSpan="2" className="achievement-photo-cell">
+              {candidate.photo ? <img src={candidate.photo} alt="本人照片" /> : <span>本人照片</span>}
+            </td>
           </tr>
           <tr>
-            <th>性 别</th>
-            <td>{candidate.gender}</td>
-            <th>出生年月</th>
-            <td>{candidate.birthDate}</td>
+            <th>学 历</th><td>{candidate.education}</td>
+            <th>学 位</th><td>{candidate.highestDegree}</td>
+            <th>党 派</th><td>{candidate.politicalAffiliation}</td>
           </tr>
           <tr>
-            <th>出生地</th>
-            <td>{candidate.birthPlace}</td>
-            <th>籍 贯</th>
-            <td>{candidate.nativePlace}</td>
+            <th>出生日期</th><td>{formatPreviewDate(candidate.birthDate)}</td>
+            <th>行政职务</th><td colSpan="3">{candidate.administrativePosition}</td>
           </tr>
           <tr>
-            <th>民 族</th>
-            <td>{candidate.ethnicity}</td>
-            <th>国 籍</th>
-            <td>{candidate.nationality}</td>
+            <th>专业技术职务</th><td>{candidate.technicalTitle}</td>
+            <th>手机号码</th><td colSpan="3">{candidate.mobilePhone}</td>
           </tr>
           <tr>
-            <th>政治面貌</th>
-            <td>{candidate.politicalAffiliation}</td>
-            <th>身份证号</th>
-            <td>{candidate.idNumber}</td>
+            <th>毕业时间</th><td>{formatPreviewDate(candidate.graduationDate)}</td>
+            <th>单位电话</th><td colSpan="3">{candidate.officePhone}</td>
           </tr>
           <tr>
-            <th>工作单位</th>
-            <td colSpan="3">{candidate.workUnit}</td>
+            <th>E-mail</th><td>{candidate.email}</td>
+            <th>住宅电话</th><td colSpan="3">{candidate.homePhone}</td>
           </tr>
-          <tr>
-            <th>行政职务</th>
-            <td>{candidate.administrativePosition}</td>
-            <th>技术职称</th>
-            <td>{candidate.technicalTitle}</td>
-          </tr>
-          <tr>
-            <th>最高学位</th>
-            <td>{candidate.highestDegree}</td>
-            <th>毕业学校</th>
-            <td>{candidate.graduateSchool}</td>
-          </tr>
-          <tr>
-            <th>专业、专长</th>
-            <td colSpan="3">{candidate.specialty}</td>
-          </tr>
-          <tr>
-            <th>通讯地址</th>
-            <td colSpan="3">{candidate.mailingAddress}</td>
-          </tr>
-          <tr>
-            <th>办公电话</th>
-            <td>{candidate.officePhone}</td>
-            <th>移动电话</th>
-            <td>{candidate.mobilePhone}</td>
-          </tr>
-          <tr>
-            <th>电子邮箱</th>
-            <td>{candidate.email}</td>
-            <th>邮政编码</th>
-            <td>{candidate.postalCode}</td>
-          </tr>
-          <tr>
-            <th>推荐单位</th>
-            <td colSpan="3">{data.applicantUnit}</td>
-          </tr>
+          <tr><th>工作单位全称</th><td colSpan="7">{candidate.workUnit}</td></tr>
+          <tr><th>单位地址</th><td colSpan="5">{candidate.mailingAddress}</td><th>邮编</th><td>{candidate.postalCode}</td></tr>
+          <tr><th>家庭住址</th><td colSpan="5">{candidate.homeAddress}</td><th>邮编</th><td>{candidate.homePostalCode}</td></tr>
+          <tr><th>社会职务</th><td colSpan="7">{candidate.socialPositions}</td></tr>
+          <tr><th>国内外学术组织任职情况</th><td colSpan="7">{candidate.academicPositions}</td></tr>
+          <tr className="achievement-long-row"><th>节能减排相关工作总结</th><td colSpan="7">{data.workSummary}</td></tr>
         </tbody>
       </table>
       <footer>1</footer>
     </article>
   );
 }
+
+function PreviewAchievementResumeTable({ records }) {
+  const month = (value) => String(value || "").replace(/^(\d{4})-(\d{2})$/, "$1年$2月");
+  return <table className="achievement-resume-table" aria-label="本人简历">
+    <colgroup><col style={{ width: "30%" }} /><col style={{ width: "70%" }} /></colgroup>
+    <thead><tr><th>起止年月</th><th>在何单位（学校）任何职（读何专业）</th></tr></thead>
+    <tbody>{(records.length ? records : [{}]).map((row, index) => <tr key={row.id || index}>
+      <td>{[month(row.startMonth), month(row.endMonth)].filter(Boolean).join(" — ")}</td>
+      <td>{isHtmlContent(row.content) ? richTextToPlain(row.content) : row.content}</td>
+    </tr>)}</tbody>
+  </table>;
+}
+
+function PreviewAchievementBasicPage({ body, records, pageNumber }) {
+  return <article className="preview-page preview-form-page preview-achievement-basic-continuation" data-section-key="basic">
+    <h3>一、基本情况</h3>
+    {body && <table aria-label="节能减排相关工作总结"><tbody>
+      <tr><th>节能减排相关工作总结</th></tr>
+      <tr><td className="achievement-summary">{body}</td></tr>
+    </tbody></table>}
+    {records && <section className="achievement-resume-section">
+      <h4>本人简历（从高校填起）</h4>
+      <PreviewAchievementResumeTable records={records} />
+    </section>}
+    <footer>{pageNumber}</footer>
+  </article>;
+}
+
+function PreviewAchievementHonorsPage({ records, honors, pageNumber }) {
+  const fields = achievementRecordFields.honors;
+  return <article className="preview-page preview-form-page preview-table-page preview-achievement-honors-page" data-section-key="honors">
+    <section className="achievement-resume-section">
+      <h4>本人简历（从高校填起）</h4>
+      <PreviewAchievementResumeTable records={records || []} />
+    </section>
+    <h3>二、所获与节能减排相关科技奖励和荣誉称号情况</h3>
+    <p className="preview-table-note">{achievementNotes.honors}</p>
+    <table aria-label="所获与节能减排相关科技奖励和荣誉称号情况">
+      <thead><tr>{fields.map((field) => <th key={field.key}>{field.label}</th>)}</tr></thead>
+      <tbody>{Array.from({ length: Math.max(5, honors?.length || 0) }, (_, index) => {
+        const record = honors?.[index];
+        return <tr key={record?.id || index}>{fields.map((field) => <td key={field.key}>{record?.[field.key] ?? ""}</td>)}</tr>;
+      })}</tbody>
+    </table>
+    <footer>{pageNumber}</footer>
+  </article>;
+}
+
+const achievementNotes = {
+  honors: "（限市级及以上人民政府或全国性行业协会授予，无则填 “无”）",
+  achievementIp: "（限填 10 项以内，聚焦节能减排领域，无则填 “无”）",
+  publications: "（限填有代表性的论文和著作十篇（册）以内。请在“基本信息”栏内按顺序填写论文/著作名称，年份，本人排名，主要合作者，发表刊物或出版社名称）",
+};
 
 function PreviewTextPage({ title, body, pageNumber, sectionKey }) {
   const rich = isHtmlContent(body);
@@ -2764,10 +2833,23 @@ function PreviewTablePage({
   pageNumber,
   continued,
   sectionKey,
+  fields: providedFields,
+  hideIndex = false,
+  note = "",
+  noteAbove = false,
+  templateRows = 0,
 }) {
-  const fields = getPdfFields(group);
+  const fields = providedFields || getPdfFields(group);
   const displayValue = (record, field) => {
     const direct = record[field.key];
+    if (field.type === "date") {
+      // The achievement template leaves an empty authorization date blank;
+      // do not render the date placeholder for an unfilled certificate row.
+      if (group === "ipRecords" && field.key === "authorizationDate" && !String(direct || "").trim()) {
+        return "";
+      }
+      return formatPreviewDate(direct);
+    }
     if (direct !== undefined && direct !== null) return direct;
     return (
       field.legacyKeys
@@ -2781,20 +2863,21 @@ function PreviewTablePage({
       data-section-key={sectionKey}
     >
       <h3>{continued ? `${title}（续）` : title}</h3>
+      {note && noteAbove && <p className="preview-table-note">{note}</p>}
       <table aria-label={title}>
         <thead>
           <tr>
-            <th className="preview-index-column">序号</th>
+            {!hideIndex && <th className="preview-index-column">序号</th>}
             {fields.map((field) => (
               <th key={field.key}>{field.label}</th>
             ))}
           </tr>
         </thead>
         <tbody>
-          {records.length ? (
-            records.map(({ record, index }) => (
+          {records.length || templateRows ? (
+            Array.from({ length: Math.max(records.length, templateRows) }, (_, rowIndex) => records[rowIndex] || { record: {}, index: rowIndex }).map(({ record, index }) => (
               <tr key={record.id || index}>
-                <td className="preview-index-column">{index + 1}</td>
+                {!hideIndex && <td className="preview-index-column">{index + 1}</td>}
                 {fields.map((field) => (
                   <td key={field.key}>{displayValue(record, field)}</td>
                 ))}
@@ -2802,11 +2885,12 @@ function PreviewTablePage({
             ))
           ) : (
             <tr className="preview-empty-row">
-              <td colSpan={fields.length + 1}>暂无记录</td>
+              <td colSpan={fields.length + (hideIndex ? 0 : 1)}>暂无记录</td>
             </tr>
           )}
         </tbody>
       </table>
+      {note && !noteAbove && <p className="preview-table-note">{note}</p>}
       <footer>{pageNumber}</footer>
     </article>
   );
@@ -3493,6 +3577,7 @@ function buildPreviewSections(sourceData) {
     records,
     pageSize = 8,
     sectionKey = group,
+    options = {},
   ) => {
     const source = records?.length ? records : [];
     const chunks = source.length
@@ -3512,44 +3597,61 @@ function buildPreviewSections(sourceData) {
           record,
           index: pageIndex * pageSize + index,
         })),
+        ...options,
       }),
     );
   };
   if (profile.code === "achievement") {
+    const honorsPerFirstPage = 5;
+    const resumeRows = data.resumePreviewRecords || normalizeApplicationData(data).resumeRecords.slice(0, 3);
+    pages.push({
+      kind: "achievementHonors",
+      title: "二、所获与节能减排相关科技奖励和荣誉称号情况",
+      records: resumeRows,
+      honors: data.awardRecords.slice(0, honorsPerFirstPage),
+      sectionKey: "honors",
+    });
+    if (data.awardRecords.length > honorsPerFirstPage) {
+      addTablePages(
+        "二、所获与节能减排相关科技奖励和荣誉称号情况",
+        "awardRecords",
+        data.awardRecords.slice(honorsPerFirstPage),
+        10,
+        "honors",
+        { fields: achievementRecordFields.honors, hideIndex: true, note: achievementNotes.honors, noteAbove: true, templateRows: 5 },
+      );
+    }
     addTablePages(
-      "二、所获科技奖励和荣誉称号情况",
-      "awardRecords",
-      data.awardRecords,
-      8,
-      "honors",
-    );
-    addTablePages(
-      "三、发表论文和专著情况",
+      "三、发表节能减排相关论文和专著情况",
       "paperRecords",
       data.paperRecords,
-      6,
+      10,
       "publications",
+      { fields: achievementRecordFields.publications, note: achievementNotes.publications, templateRows: 10 },
     );
     addTablePages(
       "四、所获知识产权证书",
       "ipRecords",
       data.ipRecords,
-      3,
+      10,
       "achievementIp",
+      { fields: achievementRecordFields.achievementIp, note: achievementNotes.achievementIp, noteAbove: true, templateRows: 10 },
     );
     addTablePages(
-      "五、承担科研项目情况",
+      "五、承担节能减排相关的科研项目情况",
       "researchRecords",
       data.researchRecords,
-      4,
+      10,
       "research",
+      { fields: achievementRecordFields.research, templateRows: 10 },
     );
     addTablePages(
-      "六、参与重大工程技术项目情况",
+      "六、参与节能减排相关的重大工程技术项目情况",
       "engineeringRecords",
       data.engineeringRecords,
       5,
       "engineering",
+      { fields: achievementRecordFields.engineering, hideIndex: true, templateRows: 5 },
     );
     splitPreviewContent(data.transformation, 1250, richTablePagination).forEach(
       (body, index) =>
@@ -3687,23 +3789,69 @@ function basicPreviewContent(data) {
   const profile = getAwardProfile(data.awardType);
   const firstPage = { ...data, candidate: { ...data.candidate } };
   const continuations = [];
-  const fields =
-    profile.code === "achievement"
-      ? [
-          ["candidate.workUnit", "工作单位", 100],
-          ["candidate.specialty", "专业、专长", 100],
-          ["candidate.mailingAddress", "通讯地址", 100],
-          ["applicantUnit", "推荐单位", 100],
-        ]
-      : [
-          ["plans", "具体计划、基金名称和编号", 160],
-          ["applicantUnit", "第一申报单位", 100],
-        ];
+  if (profile.code === "achievement") {
+    const plain = (value) => isHtmlContent(value) ? richTextToPlain(value) : String(value || "");
+    const summary = plain(data.workSummary).trim();
+    // Keep the first page aligned with the printed form. Resume rows share the
+    // next page with honors; only overflow resume rows continue afterward.
+    const chunks = (text, firstLimit, laterLimit = firstLimit) => {
+      const result = [];
+      let body = "", weight = 0, limit = firstLimit;
+      for (const char of text) {
+        const cost = char === "\n" ? 35 : 1;
+        if (body && weight + cost > limit) {
+          result.push(body); body = ""; weight = 0; limit = laterLimit;
+        }
+        body += char; weight += cost;
+      }
+      if (body) result.push(body);
+      return result;
+    };
+    const visualWeight = (text) => text.length + (text.match(/\n/g) || []).length * 34;
+    // The official form keeps the complete 1000-character summary on page 1;
+    // the resume starts on the following page.
+    firstPage.workSummary = summary;
+    const allRecords = normalizeApplicationData(data).resumeRecords.flatMap((row) => {
+      const content = plain(row.content).trim();
+      const parts = content ? chunks(content, 450) : [""];
+      return parts.map((part, index) => ({ ...row, id: `${row.id}-${index}`, content: part }));
+    });
+    const records = [...allRecords];
+    const takeRecords = (maxRows, budget) => {
+      const rows = [];
+      while (records.length && rows.length < maxRows) {
+        const cost = Math.max(80, visualWeight(records[0].content) + 50);
+        if (cost > budget) break;
+        rows.push(records.shift());
+        budget -= cost;
+      }
+      return rows;
+    };
+    firstPage.resumePreviewRecords = takeRecords(8, 650);
+    firstPage.showResume = false;
+    while (records.length) {
+      continuations.push({ kind: "achievementBasic", title: "一、基本情况", sectionKey: "basic",
+        records: takeRecords(8, 1400) });
+    }
+    return { firstPage, continuations };
+  }
+  const fields = [
+    ["plans", "具体计划、基金名称和编号", 160],
+    ["applicantUnit", "第一申报单位", 100],
+  ];
   fields.forEach(([key, label, limit]) => {
     const [parent, child] = key.includes(".") ? key.split(".") : [null, key];
-    const value = String(
-      parent ? firstPage[parent]?.[child] || "" : firstPage[child] || "",
-    );
+    const rawValue = parent
+      ? firstPage[parent]?.[child] || ""
+      : firstPage[child] || "";
+    // The first page is a fixed table. Keep rich-text fields as plain text
+    // here so a character cut never leaves broken HTML that expands the page
+    // or creates empty print pages.
+    const value = isHtmlContent(rawValue)
+      ? richTextToPlain(rawValue)
+      : String(rawValue);
+    if (parent) firstPage[parent][child] = value;
+    else firstPage[child] = value;
     if (value.length <= limit) return;
     if (parent) firstPage[parent][child] = value.slice(0, limit);
     else firstPage[child] = value.slice(0, limit);
@@ -3721,9 +3869,12 @@ function basicPreviewContent(data) {
 
 function PreviewSubmittedPage({ page }) {
   const sourceIsPdf = /\.pdf$/i.test(page.fileName);
+  const isSealReplacement = page.sectionKey === "sealReplacement";
   return (
     <article
-      className="preview-page preview-submitted-page"
+      className={`preview-page preview-submitted-page${
+        isSealReplacement ? " preview-seal-replacement" : ""
+      }`}
       data-section-key={page.sectionKey}
       data-source-pdf-id={sourceIsPdf ? page.sourceFileId : undefined}
       data-source-pdf-page={sourceIsPdf ? page.filePage : undefined}
@@ -3735,7 +3886,7 @@ function PreviewSubmittedPage({ page }) {
         alt={`${page.fileName} 第 ${page.filePage} 页`}
         crossOrigin="use-credentials"
       />
-      <footer className="preview-page-number" />
+      {!isSealReplacement && <footer className="preview-page-number" />}
     </article>
   );
 }
@@ -3999,10 +4150,14 @@ function PreviewDialog({
     }
   }, [submittedPages, submittedPagesStatus, wordRenderResults]);
   const previewPages = useMemo(() => {
-    const generatedPages = [
-      ...basicPreviewContent(data).continuations,
-      ...buildPreviewSections(data),
-    ];
+    const basicContent = basicPreviewContent(data);
+    const sectionPages = buildPreviewSections({
+      ...data,
+      resumePreviewRecords: basicContent.firstPage.resumePreviewRecords,
+    });
+    const generatedPages = getAwardProfile(data.awardType).code === "achievement"
+      ? [...sectionPages.slice(0, 1), ...basicContent.continuations, ...sectionPages.slice(1)]
+      : [...basicContent.continuations, ...sectionPages];
     const replacementByTarget = new Map(
       ["person", "unit"].flatMap((prefix) =>
         sealReplacementPages
@@ -4057,7 +4212,7 @@ function PreviewDialog({
     );
   const pageCount =
     previewPages.length +
-    1 +
+    (previewProfile.code === "achievement" ? 2 : 1) +
     renderedWordPageCount -
     previewPages.filter((page) => page.format === "word").length;
   const signedHomePage = sealReplacementPages.find(
@@ -4067,6 +4222,7 @@ function PreviewDialog({
     if (submittedPagesStatus !== "ready" || !pagesRef.current) return;
     const pages = [...pagesRef.current.querySelectorAll(".preview-page")];
     pages.forEach((page, index) => {
+      if (page.classList.contains("preview-seal-replacement")) return;
       const submitted = page.classList.contains("preview-submitted-page");
       let footer = page.querySelector(
         submitted ? ":scope > .preview-page-number" : ":scope > footer",
@@ -4116,7 +4272,11 @@ function PreviewDialog({
       }
       flushHtml();
       if (!addedPdfIds.has(fileId)) {
-        rawParts.push({ type: "pdf", fileId: Number(fileId) });
+        rawParts.push({
+          type: "pdf",
+          fileId: Number(fileId),
+          addPageNumbers: !page.classList.contains("preview-seal-replacement"),
+        });
         addedPdfIds.add(fileId);
       }
     });
@@ -4403,19 +4563,25 @@ function PreviewDialog({
       )}
       <div className="preview-workspace">
         <aside>
-          <button className="page-thumb active">
+          {previewProfile.code === "achievement" ? <button className="page-thumb active">
             <span className="mini-page">
               <i />
             </span>
             <b>第 1 页</b>
-            <small>基本情况</small>
-          </button>
+            <small>封面</small>
+          </button> : <button className="page-thumb active">
+            <span className="mini-page"><i /></span><b>第 1 页</b><small>基本情况</small>
+          </button>}
+          {previewProfile.code === "achievement" && <button className="page-thumb">
+            <span className="mini-page mini-page--text"><i /></span>
+            <b>第 2 页</b><small>基本情况</small>
+          </button>}
           {previewPages.map((page, index) => (
             <button
               className="page-thumb"
               key={`${page.title}-${index}`}
               onClick={() =>
-                pagesRef.current?.children[index + 1]?.scrollIntoView({
+                pagesRef.current?.children[index + (previewProfile.code === "achievement" ? 2 : 1)]?.scrollIntoView({
                   behavior: "smooth",
                 })
               }
@@ -4423,7 +4589,7 @@ function PreviewDialog({
               <span className="mini-page mini-page--text">
                 <i />
               </span>
-              <b>第 {index + 2} 页</b>
+                <b>第 {index + (previewProfile.code === "achievement" ? 3 : 2)} 页</b>
               <small>
                 {page.title.replace(/[一二三四五六七八九十]+、/, "")}
               </small>
@@ -4437,7 +4603,10 @@ function PreviewDialog({
           {signedHomePage ? (
             <PreviewSubmittedPage page={signedHomePage} />
           ) : getAwardProfile(data.awardType).code === "achievement" ? (
-            <PreviewAchievementPageOne data={basicPageData} />
+            <>
+              <PreviewAchievementCover data={basicPageData} />
+              <PreviewAchievementPageOne data={basicPageData} />
+            </>
           ) : (
             <PreviewPageOne
               data={basicPageData}
@@ -4445,7 +4614,13 @@ function PreviewDialog({
             />
           )}
           {previewPages.map((page, index) => {
-            const pageNumber = index + 2;
+            const pageNumber = index + (previewProfile.code === "achievement" ? 3 : 2);
+            if (page.kind === "achievementHonors") {
+              return <PreviewAchievementHonorsPage key={`honors-${index}`} {...page} pageNumber={pageNumber} />;
+            }
+            if (page.kind === "achievementBasic") {
+              return <PreviewAchievementBasicPage key={`basic-${index}`} {...page} pageNumber={pageNumber} />;
+            }
             if (page.kind === "award") {
               return (
                 <PreviewAwardPage
@@ -5618,6 +5793,9 @@ function EditorApp({ application, onHome }) {
       profileCode: profile.code,
       schemaVersion: 2,
     };
+    if (!Array.isArray(stored.resumeRecords) && !Array.isArray(localDraft.resumeRecords)) {
+      delete merged.resumeRecords;
+    }
     if (stored.candidate || localDraft.candidate) {
       merged.candidate = {
         ...(stored.candidate || {}),
@@ -5770,9 +5948,9 @@ function EditorApp({ application, onHome }) {
           .trim().length > 0
       );
     };
-    const hasRecord = (records, group) =>
+    const hasRecord = (records, group, fields = getPdfFields(group)) =>
       (records || []).some((record) =>
-        getPdfFields(group).some((field) => hasContent(record?.[field.key])),
+        fields.some((field) => hasContent(record?.[field.key])),
       );
     const hasSectionFile = (key) =>
       applicationFiles.some(
@@ -5789,11 +5967,11 @@ function EditorApp({ application, onHome }) {
           data.candidate?.birthDate,
           data.candidate?.workUnit,
         ].every(hasContent),
-        honors: hasRecord(data.awardRecords, "awardRecords"),
-        publications: hasRecord(data.paperRecords, "paperRecords"),
-        achievementIp: hasRecord(data.ipRecords, "ipRecords"),
-        research: hasRecord(data.researchRecords, "researchRecords"),
-        engineering: hasRecord(data.engineeringRecords, "engineeringRecords"),
+        honors: hasRecord(data.awardRecords, "awardRecords", achievementRecordFields.honors),
+        publications: hasRecord(data.paperRecords, "paperRecords", achievementRecordFields.publications),
+        achievementIp: hasRecord(data.ipRecords, "ipRecords", achievementRecordFields.achievementIp),
+        research: hasRecord(data.researchRecords, "researchRecords", achievementRecordFields.research),
+        engineering: hasRecord(data.engineeringRecords, "engineeringRecords", achievementRecordFields.engineering),
         transformation: hasContent(data.transformation),
         attachments: true,
         authenticity: hasSectionFile("authenticity"),
@@ -6032,6 +6210,7 @@ function EditorApp({ application, onHome }) {
             records={data.awardRecords}
             onChange={(value) => setField("awardRecords", value)}
             fields={achievementRecordFields.honors}
+            description={achievementNotes.honors}
             addLabel="添加奖励或荣誉"
             emptyLabel="暂无奖励或荣誉记录"
           />
@@ -6045,6 +6224,7 @@ function EditorApp({ application, onHome }) {
             records={data.paperRecords}
             onChange={(value) => setField("paperRecords", value)}
             fields={achievementRecordFields.publications}
+            description={achievementNotes.publications}
             showIndex
             addLabel="添加论文或专著"
             emptyLabel="暂无论文或专著记录，代表性成果不超过 10 篇（册）"
@@ -6059,6 +6239,7 @@ function EditorApp({ application, onHome }) {
             records={data.ipRecords}
             onChange={(value) => setField("ipRecords", value)}
             fields={achievementRecordFields.achievementIp}
+            description={achievementNotes.achievementIp}
             showIndex
             addLabel="添加知识产权"
             emptyLabel="暂无知识产权记录，代表性知识产权不超过 10 项"
